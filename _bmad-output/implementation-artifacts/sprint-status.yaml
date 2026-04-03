@@ -1,0 +1,136 @@
+# generated: 2026-04-03
+# last_updated: 2026-04-03
+# project: notey
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-04-03
+last_updated: 2026-04-03
+project: notey
+project_key: NOKEY
+tracking_system: file-system
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  # Epic 1: Instant Note Capture
+  epic-1: backlog
+  1-1-tauri-v2-project-scaffold: backlog
+  1-2-frontend-tooling-setup: backlog
+  1-3-rust-backend-dependencies-tauri-specta-ipc-setup: backlog
+  1-4-sqlite-database-with-notes-table-migrations: backlog
+  1-5-note-crud-tauri-commands: backlog
+  1-6-design-token-system: backlog
+  1-7-app-shell-layout: backlog
+  1-8-codemirror-6-markdown-editor: backlog
+  1-9-auto-save-with-debounce-save-indicator: backlog
+  1-10-note-format-toggle: backlog
+  1-11-global-hotkey-window-summon: backlog
+  1-12-window-dismiss-save-flush: backlog
+  1-13-system-tray-icon-context-menu: backlog
+  1-14-toml-configuration-service: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Workspace-Aware Note Organization
+  epic-2: backlog
+  2-1-workspaces-table-crud-commands: backlog
+  2-2-git-repository-detection-service: backlog
+  2-3-auto-workspace-assignment-on-note-creation: backlog
+  2-4-workspace-selector-in-statusbar: backlog
+  2-5-workspace-filtered-note-views: backlog
+  2-6-manual-workspace-reassignment: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Search & Discovery
+  epic-3: backlog
+  3-1-fts5-virtual-table-sync-triggers: backlog
+  3-2-full-text-search-tauri-command: backlog
+  3-3-searchoverlay-ui-component: backlog
+  3-4-search-result-keyboard-navigation-note-opening: backlog
+  3-5-workspace-scoped-search-toggle: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Multi-Tab Editing & Command Palette
+  epic-4: backlog
+  4-1-tab-state-management-store: backlog
+  4-2-tabbar-component: backlog
+  4-3-tab-keyboard-navigation: backlog
+  4-4-editor-tab-integration: backlog
+  4-5-command-palette-core: backlog
+  4-6-command-palette-action-registry: backlog
+  4-7-tab-reordering: backlog
+  4-8-note-list-panel: backlog
+  4-9-session-state-persistence: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Note Lifecycle & Data Export
+  epic-5: backlog
+  5-1-soft-delete-note-to-trash-with-toast: backlog
+  5-2-trash-view-note-restoration: backlog
+  5-3-permanent-delete-with-confirmation-dialog: backlog
+  5-4-trash-auto-purge: backlog
+  5-5-markdown-export-with-native-file-picker: backlog
+  5-6-json-export: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: CLI Integration
+  epic-6: backlog
+  6-1-cli-crate-scaffold-argument-parsing: backlog
+  6-2-ipc-socket-server-in-desktop-app: backlog
+  6-3-cli-add-command: backlog
+  6-4-cli-list-command: backlog
+  6-5-cli-search-command: backlog
+  6-6-real-time-desktop-sync-on-cli-changes: backlog
+  6-7-cli-error-handling-user-isolation: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Personalization & Accessibility
+  epic-7: backlog
+  7-1-settings-view-panel: backlog
+  7-2-theme-switching: backlog
+  7-3-font-configuration: backlog
+  7-4-global-hotkey-reconfiguration-conflict-detection: backlog
+  7-5-layout-mode-switching: backlog
+  7-6-keyboard-shortcut-configuration: backlog
+  7-7-comprehensive-keyboard-navigation: backlog
+  7-8-accessibility-compliance-audit: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Onboarding & Platform Integration
+  epic-8: backlog
+  8-1-first-run-detection-onboarding-overlay: backlog
+  8-2-macos-accessibility-permission-guidance: backlog
+  8-3-hotkey-customization-during-onboarding: backlog
+  8-4-auto-start-on-login: backlog
+  8-5-per-user-data-isolation: backlog
+  8-6-cross-platform-verification-wayland-fallback: backlog
+  epic-8-retrospective: optional

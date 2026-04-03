@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notey — Design Direction Mockups</title>
+<style>
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-elevated: #242424;
+    --bg-surface: #2d2d2d;
+    --border-default: #3a3a3a;
+    --border-subtle: #2f2f2f;
+    --text-primary: #e4e4e4;
+    --text-secondary: #a0a0a0;
+    --text-muted: #666666;
+    --accent: #6b9eff;
+    --accent-muted: rgba(107, 158, 255, 0.12);
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --error: #f87171;
+    --focus-ring: rgba(107, 158, 255, 0.5);
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Page Layout */
+  .page-header {
+    padding: 40px 48px 32px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--bg-primary);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header h1 {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .page-header p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 700px;
+  }
+
+  .nav-bar {
+    display: flex;
+    gap: 8px;
+    padding: 16px 48px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 97px;
+    z-index: 99;
+    flex-wrap: wrap;
+  }
+  .nav-btn {
+    padding: 6px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .nav-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .nav-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-muted); }
+
+  .directions-container { padding: 48px; }
+
+  .direction {
+    margin-bottom: 64px;
+    display: none;
+  }
+  .direction.visible { display: block; }
+
+  .direction-header {
+    margin-bottom: 24px;
+  }
+  .direction-header h2 {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .direction-header .subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .direction-header .tags {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .tag {
+    padding: 2px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  /* Mockup Container — simulates desktop with floating window */
+  .mockup-desktop {
+    background: #0d0d0d;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    min-height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mockup-desktop::before {
+    content: 'Desktop Background — Notey floats above your current work';
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #333;
+  }
+
+  /* Base floating window */
+  .notey-window {
+    width: 600px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3);
+  }
+
+  /* Direction-specific notes */
+  .direction-notes {
+    margin-top: 20px;
+    padding: 16px 20px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+  }
+  .direction-notes h3 {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+  }
+  .direction-notes ul {
+    list-style: none;
+    padding: 0;
+  }
+  .direction-notes li {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 3px 0;
+    padding-left: 16px;
+    position: relative;
+  }
+  .direction-notes li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: var(--text-muted);
+  }
+
+  /* States row */
+  .states-row {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .state-card {
+    flex: 1;
+    min-width: 260px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .state-card-label {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .state-card-body { padding: 0; }
+
+  /* ====== DIRECTION 1: Minimal Chromeless ====== */
+  .d1 .notey-window { background: var(--bg-primary); }
+  .d1 .tab-bar {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    padding: 0 8px;
+    gap: 2px;
+  }
+  .d1 .tab {
+    padding: 4px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    border-radius: 3px;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .d1 .tab.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+  }
+  .d1 .tab .close {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0;
+  }
+  .d1 .tab.active .close { opacity: 1; }
+  .d1 .editor-area {
+    padding: 16px 20px;
+    min-height: 340px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-primary);
+  }
+  .d1 .editor-area .line { padding: 1px 0; }
+  .d1 .editor-area .comment { color: var(--text-muted); }
+  .d1 .editor-area .keyword { color: #c586c0; }
+  .d1 .editor-area .string { color: #ce9178; }
+  .d1 .editor-area .fn { color: #dcdcaa; }
+  .d1 .editor-area .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .d1 .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 24px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .d1 .status-bar .left { display: flex; gap: 12px; color: var(--text-muted); }
+  .d1 .status-bar .right { display: flex; gap: 12px; }
+  .d1 .status-bar .saved { color: var(--success); }
+  .d1 .status-bar .workspace { color: var(--text-secondary); }
+
+  /* ====== DIRECTION 2: Ultra-Minimal (No Tab Bar) ====== */
+  .d2 .notey-window { background: var(--bg-primary); }
+  .d2 .editor-area {
+    padding: 20px 24px;
+    min-height: 370px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-primary);
+  }
+  .d2 .editor-area .placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .d2 .editor-area .line { padding: 1px 0; }
+  .d2 .editor-area .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  .d2 .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 24px;
+    padding: 0 16px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .d2 .status-bar .left { display: flex; gap: 16px; color: var(--text-muted); }
+  .d2 .status-bar .right { display: flex; gap: 12px; }
+  .d2 .status-bar .saved { color: var(--success); }
+  .d2 .status-bar .hint { color: var(--text-muted); }
+
+  /* ====== DIRECTION 3: Sidebar List ====== */
+  .d3 .notey-window { background: var(--bg-primary); display: flex; width: 750px; }
+  .d3 .sidebar {
+    width: 200px;
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+  }
+  .d3 .sidebar-header {
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .d3 .sidebar-header .count { color: var(--text-muted); }
+  .d3 .note-list { flex: 1; overflow: auto; }
+  .d3 .note-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: default;
+  }
+  .d3 .note-item.active { background: var(--accent-muted); border-left: 2px solid var(--accent); }
+  .d3 .note-item .title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .d3 .note-item .meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .d3 .main-area { flex: 1; display: flex; flex-direction: column; }
+  .d3 .editor-area {
+    flex: 1;
+    padding: 16px 20px;
+    min-height: 340px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-primary);
+  }
+  .d3 .editor-area .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  .d3 .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 24px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .d3 .status-bar .left { display: flex; gap: 12px; color: var(--text-muted); }
+  .d3 .status-bar .right { display: flex; gap: 12px; }
+  .d3 .status-bar .saved { color: var(--success); }
+
+  /* ====== DIRECTION 4: Compact with Workspace Prominence ====== */
+  .d4 .notey-window { background: var(--bg-primary); }
+  .d4 .workspace-bar {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    background: #1e1e2e;
+    padding: 0 12px;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .d4 .workspace-bar .ws-label { color: var(--text-muted); }
+  .d4 .workspace-bar .ws-name { color: var(--accent); font-weight: 500; }
+  .d4 .workspace-bar .ws-sep { color: var(--text-muted); margin: 0 4px; }
+  .d4 .workspace-bar .note-count { color: var(--text-muted); margin-left: auto; }
+  .d4 .tab-bar {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    padding: 0 8px;
+    gap: 2px;
+  }
+  .d4 .tab {
+    padding: 4px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .d4 .tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+  .d4 .tab .close { font-size: 10px; color: var(--text-muted); }
+  .d4 .editor-area {
+    padding: 12px 16px;
+    min-height: 310px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--text-primary);
+  }
+  .d4 .editor-area .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  .d4 .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 22px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .d4 .status-bar .left { display: flex; gap: 12px; color: var(--text-muted); }
+  .d4 .status-bar .saved { color: var(--success); }
+
+  /* ====== DIRECTION 5: Search-Focused ====== */
+  .d5 .notey-window { background: var(--bg-primary); }
+  .d5 .search-header {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-default);
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .d5 .search-icon { color: var(--text-muted); font-size: 14px; }
+  .d5 .search-input {
+    flex: 1;
+    background: none;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-primary);
+    outline: none;
+  }
+  .d5 .search-input::placeholder { color: var(--text-muted); }
+  .d5 .search-scope {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 2px 8px;
+    background: var(--bg-surface);
+    border-radius: 3px;
+  }
+  .d5 .results-list { max-height: 360px; overflow: auto; }
+  .d5 .result-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: default;
+  }
+  .d5 .result-item:hover { background: var(--bg-surface); }
+  .d5 .result-item.selected { background: var(--accent-muted); }
+  .d5 .result-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+  .d5 .result-title .match { color: var(--accent); font-weight: 600; }
+  .d5 .result-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+  }
+  .d5 .result-snippet {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .d5 .result-snippet .match { color: var(--accent); background: var(--accent-muted); padding: 0 2px; border-radius: 2px; }
+  .d5 .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 24px;
+    padding: 0 12px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-default);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ====== DIRECTION 6: Command Palette Overlay ====== */
+  .d6 .mockup-desktop { background: #0a0a0a; }
+  .d6 .desktop-content {
+    position: absolute;
+    top: 40px;
+    left: 20px;
+    right: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #2a2a2a;
+    line-height: 1.6;
+  }
+  .d6 .notey-window {
+    background: var(--bg-primary);
+    width: 520px;
+    border: 1px solid var(--border-default);
+    position: relative;
+    z-index: 2;
+  }
+  .d6 .palette-input {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 16px;
+    gap: 8px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .d6 .palette-input .chevron { color: var(--accent); font-size: 14px; }
+  .d6 .palette-input .text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  .d6 .palette-input .cursor-char {
+    display: inline-block;
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  .d6 .palette-results { }
+  .d6 .palette-group-label {
+    padding: 6px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .d6 .palette-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    cursor: default;
+  }
+  .d6 .palette-item:hover { background: var(--bg-surface); }
+  .d6 .palette-item.selected { background: var(--accent-muted); }
+  .d6 .palette-item .label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+  .d6 .palette-item .shortcut {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 4px;
+  }
+  .d6 .palette-item .key {
+    padding: 1px 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 3px;
+    font-size: 10px;
+  }
+
+  /* ====== DIRECTION 7: Onboarding State ====== */
+  .d7 .notey-window { background: var(--bg-primary); position: relative; }
+  .d7 .onboarding-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 48px 32px;
+    text-align: center;
+  }
+  .d7 .onboarding-overlay .logo {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 24px;
+  }
+  .d7 .onboarding-overlay .instruction {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }
+  .d7 .onboarding-overlay .hotkey-display {
+    display: inline-flex;
+    gap: 6px;
+    padding: 12px 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    margin-bottom: 32px;
+  }
+  .d7 .onboarding-overlay .key-cap {
+    padding: 4px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-primary);
+    box-shadow: 0 2px 0 var(--border-default);
+  }
+  .d7 .onboarding-overlay .key-plus {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .d7 .onboarding-overlay .cta {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: var(--accent);
+  }
+  .d7 .onboarding-overlay .skip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 16px;
+  }
+
+  /* ====== DIRECTION 8: Error / Edge States ====== */
+  .d8-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .d8-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .d8-card-label {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .d8-card-body { padding: 16px; }
+  .d8-toast {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .d8-toast.success { background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.3); color: var(--success); }
+  .d8-toast.warning { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: var(--warning); }
+  .d8-toast.error { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--error); }
+  .d8-empty {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .d8-empty .icon { font-size: 24px; margin-bottom: 8px; }
+  .d8-confirm {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .d8-confirm .msg { color: var(--text-primary); margin-bottom: 12px; }
+  .d8-confirm .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .d8-confirm .btn {
+    padding: 4px 14px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border: 1px solid var(--border-default);
+    cursor: default;
+  }
+  .d8-confirm .btn.danger { background: rgba(248, 113, 113, 0.15); border-color: var(--error); color: var(--error); }
+  .d8-confirm .btn.cancel { background: var(--bg-elevated); color: var(--text-secondary); }
+  .d8-cli-output {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .d8-cli-output .prompt { color: var(--text-muted); }
+  .d8-cli-output .cmd { color: var(--text-primary); }
+  .d8-cli-output .ok { color: var(--success); }
+  .d8-cli-output .err { color: var(--error); }
+
+  /* Show all mode */
+  .show-all .direction { display: block !important; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>notey — Design Direction Mockups</h1>
+  <p>8 visual explorations for Notey's UI. Each mockup shows a different view or state of the application. Click a direction to focus, or "Show All" to compare.</p>
+</div>
+
+<div class="nav-bar" id="nav">
+  <button class="nav-btn" onclick="showAll()">Show All</button>
+  <button class="nav-btn" onclick="show(1)">1. Standard Editor</button>
+  <button class="nav-btn" onclick="show(2)">2. Ultra-Minimal</button>
+  <button class="nav-btn" onclick="show(3)">3. Sidebar List</button>
+  <button class="nav-btn" onclick="show(4)">4. Workspace Focus</button>
+  <button class="nav-btn" onclick="show(5)">5. Search View</button>
+  <button class="nav-btn" onclick="show(6)">6. Command Palette</button>
+  <button class="nav-btn" onclick="show(7)">7. Onboarding</button>
+  <button class="nav-btn" onclick="show(8)">8. Edge States</button>
+</div>
+
+<div class="directions-container" id="container">
+
+  <!-- DIRECTION 1: Standard Editor with Tabs -->
+  <div class="direction visible" id="d1">
+    <div class="direction-header">
+      <h2>Direction 1 — Standard Editor with Tabs</h2>
+      <div class="subtitle">The default capture view. Tab bar + editor + status bar. Compact chrome, maximum content.</div>
+      <div class="tags">
+        <span class="tag">default view</span>
+        <span class="tag">multi-tab</span>
+        <span class="tag">floating mode</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d1">
+        <div class="tab-bar">
+          <div class="tab active">CORS fix for nginx<span class="close">×</span></div>
+          <div class="tab">k8s debug notes<span class="close">×</span></div>
+          <div class="tab">sprint retro items<span class="close">×</span></div>
+        </div>
+        <div class="editor-area">
+          <div class="line"><span class="comment">## API Gateway Fix</span></div>
+          <div class="line">&nbsp;</div>
+          <div class="line">Missing `Access-Control-Allow-Headers` for</div>
+          <div class="line">`X-Request-ID` in nginx.conf L47.</div>
+          <div class="line">&nbsp;</div>
+          <div class="line"><span class="comment">### Steps to reproduce:</span></div>
+          <div class="line">1. Hit `/api/users` from frontend</div>
+          <div class="line">2. CORS preflight fails on X-Request-ID</div>
+          <div class="line">3. Check nginx access log for 403</div>
+          <div class="line">&nbsp;</div>
+          <div class="line"><span class="comment">### Fix:</span></div>
+          <div class="line">```</div>
+          <div class="line"><span class="keyword">add_header</span> <span class="string">'Access-Control-Allow-Headers'</span></div>
+          <div class="line">  <span class="string">'X-Request-ID, Content-Type, Authorization'</span>;</div>
+          <div class="line">```<span class="cursor"></span></div>
+        </div>
+        <div class="status-bar">
+          <div class="left">
+            <span class="workspace">startup-app</span>
+            <span>Markdown</span>
+            <span>Ln 15, Col 4</span>
+          </div>
+          <div class="right">
+            <span class="saved">Saved</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Tab bar at top — familiar from VS Code/browsers. 32px height keeps it compact.</li>
+        <li>Active tab uses primary background, inactive tabs use elevated — subtle distinction without color.</li>
+        <li>Close button only visible on active tab — reduces visual noise.</li>
+        <li>Status bar: workspace name (left), save status (right). 24px total height.</li>
+        <li>Editor takes 85%+ of vertical space. No titlebar, no toolbar, no menu bar.</li>
+        <li>Drop shadow on window provides depth separation from desktop.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 2: Ultra-Minimal -->
+  <div class="direction" id="d2">
+    <div class="direction-header">
+      <h2>Direction 2 — Ultra-Minimal (Quick Capture)</h2>
+      <div class="subtitle">Zero chrome. Just the editor and a whisper-thin status bar. The "just type" experience.</div>
+      <div class="tags">
+        <span class="tag">single note</span>
+        <span class="tag">zero chrome</span>
+        <span class="tag">fastest capture</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d2">
+        <div class="editor-area">
+          <div class="line">retry backoff is 2^n but threshold is</div>
+          <div class="line">fixed at 5s — mismatch causes cascading</div>
+          <div class="line">failures when auth-svc is under load</div>
+          <div class="line">&nbsp;</div>
+          <div class="line">check circuit_breaker config in</div>
+          <div class="line">infra/helm/auth-svc/values.yaml<span class="cursor"></span></div>
+        </div>
+        <div class="status-bar">
+          <div class="left">
+            <span>infra-platform</span>
+            <span>·</span>
+            <span>Markdown</span>
+          </div>
+          <div class="right">
+            <span class="saved">Saved</span>
+            <span class="hint">Ctrl+P commands</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>No tab bar — single note focus. Tabs accessible via Ctrl+Tab or command palette.</li>
+        <li>Maximum content area — 95% of the window is editor.</li>
+        <li>Status bar shows workspace + save status + command palette hint for discoverability.</li>
+        <li>Ideal for the "hotkey → type → Esc" capture loop where speed is everything.</li>
+        <li>Could be the default for new/empty captures, switching to tabbed view when multiple notes are open.</li>
+        <li>Trade-off: Less discoverable features, but aligned with "invisible until summoned" principle.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 3: Sidebar List -->
+  <div class="direction" id="d3">
+    <div class="direction-header">
+      <h2>Direction 3 — Sidebar Note List</h2>
+      <div class="subtitle">Note list sidebar for browsing and management. Better for half-screen/full-screen modes.</div>
+      <div class="tags">
+        <span class="tag">note browsing</span>
+        <span class="tag">half-screen mode</span>
+        <span class="tag">management view</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d3">
+        <div class="sidebar">
+          <div class="sidebar-header">
+            <span>startup-app</span>
+            <span class="count">23 notes</span>
+          </div>
+          <div class="note-list">
+            <div class="note-item active">
+              <div class="title">CORS fix for nginx</div>
+              <div class="meta">2 min ago · Markdown</div>
+            </div>
+            <div class="note-item">
+              <div class="title">Dashboard search perf</div>
+              <div class="meta">3 days ago · Markdown</div>
+            </div>
+            <div class="note-item">
+              <div class="title">Sprint planning notes</div>
+              <div class="meta">5 days ago · Plain text</div>
+            </div>
+            <div class="note-item">
+              <div class="title">Deploy checklist v2</div>
+              <div class="meta">1 week ago · Markdown</div>
+            </div>
+            <div class="note-item">
+              <div class="title">SQL query — user stats</div>
+              <div class="meta">1 week ago · Markdown</div>
+            </div>
+            <div class="note-item">
+              <div class="title">API rate limit config</div>
+              <div class="meta">2 weeks ago · Plain text</div>
+            </div>
+          </div>
+        </div>
+        <div class="main-area">
+          <div class="editor-area">
+            <div class="line">## CORS fix for nginx</div>
+            <div class="line">&nbsp;</div>
+            <div class="line">Missing `Access-Control-Allow-Headers`</div>
+            <div class="line">for `X-Request-ID` in nginx.conf L47.</div>
+            <div class="line">&nbsp;</div>
+            <div class="line">Fix in infra repo, not frontend.<span class="cursor"></span></div>
+          </div>
+          <div class="status-bar">
+            <div class="left">
+              <span>Markdown</span>
+              <span>Ln 6, Col 35</span>
+            </div>
+            <div class="right">
+              <span class="saved" style="color: var(--success);">Saved</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Sidebar provides note browsing without leaving the editor context.</li>
+        <li>Best suited for half-screen or full-screen modes where width allows it.</li>
+        <li>Active note highlighted with accent border — clear selection indicator.</li>
+        <li>Sidebar could be toggled (hidden by default in floating mode, shown in wider modes).</li>
+        <li>Trade-off: Adds complexity. Not needed for the core capture loop, but valuable for retrieval and management.</li>
+        <li>Workspace name in sidebar header replaces status bar workspace indicator.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 4: Workspace Prominence -->
+  <div class="direction" id="d4">
+    <div class="direction-header">
+      <h2>Direction 4 — Workspace-Prominent Header</h2>
+      <div class="subtitle">Workspace context elevated to a dedicated bar. Makes the "zero-config organization" visible.</div>
+      <div class="tags">
+        <span class="tag">workspace aware</span>
+        <span class="tag">context visible</span>
+        <span class="tag">aha moment</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d4">
+        <div class="workspace-bar">
+          <span class="ws-label">workspace</span>
+          <span class="ws-sep">/</span>
+          <span class="ws-name">startup-app</span>
+          <span class="note-count">23 notes</span>
+        </div>
+        <div class="tab-bar">
+          <div class="tab active">CORS fix<span class="close"> ×</span></div>
+          <div class="tab">k8s debug<span class="close"> ×</span></div>
+        </div>
+        <div class="editor-area">
+          <div class="line">Missing `Access-Control-Allow-Headers`</div>
+          <div class="line">for `X-Request-ID` in nginx.conf L47.</div>
+          <div class="line">&nbsp;</div>
+          <div class="line">Fix in infra repo, not frontend.</div>
+          <div class="line">&nbsp;</div>
+          <div class="line">```nginx</div>
+          <div class="line">add_header 'Access-Control-Allow-Headers'</div>
+          <div class="line">  'X-Request-ID, Content-Type';</div>
+          <div class="line">```<span class="cursor"></span></div>
+        </div>
+        <div class="status-bar">
+          <div class="left">
+            <span>Markdown · Ln 9 · Col 4</span>
+          </div>
+          <div class="right">
+            <span class="saved">Saved</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Dedicated workspace bar makes the auto-detection feature immediately visible.</li>
+        <li>Drives the "aha moment" — user sees workspace name without configuring anything.</li>
+        <li>Workspace bar uses a slightly different background tone for visual separation.</li>
+        <li>Tab bar uses bottom-border indicator (VS Code style) instead of background highlight.</li>
+        <li>Trade-off: Extra 28px of chrome. Justified if workspace awareness is a key differentiator.</li>
+        <li>Could show "All Workspaces" as an option for unscoped browsing.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 5: Search View -->
+  <div class="direction" id="d5">
+    <div class="direction-header">
+      <h2>Direction 5 — Search & Retrieval View</h2>
+      <div class="subtitle">The retrieval loop. Full-width search with real-time fuzzy results.</div>
+      <div class="tags">
+        <span class="tag">search</span>
+        <span class="tag">fuzzy matching</span>
+        <span class="tag">fzf-inspired</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d5">
+        <div class="search-header">
+          <span class="search-icon">⌕</span>
+          <input class="search-input" type="text" value="circuit break" placeholder="Search notes..." disabled>
+          <span class="search-scope">startup-app</span>
+        </div>
+        <div class="results-list">
+          <div class="result-item selected">
+            <div class="result-title">k8s debug — <span class="match">circuit break</span>er config</div>
+            <div class="result-meta">
+              <span>infra-platform</span>
+              <span>2 hours ago</span>
+            </div>
+            <div class="result-snippet">retry backoff is 2^n but threshold is fixed at 5s — <span class="match">circuit break</span>er mismatch causes...</div>
+          </div>
+          <div class="result-item">
+            <div class="result-title">Auth service resilience notes</div>
+            <div class="result-meta">
+              <span>infra-platform</span>
+              <span>3 days ago</span>
+            </div>
+            <div class="result-snippet">...need to review <span class="match">circuit break</span>er thresholds across all services before next...</div>
+          </div>
+          <div class="result-item">
+            <div class="result-title">Incident 2847 postmortem prep</div>
+            <div class="result-meta">
+              <span>infra-platform</span>
+              <span>1 week ago</span>
+            </div>
+            <div class="result-snippet">Root cause: <span class="match">circuit</span> <span class="match">break</span>er threshold was static while retry backoff was exponential...</div>
+          </div>
+        </div>
+        <div class="status-bar">
+          <span>3 results · ↑↓ navigate · Enter open · Esc close</span>
+          <span>All workspaces</span>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Search input at top with scope indicator — user sees what workspace they're searching in.</li>
+        <li>Results show title, workspace, date, and snippet with match highlighting.</li>
+        <li>Selected result uses accent-muted background — keyboard-navigable with arrow keys.</li>
+        <li>Status bar shows result count and keyboard hints for discoverability.</li>
+        <li>Fuzzy matching highlights split across words ("circuit" + "break" matched separately).</li>
+        <li>This view is an overlay that appears over the editor — Esc returns to the editor state.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 6: Command Palette -->
+  <div class="direction" id="d6">
+    <div class="direction-header">
+      <h2>Direction 6 — Command Palette (Ctrl+P)</h2>
+      <div class="subtitle">The progressive disclosure layer. Every feature accessible from one input.</div>
+      <div class="tags">
+        <span class="tag">command palette</span>
+        <span class="tag">progressive disclosure</span>
+        <span class="tag">VS Code pattern</span>
+      </div>
+    </div>
+    <div class="mockup-desktop d6">
+      <div class="desktop-content">
+        <div>$ kubectl get pods -n production</div>
+        <div>NAME&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;READY&nbsp;&nbsp;STATUS</div>
+        <div>auth-svc-7f8d&nbsp;&nbsp;&nbsp;1/1&nbsp;&nbsp;&nbsp;&nbsp;Running</div>
+        <div>api-gw-3k2j&nbsp;&nbsp;&nbsp;&nbsp;1/1&nbsp;&nbsp;&nbsp;&nbsp;Running</div>
+      </div>
+      <div class="notey-window">
+        <div class="palette-input">
+          <span class="chevron">›</span>
+          <span class="text">theme</span><span class="cursor-char"></span>
+        </div>
+        <div class="palette-results">
+          <div class="palette-group-label">Settings</div>
+          <div class="palette-item selected">
+            <span class="label">Toggle Dark/Light Theme</span>
+            <div class="shortcut"><span class="key">Ctrl</span><span class="key">Shift</span><span class="key">T</span></div>
+          </div>
+          <div class="palette-group-label">Actions</div>
+          <div class="palette-item">
+            <span class="label">New Note</span>
+            <div class="shortcut"><span class="key">Ctrl</span><span class="key">N</span></div>
+          </div>
+          <div class="palette-item">
+            <span class="label">Search Notes</span>
+            <div class="shortcut"><span class="key">Ctrl</span><span class="key">F</span></div>
+          </div>
+          <div class="palette-item">
+            <span class="label">Switch Workspace</span>
+            <div class="shortcut"><span class="key">Ctrl</span><span class="key">W</span></div>
+          </div>
+          <div class="palette-item">
+            <span class="label">Export All Notes</span>
+            <div class="shortcut"></div>
+          </div>
+          <div class="palette-item">
+            <span class="label">Open Settings</span>
+            <div class="shortcut"><span class="key">Ctrl</span><span class="key">,</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>VS Code/Obsidian-inspired: single input, fuzzy-matched commands, keyboard shortcuts shown.</li>
+        <li>Group labels ("Settings", "Actions") organize commands without hierarchy.</li>
+        <li>Selected item uses accent-muted background. Arrow keys navigate, Enter executes.</li>
+        <li>Appears as centered overlay — same pattern as Spotlight/Raycast.</li>
+        <li>Every feature is discoverable here without cluttering the main UI.</li>
+        <li>The ">" chevron signals "command mode" — differentiates from search.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 7: Onboarding -->
+  <div class="direction" id="d7">
+    <div class="direction-header">
+      <h2>Direction 7 — First-Run Onboarding</h2>
+      <div class="subtitle">One instruction. No tour, no wizard, no account creation. 60 seconds to first capture.</div>
+      <div class="tags">
+        <span class="tag">onboarding</span>
+        <span class="tag">first-run</span>
+        <span class="tag">minimal</span>
+      </div>
+    </div>
+    <div class="mockup-desktop">
+      <div class="notey-window d7">
+        <div class="onboarding-overlay">
+          <div class="logo">notey</div>
+          <div class="instruction">
+            Your capture shortcut is:
+          </div>
+          <div class="hotkey-display">
+            <span class="key-cap">Ctrl</span>
+            <span class="key-plus">+</span>
+            <span class="key-cap">Shift</span>
+            <span class="key-plus">+</span>
+            <span class="key-cap">N</span>
+          </div>
+          <div class="cta">Press it now to try.</div>
+          <div class="skip">Esc to dismiss · Ctrl+, to customize shortcut</div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Single instruction — "Press it now to try." No multi-step wizard.</li>
+        <li>Key caps rendered as physical key representations — instantly readable.</li>
+        <li>Product name ("notey") is the only branding moment. Clean, lowercase, monospace.</li>
+        <li>Skip/customize options are secondary — muted text, not competing with the CTA.</li>
+        <li>After pressing the hotkey, this overlay dismisses and never appears again.</li>
+        <li>On macOS: an additional line would appear for accessibility permission guidance if not granted.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DIRECTION 8: Edge States -->
+  <div class="direction" id="d8">
+    <div class="direction-header">
+      <h2>Direction 8 — Edge States & Feedback</h2>
+      <div class="subtitle">Error handling, empty states, confirmations, and CLI output. The "whispers, not alarms" principle in action.</div>
+      <div class="tags">
+        <span class="tag">error states</span>
+        <span class="tag">empty states</span>
+        <span class="tag">CLI feedback</span>
+      </div>
+    </div>
+    <div class="d8-grid">
+      <div class="d8-card">
+        <div class="d8-card-label">Save States</div>
+        <div class="d8-card-body" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="d8-toast success">✓ Saved</div>
+          <div class="d8-toast warning">⚠ Save failed — retrying on next edit</div>
+          <div class="d8-toast error">✕ Database error — notes may not persist</div>
+        </div>
+      </div>
+      <div class="d8-card">
+        <div class="d8-card-label">Empty State — No Notes</div>
+        <div class="d8-card-body">
+          <div class="d8-empty">
+            <div class="icon" style="color: var(--text-muted);">⌨</div>
+            <div>Start typing to create your first note.</div>
+            <div style="margin-top: 8px; font-size: 11px;">Notes auto-save. Press Esc to dismiss.</div>
+          </div>
+        </div>
+      </div>
+      <div class="d8-card">
+        <div class="d8-card-label">Permanent Delete Confirmation</div>
+        <div class="d8-card-body">
+          <div class="d8-confirm">
+            <div class="msg">Permanently delete "k8s debug notes"?<br><span style="color: var(--text-muted); font-size: 12px;">This cannot be undone.</span></div>
+            <div class="actions">
+              <div class="btn cancel">Cancel</div>
+              <div class="btn danger">Delete Forever</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="d8-card">
+        <div class="d8-card-label">CLI Output</div>
+        <div class="d8-card-body">
+          <div class="d8-cli-output">
+            <div><span class="prompt">$</span> <span class="cmd">notey add "fix nginx CORS header"</span></div>
+            <div><span class="ok">✓</span> Note saved (workspace: startup-app)</div>
+            <div>&nbsp;</div>
+            <div><span class="prompt">$</span> <span class="cmd">notey search "circuit"</span></div>
+            <div><span style="color: var(--text-primary);">1.</span> k8s debug — circuit breaker config</div>
+            <div><span style="color: var(--text-primary);">2.</span> Incident 2847 postmortem prep</div>
+            <div>&nbsp;</div>
+            <div><span class="prompt">$</span> <span class="cmd">notey add "test" --workspace missing</span></div>
+            <div><span class="err">✕</span> Workspace "missing" not found</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="direction-notes">
+      <h3>Design Rationale</h3>
+      <ul>
+        <li>Save states: green check (success), amber warning (recoverable), red error (critical). Color-coded, terse, non-modal.</li>
+        <li>Empty state: minimal, instructional, non-patronizing. Keyboard icon signals "just type."</li>
+        <li>Delete confirmation: only shown for permanent delete (not soft-delete). Clear danger styling. Cancel is default focus.</li>
+        <li>CLI output: clean, colored feedback. Checkmarks and X marks for immediate scan. Workspace confirmation on save.</li>
+        <li>All feedback follows "whispers, not alarms" — status indicators, not modal dialogs.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function show(n) {
+  document.getElementById('container').classList.remove('show-all');
+  document.querySelectorAll('.direction').forEach(d => d.classList.remove('visible'));
+  document.getElementById('d' + n).classList.add('visible');
+  document.querySelectorAll('.nav-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === n);
+  });
+  document.getElementById('d' + n).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function showAll() {
+  document.getElementById('container').classList.add('show-all');
+  document.querySelectorAll('.direction').forEach(d => d.classList.add('visible'));
+  document.querySelectorAll('.nav-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === 0);
+  });
+}
+// Default: show all
+showAll();
+</script>
+
+</body>
+</html>
