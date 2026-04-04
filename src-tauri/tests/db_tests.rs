@@ -2,13 +2,13 @@ mod helpers;
 
 use rusqlite::params;
 
-use helpers::factories::{cleanup_temp_db, create_temp_db, NoteBuilder};
+use helpers::factories::{create_temp_db, NoteBuilder};
 use tauri_app_lib::errors::NoteyError;
 use tauri_app_lib::services::notes;
 
 #[test]
 fn test_notes_table_creation() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='notes'",
@@ -17,62 +17,56 @@ fn test_notes_table_creation() {
         )
         .expect("query failed");
     assert_eq!(count, 1, "notes table should exist");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_wal_mode_active() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let mode: String = conn
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .expect("query failed");
     assert_eq!(mode, "wal", "journal_mode should be WAL");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_pragma_synchronous() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let val: i64 = conn
         .query_row("PRAGMA synchronous", [], |row| row.get(0))
         .expect("query failed");
     assert_eq!(val, 1, "synchronous should be NORMAL (1)");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_pragma_busy_timeout() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let val: i64 = conn
         .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
         .expect("query failed");
     assert_eq!(val, 5000, "busy_timeout should be 5000");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_pragma_foreign_keys() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let val: i64 = conn
         .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
         .expect("query failed");
     assert_eq!(val, 1, "foreign_keys should be ON (1)");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_pragma_cache_size() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let val: i64 = conn
         .query_row("PRAGMA cache_size", [], |row| row.get(0))
         .expect("query failed");
     assert_eq!(val, -10000, "cache_size should be -10000");
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_create_note_inserts_row_with_correct_defaults() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let note = notes::create_note(&conn, "markdown").expect("create_note failed");
 
     assert!(note.id > 0, "note should have a positive id");
@@ -100,24 +94,21 @@ fn test_create_note_inserts_row_with_correct_defaults() {
         )
         .expect("query failed");
     assert_eq!(count, 1, "note should exist in database");
-
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_get_note_not_found_returns_not_found_error() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let result = notes::get_note(&conn, 99999);
     assert!(
         matches!(result, Err(NoteyError::NotFound)),
         "get_note with nonexistent id should return NotFound"
     );
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_update_note_only_updates_provided_fields() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
     let note = notes::create_note(&conn, "markdown").expect("create_note failed");
 
     let updated = notes::update_note(
@@ -132,13 +123,11 @@ fn test_update_note_only_updates_provided_fields() {
     assert_eq!(updated.content, "updated content", "content should be updated");
     assert_eq!(updated.title, note.title, "title should not change");
     assert_eq!(updated.format, note.format, "format should not change");
-
-    cleanup_temp_db(&dir);
 }
 
 #[test]
 fn test_list_notes_filters_trashed_notes() {
-    let (conn, dir) = create_temp_db();
+    let (conn, _dir) = create_temp_db();
 
     let _note1 = NoteBuilder::new().trashed().insert(&conn);
     let note2 = NoteBuilder::new().title("Visible").insert(&conn);
@@ -147,8 +136,6 @@ fn test_list_notes_filters_trashed_notes() {
 
     assert_eq!(result.len(), 1, "only non-trashed notes should appear");
     assert_eq!(result[0].id, note2.id);
-
-    cleanup_temp_db(&dir);
 }
 
 // P0-INT-002: DB write durability — data survives close + reopen
@@ -173,13 +160,11 @@ fn test_db_write_survives_reopen() {
     drop(conn);
 
     // Reopen the same database
-    let conn2 = tauri_app_lib::db::init_db(dir.clone()).expect("reopen failed");
+    let conn2 = tauri_app_lib::db::init_db(dir.path().to_path_buf()).expect("reopen failed");
     let reloaded = notes::get_note(&conn2, note_id).expect("get_note after reopen failed");
 
     assert_eq!(reloaded.title, "durable title");
     assert_eq!(reloaded.content, "durable content");
-
-    cleanup_temp_db(&dir);
 }
 
 // P0-INT-003: integrity_check passes after concurrent writes
@@ -188,7 +173,7 @@ fn test_integrity_check_after_concurrent_writes() {
     let (conn, dir) = create_temp_db();
 
     // Open a second connection to the same file DB
-    let db_path = dir.join("notey.db");
+    let db_path = dir.path().join("notey.db");
     let conn2 = rusqlite::Connection::open(&db_path).expect("open second connection");
     conn2
         .execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
@@ -213,8 +198,6 @@ fn test_integrity_check_after_concurrent_writes() {
 
     assert_eq!(check1, "ok", "conn1 integrity_check should pass");
     assert_eq!(check2, "ok", "conn2 integrity_check should pass");
-
-    cleanup_temp_db(&dir);
 }
 
 // P1-UNIT-006: Migration applies identically on fresh and existing DB
@@ -234,7 +217,7 @@ fn test_migration_idempotent_on_existing_db() {
     drop(conn);
 
     // Re-init the same DB (migrations should be a no-op)
-    let conn2 = tauri_app_lib::db::init_db(dir.clone()).expect("re-init failed");
+    let conn2 = tauri_app_lib::db::init_db(dir.path().to_path_buf()).expect("re-init failed");
     let schema2: String = conn2
         .query_row(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes'",
@@ -244,6 +227,4 @@ fn test_migration_idempotent_on_existing_db() {
         .expect("schema query 2");
 
     assert_eq!(schema1, schema2, "schema should be identical after re-migration");
-
-    cleanup_temp_db(&dir);
 }

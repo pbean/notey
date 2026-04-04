@@ -1,28 +1,17 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
-use std::path::PathBuf;
+use tempfile::TempDir;
 
 use tauri_app_lib::db;
 use tauri_app_lib::models::Note;
 
 /// Create a file-backed temp DB with full init (PRAGMAs + migrations).
-/// Returns the connection and temp directory path for cleanup.
-pub fn create_temp_db() -> (Connection, PathBuf) {
-    let dir = std::env::temp_dir().join(format!(
-        "notey_test_{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&dir).expect("failed to create temp dir");
-    let conn = db::init_db(dir.clone()).expect("failed to init db");
+/// Returns the connection and a `TempDir` guard — the directory is automatically
+/// cleaned up when the guard is dropped, even if the test panics.
+pub fn create_temp_db() -> (Connection, TempDir) {
+    let dir = TempDir::new().expect("failed to create temp dir");
+    let conn = db::init_db(dir.path().to_path_buf()).expect("failed to init db");
     (conn, dir)
-}
-
-/// Remove the temp DB directory.
-pub fn cleanup_temp_db(dir: &std::path::Path) {
-    let _ = std::fs::remove_dir_all(dir);
 }
 
 /// Create an in-memory test DB with PRAGMAs and migrations applied.

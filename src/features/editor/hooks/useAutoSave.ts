@@ -34,15 +34,18 @@ export async function flushSave(): Promise<void> {
 
   if (noteId === null) {
     isCreating = true;
-    const createResult = await commands.createNote(format);
-    isCreating = false;
-    if (createResult.status === 'error') {
-      setSaveStatus('failed');
-      console.error('flushSave createNote failed:', createResult.error);
-      return;
+    try {
+      const createResult = await commands.createNote(format);
+      if (createResult.status === 'error') {
+        setSaveStatus('failed');
+        console.error('flushSave createNote failed:', createResult.error);
+        return;
+      }
+      noteId = createResult.data.id;
+      setActiveNote(noteId);
+    } finally {
+      isCreating = false;
     }
-    noteId = createResult.data.id;
-    setActiveNote(noteId);
   }
 
   const firstLine = content.split('\n')[0].trim();
@@ -106,15 +109,18 @@ export function useAutoSave(): void {
 
       if (noteId === null) {
         isCreating = true;
-        const createResult = await commands.createNote(useEditorStore.getState().format);
-        isCreating = false;
-        if (createResult.status === 'error') {
-          setSaveStatus('failed');
-          console.error('createNote failed:', createResult.error);
-          return;
+        try {
+          const createResult = await commands.createNote(useEditorStore.getState().format);
+          if (createResult.status === 'error') {
+            setSaveStatus('failed');
+            console.error('createNote failed:', createResult.error);
+            return;
+          }
+          noteId = createResult.data.id;
+          setActiveNote(noteId);
+        } finally {
+          isCreating = false;
         }
-        noteId = createResult.data.id;
-        setActiveNote(noteId);
       }
 
       const updateResult = await commands.updateNote(noteId, title, content, null);

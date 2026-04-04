@@ -16,10 +16,7 @@ export function useNoteHydration(viewRef: RefObject<EditorView | null>): void {
     if (!isHydrating) return;
 
     const view = viewRef.current;
-    if (!view) {
-      clearHydrating();
-      return;
-    }
+    if (!view) return; // View not mounted yet — keep isHydrating so next render retries
 
     view.dispatch(
       view.state.update({

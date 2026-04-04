@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { EditorView } from '@codemirror/view';
 
@@ -9,17 +9,15 @@ import type { EditorView } from '@codemirror/view';
  * not unconditionally at construction time.
  */
 export function useWindowFocus(viewRef: React.RefObject<EditorView | null>): void {
-  const cancelledRef = useRef(false);
-
   useEffect(() => {
-    cancelledRef.current = false;
-    const appWindow = getCurrentWebviewWindow();
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
+    const appWindow = getCurrentWebviewWindow();
 
     appWindow.listen('tauri://focus', () => {
       viewRef.current?.focus();
     }).then((fn) => {
-      if (cancelledRef.current) {
+      if (cancelled) {
         fn();
       } else {
         unlisten = fn;
@@ -27,7 +25,7 @@ export function useWindowFocus(viewRef: React.RefObject<EditorView | null>): voi
     });
 
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
       unlisten?.();
     };
   }, [viewRef]);
