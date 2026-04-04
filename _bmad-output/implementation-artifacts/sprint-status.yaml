@@ -58,7 +58,7 @@ development_status:
   1-12-window-dismiss-save-flush: done
   1-13-system-tray-icon-context-menu: done
   1-14-toml-configuration-service: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Workspace-Aware Note Organization
   epic-2: backlog
