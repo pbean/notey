@@ -30,6 +30,8 @@ interface EditorActions {
   setSaveStatus: (status: SaveStatus) => void;
   /** Atomically mark a successful save with its timestamp. */
   markSaved: (lastSavedAt: string) => void;
+  /** Reset all editor state to initial values (for "new note" or "close note" flows). */
+  resetNote: () => void;
 }
 
 /** Per-editor Zustand store for note content, format, and save state. */
@@ -44,4 +46,12 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setFormat: (format) => set({ format }),
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   markSaved: (lastSavedAt) => set({ saveStatus: 'saved', lastSavedAt }),
+  resetNote: () =>
+    set({
+      activeNoteId: null,
+      content: '',
+      format: 'markdown',
+      saveStatus: 'idle',
+      lastSavedAt: null,
+    }),
 }));

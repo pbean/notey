@@ -47,13 +47,22 @@ pub fn load_or_create(config_dir: &Path) -> Result<AppConfig, NoteyError> {
     }
 }
 
-/// Writes the config to disk as TOML.
+/// Writes the config to disk as TOML using atomic write (temp file + rename).
+/// Cleans up the temp file on any failure to avoid leaving stale partial files.
 pub fn save(config_dir: &Path, config: &AppConfig) -> Result<(), NoteyError> {
     fs::create_dir_all(config_dir)?;
     let path = config_file_path(config_dir);
+    let tmp_path = config_dir.join("config.toml.tmp");
     let contents = toml::to_string_pretty(config)
         .map_err(|e| NoteyError::Config(format!("Failed to serialize config: {}", e)))?;
-    fs::write(&path, contents)?;
+    if let Err(e) = fs::write(&tmp_path, &contents) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+    if let Err(e) = fs::rename(&tmp_path, &path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
     Ok(())
 }
 
@@ -191,5 +200,26 @@ globalShortcut = "Ctrl+Shift+M"
         let contents = fs::read_to_string(tmp.path().join("config.toml")).unwrap();
         let parsed: AppConfig = toml::from_str(&contents).unwrap();
         assert_eq!(parsed.general.theme, config.general.theme);
+    }
+
+    #[test]
+    fn save_is_atomic_no_temp_file_left() {
+        let tmp = TempDir::new().unwrap();
+        let config = AppConfig::default();
+        save(tmp.path(), &config).unwrap();
+
+        // Temp file should not remain after successful save
+        assert!(!tmp.path().join("config.toml.tmp").exists());
+        assert!(tmp.path().join("config.toml").exists());
+
+        // Overwrite with different config — original is replaced atomically
+        let mut updated = config;
+        updated.editor.font_size = 24;
+        save(tmp.path(), &updated).unwrap();
+
+        let contents = fs::read_to_string(tmp.path().join("config.toml")).unwrap();
+        let parsed: AppConfig = toml::from_str(&contents).unwrap();
+        assert_eq!(parsed.editor.font_size, 24);
+        assert!(!tmp.path().join("config.toml.tmp").exists());
     }
 }

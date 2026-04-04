@@ -10,7 +10,11 @@ export const commands = {
 	listNotes: () => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes")),
 	// Returns the full application config.
 	getConfig: () => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("get_config")),
-	// Applies a partial update to the config, saves to disk, and returns the updated config.
+	/**
+	 *  Applies a partial update to the config, saves to disk, and returns the updated config.
+	 *  Validates shortcut strings before persisting. Re-registers the global hotkey if changed.
+	 *  Releases the mutex before filesystem I/O to avoid blocking concurrent reads.
+	 */
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),

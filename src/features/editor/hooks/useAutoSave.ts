@@ -55,7 +55,7 @@ export async function flushSave(): Promise<void> {
     return;
   }
 
-  markSaved(new Date().toISOString());
+  markSaved(updateResult.data.updatedAt);
 }
 
 /**
@@ -121,7 +121,7 @@ export function useAutoSave(): void {
         return;
       }
 
-      markSaved(new Date().toISOString());
+      markSaved(updateResult.data.updatedAt);
       idleTimerRef.current = setTimeout(() => {
         if (useEditorStore.getState().saveStatus === 'saved') {
           useEditorStore.getState().setSaveStatus('idle');

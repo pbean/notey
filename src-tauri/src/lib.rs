@@ -46,7 +46,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 }
 
 /// Parses a shortcut string like "Ctrl+Shift+N" into Modifiers + Code.
-fn parse_shortcut(
+pub(crate) fn parse_shortcut(
     s: &str,
 ) -> Option<tauri_plugin_global_shortcut::Shortcut> {
     use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
@@ -137,10 +137,11 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
-                        .with_handler(move |_app, fired_shortcut, event| {
-                            if fired_shortcut == &shortcut
-                                && event.state() == ShortcutState::Pressed
-                            {
+                        .with_handler(move |_app, _shortcut, event| {
+                            // Only one global shortcut is registered at a time, so any
+                            // press event is ours. This avoids capturing a stale shortcut
+                            // value when the hotkey is re-registered via update_config.
+                            if event.state() == ShortcutState::Pressed {
                                 toggle_main_window(&app_handle);
                             }
                         })
