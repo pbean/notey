@@ -1,7 +1,7 @@
 ---
 project_name: 'notey'
 user_name: 'Pinkyd'
-date: '2026-04-03'
+date: '2026-04-04'
 sections_completed:
   ['technology_stack', 'language_rules', 'framework_rules', 'testing_rules', 'quality_rules', 'workflow_rules', 'anti_patterns']
 status: 'complete'
@@ -21,7 +21,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Tauri v2.10.3** — Desktop framework (Rust backend + web frontend)
 - **React 19** — UI library
 - **TypeScript** — Strict mode enabled, frontend language
-- **Rust stable** — Backend language
+- **Rust nightly-2026-04-03** — Backend language (pinned in `rust-toolchain.toml`; required by `specta =2.0.0-rc.24` for `fmt::from_fn` behind `debug_closure_helpers` feature gate)
 - **Vite** — Frontend bundler
 
 ### Key Dependencies
@@ -29,7 +29,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Zustand** — State management (per-feature stores)
 - **Tailwind CSS v4** + **shadcn/ui** — Styling and components
 - **rusqlite** + **SQLite** — Database (WAL mode + FTS5 full-text search)
-- **tauri-specta v2** — Compile-time type-safe IPC bindings (mandatory)
+- **tauri-specta v2** (`=2.0.0-rc.24`) — Compile-time type-safe IPC bindings (mandatory; RC-stage, requires nightly Rust)
+- **specta** (`=2.0.0-rc.24`) + **specta-typescript** (`=0.0.11`) — Type introspection and TS codegen backends for tauri-specta
 - **serde** + **serde_json** — Rust serialization
 - **chrono** — Date/time handling
 - **thiserror** — Error type derivation
@@ -69,7 +70,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Date/time generation: `chrono::Utc::now().to_rfc3339()` — ISO 8601 TEXT
 - Never use Unix timestamps — storage and JSON are always ISO 8601 strings
 - Error types via `thiserror` — `NoteyError` enum with `Serialize` derive
-- Error variants: `Database`, `NotFound`, `Workspace`, `Io`, `Validation`
+- Error variants: `Database`, `NotFound`, `Workspace`, `Io`, `Validation`, `Config`
 - Tauri commands: thin handlers only — delegate all logic to service layer
 - Platform code: trait-based `Platform` abstraction with `#[cfg(target_os)]` per-OS implementations
 - Database queries: parameterized only — NEVER string interpolation/concatenation
@@ -228,4 +229,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Review quarterly for outdated rules
 - Remove rules that become obvious over time
 
-Last Updated: 2026-04-03
+Last Updated: 2026-04-04

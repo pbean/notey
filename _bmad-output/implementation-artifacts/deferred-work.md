@@ -37,3 +37,15 @@ Depends on: Frontend Core Visual Foundation (Stories 1.6–1.8)
 - ~~**Non-atomic config write**~~ → Atomic write via temp+rename with cleanup on error
 - ~~**Mutex held across I/O in `update_config`**~~ → Lock released before filesystem I/O
 - ~~**Shortcut string validation in `update_config`**~~ → Validated via `parse_shortcut` before persist
+
+## Deferred from: Epic 1 Retro Action Items (2026-04-04)
+
+Source: `_bmad-output/implementation-artifacts/epic-1-retro-2026-04-04.md`
+
+- **Test data factories** — Rust (`src-tauri/tests/helpers/factories.rs`) + TypeScript (`src/test-utils/factories.ts`). Blocks all other test work.
+- **Note content load path** — Editor hydration for existing notes via `view.dispatch(view.state.update({ changes: ... }))`. Blocks Epic 2 Story 2-5.
+- **P0 test suite** — 7 tests (P0-UNIT-001, P0-UNIT-002, P0-INT-001, P0-INT-002, P0-INT-003, P0-INT-006, P0-E2E-001). Must pass 100% before Epic 2.
+- **P1 test suite** — 6 tests (P1-UNIT-005, P1-UNIT-006, P1-UNIT-007, P1-INT-011, P1-INT-012, P1-UNIT-008). Must pass ≥95% before Epic 2.
+- **CI pipeline** — GitHub Actions with xvfb + multi-platform matrix (Windows x64, macOS x64+ARM64, Linux x64+ARM64).
+- **Story template process update** — Each story file must include "Required Tests" section mapping to test IDs from test design handoff.
+- **Document `patches/specta/` directory** — Dead artifact containing a stable-Rust-compatible fork of specta (replaces `fmt::from_fn` with wrapper struct pattern). Not wired into build (`Cargo.toml` has no `[patch]` section). Either document as fallback plan or remove.
