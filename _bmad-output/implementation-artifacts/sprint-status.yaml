@@ -1,5 +1,5 @@
 # generated: 2026-04-03
-# last_updated: 2026-04-03
+# last_updated: 2026-04-04
 # project: notey
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-03
+last_updated: 2026-04-04
 project: notey
 project_key: NOKEY
 tracking_system: file-system
@@ -43,21 +43,21 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # Epic 1: Instant Note Capture
-  epic-1: backlog
-  1-1-tauri-v2-project-scaffold: backlog
-  1-2-frontend-tooling-setup: backlog
-  1-3-rust-backend-dependencies-tauri-specta-ipc-setup: backlog
-  1-4-sqlite-database-with-notes-table-migrations: backlog
-  1-5-note-crud-tauri-commands: backlog
-  1-6-design-token-system: backlog
-  1-7-app-shell-layout: backlog
-  1-8-codemirror-6-markdown-editor: backlog
-  1-9-auto-save-with-debounce-save-indicator: backlog
-  1-10-note-format-toggle: backlog
-  1-11-global-hotkey-window-summon: backlog
-  1-12-window-dismiss-save-flush: backlog
-  1-13-system-tray-icon-context-menu: backlog
-  1-14-toml-configuration-service: backlog
+  epic-1: done
+  1-1-tauri-v2-project-scaffold: done
+  1-2-frontend-tooling-setup: done
+  1-3-rust-backend-dependencies-tauri-specta-ipc-setup: done
+  1-4-sqlite-database-with-notes-table-migrations: done
+  1-5-note-crud-tauri-commands: done
+  1-6-design-token-system: done
+  1-7-app-shell-layout: done
+  1-8-codemirror-6-markdown-editor: done
+  1-9-auto-save-with-debounce-save-indicator: done
+  1-10-note-format-toggle: done
+  1-11-global-hotkey-window-summon: done
+  1-12-window-dismiss-save-flush: done
+  1-13-system-tray-icon-context-menu: done
+  1-14-toml-configuration-service: done
   epic-1-retrospective: optional
 
   # Epic 2: Workspace-Aware Note Organization
