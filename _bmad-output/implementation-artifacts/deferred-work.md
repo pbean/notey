@@ -25,6 +25,10 @@ Depends on: Frontend Core Visual Foundation (Stories 1.6–1.8)
 - **`view.focus()` on hidden window** — Currently called unconditionally on mount. Story 1.11 (Window Summon) should call `view.focus()` after the window becomes visible, not at construction time, to guarantee focus when the window is toggled.
 - **Note content load path** — The editor has no mechanism to push existing content into CodeMirror after mount. Story 1.9 or the note-loading feature needs to use `view.dispatch(view.state.update({ changes: { from: 0, to: view.state.doc.length, insert: savedContent } }))` to hydrate a loaded note.
 
+### Deferred from: Stories 1.9–1.10 review (2026-04-03)
+
+- **`lastSavedAt` uses client clock** — `useAutoSave` sets `lastSavedAt` via `new Date().toISOString()`. The resolved `updateResult.data.updatedAt` (server-side timestamp) is available but ignored. If `lastSavedAt` is ever displayed or used for conflict detection, switch to `updateResult.data.updatedAt`.
+
 ### Cluster 3: Window & Daemon (Stories 1.11–1.14)
 
 Depends on: Frontend Core (Stories 1.6–1.10)

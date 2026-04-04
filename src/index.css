@@ -262,6 +262,21 @@
   --focus-ring: #3b7cff60;
 }
 
+@keyframes save-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.save-indicator-saved {
+  animation: save-fade 2s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-indicator-saved {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

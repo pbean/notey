@@ -4,6 +4,7 @@ import { EditorState, Compartment } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap } from '@codemirror/commands';
 import { useEditorStore } from '../store';
+import { useAutoSave } from '../hooks/useAutoSave';
 
 /** Module-scoped compartment enables dynamic language reconfiguration (Story 1.10). */
 export const langCompartment = new Compartment();
@@ -15,21 +16,28 @@ interface EditorPaneProps {
 
 /**
  * CodeMirror 6 editor pane. Auto-focuses on mount. Syncs document
- * changes to useEditorStore.content via an update listener.
+ * changes to useEditorStore.content via an update listener. Reconfigures
+ * the language compartment when store format changes (Story 1.10).
  */
 export function EditorPane({ className, style }: EditorPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
   const setContent = useEditorStore((s) => s.setContent);
+  const format = useEditorStore((s) => s.format);
+
+  useAutoSave();
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const initialFormat = useEditorStore.getState().format;
 
     const view = new EditorView({
       state: EditorState.create({
         doc: '',
         extensions: [
           EditorView.lineWrapping,
-          langCompartment.of(markdown()),
+          langCompartment.of(initialFormat === 'markdown' ? markdown() : []),
           keymap.of(defaultKeymap),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -55,10 +63,23 @@ export function EditorPane({ className, style }: EditorPaneProps) {
       parent: containerRef.current,
     });
 
+    viewRef.current = view;
     view.focus();
 
-    return () => view.destroy();
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
   }, [setContent]);
+
+  // Reconfigure language compartment when format changes
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: langCompartment.reconfigure(format === 'markdown' ? markdown() : []),
+    });
+  }, [format]);
 
   return <div ref={containerRef} className={className} style={{ height: '100%', ...style }} />;
 }
