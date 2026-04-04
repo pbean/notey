@@ -153,6 +153,31 @@
     --sidebar-border: oklch(0.922 0 0);
 
     --sidebar-ring: oklch(0.708 0 0);
+
+  /* Notey design tokens — dark theme (dark-first: :root = dark) */
+  --bg-primary: #1a1a1a;
+  --bg-elevated: #242424;
+  --bg-surface: #2d2d2d;
+  --border-default: #3a3a3a;
+  --border-subtle: #2f2f2f;
+  --text-primary: #e4e4e4;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666;
+  --accent: #6b9eff;
+  --accent-muted: #6b9eff20;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --focus-ring: #6b9eff80;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
 }
 
 .dark {
@@ -218,6 +243,23 @@
     --sidebar-border: oklch(1 0 0 / 10%);
 
     --sidebar-ring: oklch(0.556 0 0);
+}
+
+.light {
+  --bg-primary: #ffffff;
+  --bg-elevated: #f5f5f5;
+  --bg-surface: #ebebeb;
+  --border-default: #d4d4d4;
+  --border-subtle: #e5e5e5;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-muted: #a0a0a0;
+  --accent: #3b7cff;
+  --accent-muted: #3b7cff15;
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+  --focus-ring: #3b7cff60;
 }
 
 @layer base {
