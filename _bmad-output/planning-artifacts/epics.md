@@ -4,6 +4,7 @@ inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
   - _bmad-output/planning-artifacts/ux-design-specification.md
+  - _bmad-output/test-artifacts/test-design/notey-handoff.md
 ---
 
 # Notey - Epic Breakdown
@@ -322,6 +323,51 @@ FR56: Epic 8 - Cross-platform support (Windows, macOS, Linux X11)
 FR57: Epic 8 - Wayland fallback for global hotkeys
 FR58: Epic 1 - Platform-standard paths for data and configuration
 
+### TEA Quality Requirements
+
+**Source:** TEA Test Design → BMAD Handoff (`_bmad-output/test-artifacts/test-design/notey-handoff.md`)
+
+#### Epic-Level Quality Gates
+
+- P0 tests from the epic must pass at **100%** before story completion.
+- P1 tests must pass at **≥95%**.
+- No open high-severity bugs in the epic's scope.
+- Performance benchmarks tracked for perf-sensitive stories.
+- **RISK-007 (E2E tooling constraint, Score 6):** All epics must favor unit/integration tests over E2E. Only 3 E2E journeys total across all epics.
+
+#### Risk-to-Story Mapping
+
+| Risk ID | Category | Score | Maps to Epic/Story | Test Type |
+|---|---|---|---|---|
+| RISK-001 | TECH | 6 | Epic 8 / Story 8.6 (Cross-platform) | E2E + Visual |
+| RISK-002 | DATA | 6 | Epic 1 / Stories 1.4, 1.5 (Database + Note CRUD) | Integration |
+| RISK-003 | DATA | 4 | Epic 3 / Stories 3.1, 3.2 (FTS5 search) | Integration |
+| RISK-004 | PERF | 4 | Epic 1 / Story 1.11 (Window management / hotkey) | Benchmark |
+| RISK-005 | OPS | 6 | Epic 8 / Story 8.1 (Onboarding / first-run) | E2E |
+| RISK-006 | SEC | 6 | Epic 6 / Stories 6.1–6.7 (CLI binary) | Unit + Integration |
+| RISK-007 | TECH | 6 | All epics (test strategy constraint) | Unit + Integration |
+
+#### data-testid Requirements
+
+Stories implementing UI components must include these `data-testid` attributes:
+
+| Component Area | Attributes | Mapped Stories |
+|---|---|---|
+| Editor | `editor-pane`, `tab-bar`, `tab-{id}` | 1.7, 1.8, 4.2 |
+| Search | `search-overlay`, `search-input`, `search-result-{id}` | 3.3 |
+| Status | `status-bar`, `save-indicator`, `workspace-name` | 1.7, 1.9 |
+| Command Palette | `command-palette`, `command-input` | 4.5 |
+| Onboarding | `onboarding-overlay`, `hotkey-display` | 8.1 |
+
+#### Phase Transition Quality Gates
+
+| Transition | Gate Criteria |
+|---|---|
+| Epic/Story Creation → ATDD | Stories have acceptance criteria from test design |
+| ATDD → Implementation | Failing acceptance tests exist for P0/P1 scenarios |
+| Implementation → Test Automation | All acceptance tests pass |
+| Test Automation → Release | Trace matrix shows ≥80% coverage of P0/P1 requirements |
+
 ## Epic List
 
 ### Epic 1: Instant Note Capture
@@ -361,6 +407,10 @@ New users get a guided first-run experience. The app auto-starts on login and wo
 ## Epic 1: Instant Note Capture
 
 Users can summon a floating window with a global hotkey from anywhere on their desktop, type a note in Markdown or plain text, and have it auto-saved instantly. The app runs as a system tray daemon.
+
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Risk References:** RISK-002 (Data loss, Score 6) — crash recovery tests required on database and CRUD stories. RISK-004 (Window perf, Score 4) — benchmark tests for hotkey-to-visible latency.
+**Test Scenarios:** P0-UNIT-001, P0-UNIT-002, P0-UNIT-003, P0-INT-001 (Note CRUD); P0-E2E-001, P1-INT-012 (Global hotkey + window management).
 
 ### Story 1.1: Tauri v2 Project Scaffold
 
@@ -474,6 +524,8 @@ So that notes can be reliably stored and retrieved.
 **When** `cargo test` runs database integration tests
 **Then** tests verify table creation, PRAGMA values, and WAL mode using a temp-file database
 
+**TEA Test Scenarios:** P0-INT-001 — Database must survive application crash without corruption. Tests must verify WAL mode integrity and crash recovery behavior (RISK-002).
+
 ### Story 1.5: Note CRUD Tauri Commands
 
 As a user,
@@ -512,6 +564,8 @@ So that my notes are persisted and retrievable.
 **When** `cargo build` completes
 **Then** `src/bindings.ts` exports typed `commands.createNote()`, `commands.getNote()`, `commands.updateNote()`, `commands.listNotes()` functions
 **And** the capability ACL in `src-tauri/capabilities/default.json` includes permissions for all note commands
+
+**TEA Test Scenarios:** P0-UNIT-001 (create note), P0-UNIT-002 (update note), P0-UNIT-003 (list notes). All CRUD operations must include crash recovery assertions — no partial or empty note states visible after abrupt termination (RISK-002).
 
 ### Story 1.6: Design Token System (CSS Custom Properties)
 
@@ -568,6 +622,8 @@ So that I can write notes without visual clutter.
 **And** StatusBar occupies the bottom 24px
 **And** no horizontal scrollbar appears at any width >= 400px
 
+**TEA data-testid Requirements:** The editor area must include `data-testid="editor-pane"`, the status bar must include `data-testid="status-bar"`, the save indicator must include `data-testid="save-indicator"`, and the workspace name display must include `data-testid="workspace-name"`.
+
 ### Story 1.8: CodeMirror 6 Markdown Editor
 
 As a user,
@@ -602,6 +658,8 @@ So that I can write formatted notes with visual feedback.
 **Then** `view.state.doc.toString()` returns the full content
 **And** `view.state.selection.main.head` returns the cursor position
 **And** content can be replaced via `view.dispatch({ changes: {...} })`
+
+**TEA data-testid Requirements:** The EditorPane wrapper element must include `data-testid="editor-pane"`.
 
 ### Story 1.9: Auto-Save with Debounce & Save Indicator
 
@@ -704,6 +762,8 @@ So that I can capture thoughts the moment they occur.
 **When** the user presses the hotkey again
 **Then** the window is hidden (toggle behavior)
 
+**TEA Test Scenarios:** P0-E2E-001 (global hotkey summons window and focuses editor), P1-INT-012 (window management integration). Benchmark: hotkey-to-visible must be measured and asserted <150ms (RISK-004).
+
 ### Story 1.12: Window Dismiss & Save Flush
 
 As a user,
@@ -794,6 +854,9 @@ So that I can back up and manually edit my preferences if needed.
 
 Notes are automatically scoped to the user's current project via git repository detection. Users can switch between workspaces, filter notes by workspace, or view all notes unscoped.
 
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Test Scenarios:** P1-UNIT-003, P1-UNIT-004 (Workspace detection).
+
 ### Story 2.1: Workspaces Table & CRUD Commands
 
 As a developer,
@@ -851,6 +914,8 @@ So that workspaces can be automatically identified.
 **When** it is validated
 **Then** `std::fs::canonicalize()` is used to resolve the real path
 **And** the path must resolve to an existing directory
+
+**TEA Test Scenarios:** P1-UNIT-003 (git repo detection from nested path), P1-UNIT-004 (fallback to working directory for non-git paths).
 
 ### Story 2.3: Auto-Workspace Assignment on Note Creation
 
@@ -957,6 +1022,10 @@ So that I can correct or change a note's organization.
 
 Users can instantly find any note using full-text fuzzy search, scoped to the current workspace or across all workspaces, with results ranked by relevance.
 
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Risk References:** RISK-003 (FTS5 data integrity, Score 4) — integration tests for index sync.
+**Test Scenarios:** P0-INT-004, P0-INT-005 (FTS5 search); P1-UNIT-001, P1-UNIT-002 (search service).
+
 ### Story 3.1: FTS5 Virtual Table & Sync Triggers
 
 As a developer,
@@ -982,6 +1051,8 @@ So that search queries return accurate, up-to-date results.
 **Given** the triggers are active
 **When** a note is created, updated, or deleted via CRUD commands
 **Then** the FTS5 index reflects the change without additional application code
+
+**TEA Test Scenarios:** P0-INT-004 (FTS5 index stays in sync after CRUD), P0-INT-005 (FTS5 backfill on migration). Integration tests must verify index consistency after create, update, and delete sequences (RISK-003).
 
 ### Story 3.2: Full-Text Search Tauri Command
 
@@ -1013,6 +1084,8 @@ So that I can find information I've previously captured.
 **Given** an empty query string
 **When** `search_notes` is invoked
 **Then** an empty result set is returned (no error)
+
+**TEA Test Scenarios:** P1-UNIT-001 (search returns ranked results), P1-UNIT-002 (search with workspace filter). Performance assertion: <100ms for 10K notes.
 
 ### Story 3.3: SearchOverlay UI Component
 
@@ -1050,6 +1123,8 @@ So that I can visually identify the note I'm looking for.
 **Given** search results are shown
 **When** the result count is displayed
 **Then** the header shows "N results · ↑↓ navigate · Enter open"
+
+**TEA data-testid Requirements:** The search overlay container must include `data-testid="search-overlay"`, the search input must include `data-testid="search-input"`, and each search result item must include `data-testid="search-result-{id}"`.
 
 ### Story 3.4: Search Result Keyboard Navigation & Note Opening
 
@@ -1114,6 +1189,8 @@ So that I can control the scope of my search.
 ## Epic 4: Multi-Tab Editing & Command Palette
 
 Users can open multiple notes simultaneously in tabs and access all application features through a VS Code-style command palette with fuzzy matching.
+
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
 
 ### Story 4.1: Tab State Management Store
 
@@ -1180,6 +1257,8 @@ So that I can see and manage my open notes at a glance.
 **Given** the tab bar is rendered
 **When** accessible markup is checked
 **Then** the container has `role="tablist"`, each tab has `role="tab"` with `aria-selected` on the active tab
+
+**TEA data-testid Requirements:** The tab bar container must include `data-testid="tab-bar"` and each tab must include `data-testid="tab-{id}"` where `{id}` is the note ID.
 
 ### Story 4.3: Tab Keyboard Navigation
 
@@ -1275,6 +1354,8 @@ So that I can do anything without remembering where it is in the UI.
 **Given** the command palette is open
 **When** the user presses Esc
 **Then** the palette closes and focus returns to the editor
+
+**TEA data-testid Requirements:** The command palette container must include `data-testid="command-palette"` and the input must include `data-testid="command-input"`.
 
 ### Story 4.6: Command Palette Action Registry
 
@@ -1386,6 +1467,9 @@ So that I can pick up right where I left off.
 ## Epic 5: Note Lifecycle & Data Export
 
 Users can soft-delete notes to a 30-day recoverable trash, restore them, permanently delete when needed, and export all notes as Markdown files or a JSON bundle.
+
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Test Scenarios:** P1-INT-009, P1-INT-010 (Export).
 
 ### Story 5.1: Soft-Delete Note to Trash with Toast
 
@@ -1514,6 +1598,8 @@ So that I can back up or migrate my notes to other tools.
 **When** export runs
 **Then** it completes within 30 seconds (NFR20)
 
+**TEA Test Scenarios:** P1-INT-009 (Markdown export writes correct files with frontmatter).
+
 ### Story 5.6: JSON Export
 
 As a user,
@@ -1536,11 +1622,17 @@ So that I can programmatically process or back up my data.
 **When** the UI updates
 **Then** a toast shows: "Exported N notes to /path/to/file.json" (5s auto-dismiss)
 
+**TEA Test Scenarios:** P1-INT-010 (JSON export produces valid structured file with all note metadata).
+
 ---
 
 ## Epic 6: CLI Integration
 
 Developers can capture notes and search from the terminal. CLI commands sync to the running desktop app in real-time via IPC socket.
+
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Risk References:** RISK-006 (CLI injection, Score 6) — input validation tests required as acceptance criteria.
+**Test Scenarios:** P0-UNIT-004, P0-UNIT-005, P0-UNIT-006, P0-INT-008 (CLI binary); P0-INT-007, P1-INT-001 through P1-INT-008 (IPC socket server).
 
 ### Story 6.1: CLI Crate Scaffold & Argument Parsing
 
@@ -1575,6 +1667,8 @@ So that terminal users have a clear interface.
 **When** its Rust code is checked
 **Then** it shares NO code with `src-tauri/` (protocol types are duplicated as simple JSON structs)
 
+**TEA Test Scenarios:** P0-UNIT-004 (CLI argument parsing), P0-UNIT-005 (CLI input validation — max 1MB, no injection), P0-UNIT-006 (CLI exit codes). Input validation tests are required acceptance criteria per RISK-006 (CLI injection, Score 6).
+
 ### Story 6.2: IPC Socket Server in Desktop App
 
 As a developer,
@@ -1602,6 +1696,8 @@ So that the CLI can communicate with the running app.
 **Given** the application exits
 **When** cleanup runs
 **Then** the socket file is removed
+
+**TEA Test Scenarios:** P0-INT-007 (IPC socket server accepts and routes CLI commands), P0-INT-008 (IPC protocol request/response format validation), P1-INT-001 through P1-INT-008 (IPC socket integration — concurrent connections, malformed requests, timeout handling, socket permission enforcement).
 
 ### Story 6.3: CLI `add` Command (Text + Stdin)
 
@@ -1736,6 +1832,8 @@ So that I know how to fix the issue.
 ## Epic 7: Personalization & Accessibility
 
 Users can customize their experience with theme switching, font configuration, shortcut remapping, layout modes, and full keyboard-only navigation.
+
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
 
 ### Story 7.1: Settings View Panel
 
@@ -1971,6 +2069,10 @@ So that I can use it regardless of my abilities.
 
 New users get a guided first-run experience. The app auto-starts on login and works reliably across Windows, macOS, and Linux with per-user data isolation.
 
+**TEA Quality Gate:** P0 tests 100%, P1 tests ≥95%. No open high-severity bugs.
+**Risk References:** RISK-001 (Cross-platform rendering, Score 6) — E2E + visual tests. RISK-005 (First-run onboarding, Score 6) — E2E test required.
+**Test Scenarios:** P1-E2E-002 (Onboarding).
+
 ### Story 8.1: First-Run Detection & Onboarding Overlay
 
 As a new user,
@@ -2003,6 +2105,9 @@ So that I can start capturing notes immediately.
 **When** the StatusBar renders
 **Then** a hint "Ctrl+P for commands" is shown in `var(--text-muted)` in the StatusBar (progressive disclosure)
 **And** after 5 sessions, the hint disappears permanently
+
+**TEA Test Scenarios:** P1-E2E-002 (first-run onboarding flow — overlay display, hotkey press dismissal, config persistence). This is one of the 3 permitted E2E journeys (RISK-005, RISK-007).
+**TEA data-testid Requirements:** The onboarding overlay must include `data-testid="onboarding-overlay"` and the hotkey key cap visualization must include `data-testid="hotkey-display"`.
 
 ### Story 8.2: macOS Accessibility Permission Guidance
 
