@@ -6,9 +6,15 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered",
     "allow-create-note",
     "allow-get-note",
     "allow-update-note",
-    "allow-list-notes"
+    "allow-list-notes",
+    "allow-get-config",
+    "allow-update-config",
+    "allow-dismiss-window"
   ]
 }

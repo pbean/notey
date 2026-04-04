@@ -8,9 +8,38 @@ export const commands = {
 	getNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("get_note", { id })),
 	updateNote: (id: number, title: string | null, content: string | null, format: string | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("update_note", { id, title, content, format })),
 	listNotes: () => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes")),
+	// Returns the full application config.
+	getConfig: () => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("get_config")),
+	// Applies a partial update to the config, saves to disk, and returns the updated config.
+	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
+	// Hides the calling window (dismiss without destroy).
+	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
 };
 
 /* Types */
+// Top-level application configuration, persisted as TOML.
+export type AppConfig = {
+	general?: GeneralConfig,
+	editor?: EditorConfig,
+	hotkey?: HotkeyConfig,
+};
+
+// Editor-specific settings.
+export type EditorConfig = {
+	fontSize: number,
+};
+
+// General application settings.
+export type GeneralConfig = {
+	theme: string,
+	layoutMode: string,
+};
+
+// Hotkey bindings.
+export type HotkeyConfig = {
+	globalShortcut: string,
+};
+
 export type Note = {
 	id: number,
 	title: string,
@@ -24,6 +53,29 @@ export type Note = {
 };
 
 export type NoteyError = { type: "Database" } | { type: "NotFound" } | { type: "Workspace" } | { type: "Io" } | { type: "Validation"; message: string } | { type: "Config"; message: string };
+
+// Partial config for updates — all fields optional.
+export type PartialAppConfig = {
+	general: PartialGeneralConfig | null,
+	editor: PartialEditorConfig | null,
+	hotkey: PartialHotkeyConfig | null,
+};
+
+// Partial editor settings for selective updates.
+export type PartialEditorConfig = {
+	fontSize: number | null,
+};
+
+// Partial general settings for selective updates.
+export type PartialGeneralConfig = {
+	theme: string | null,
+	layoutMode: string | null,
+};
+
+// Partial hotkey settings for selective updates.
+export type PartialHotkeyConfig = {
+	globalShortcut: string | null,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

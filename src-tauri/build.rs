@@ -6,6 +6,9 @@ fn main() {
                 "get_note",
                 "update_note",
                 "list_notes",
+                "get_config",
+                "update_config",
+                "dismiss_window",
             ]),
         ),
     )

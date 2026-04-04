@@ -29,11 +29,11 @@ Depends on: Frontend Core Visual Foundation (Stories 1.6–1.8)
 
 - **`lastSavedAt` uses client clock** — `useAutoSave` sets `lastSavedAt` via `new Date().toISOString()`. The resolved `updateResult.data.updatedAt` (server-side timestamp) is available but ignored. If `lastSavedAt` is ever displayed or used for conflict detection, switch to `updateResult.data.updatedAt`.
 
-### Cluster 3: Window & Daemon (Stories 1.11–1.14)
+### ~~Cluster 3: Window & Daemon (Stories 1.11–1.14)~~ DONE
 
-Depends on: Frontend Core (Stories 1.6–1.10)
+### Deferred from: Stories 1.11–1.14 review (2026-04-04)
 
-- **Story 1.11** — Global Hotkey & Window Summon
-- **Story 1.12** — Window Dismiss & Save Flush
-- **Story 1.13** — System Tray Icon & Context Menu
-- **Story 1.14** — TOML Configuration Service
+- **Hotkey re-registration on config change** — `update_config` persists a new `global_shortcut` to disk but does not unregister/re-register the live shortcut. Requires app restart for hotkey changes to take effect. Enhancement: add runtime shortcut re-registration when hotkey config changes.
+- **Non-atomic config write** — `services::config::save` uses `fs::write` which is not crash-safe. A write-to-temp-then-rename pattern would prevent partial files on crash/power loss.
+- **Mutex held across I/O in `update_config`** — The `Mutex<AppConfig>` lock is held while `fs::write` runs. On slow filesystems this blocks concurrent `get_config` calls. Optimization: drop lock before I/O, re-acquire to update.
+- **Shortcut string validation in `update_config`** — Invalid shortcut strings (e.g., `"invalid!!!"`) are persisted without validation. Should validate via `parse_shortcut` before saving and return an error for unparseable strings.

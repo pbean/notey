@@ -4,20 +4,24 @@ import { EditorState, Compartment } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap } from '@codemirror/commands';
 import { useEditorStore } from '../store';
-import { useAutoSave } from '../hooks/useAutoSave';
+import { useAutoSave, flushSave } from '../hooks/useAutoSave';
+import { useWindowFocus } from '../hooks/useWindowFocus';
+import { commands } from '../../../generated/bindings';
 
 /** Module-scoped compartment enables dynamic language reconfiguration (Story 1.10). */
 export const langCompartment = new Compartment();
 
+/** Props for the CodeMirror editor pane component. */
 interface EditorPaneProps {
   className?: string;
   style?: React.CSSProperties;
 }
 
 /**
- * CodeMirror 6 editor pane. Auto-focuses on mount. Syncs document
- * changes to useEditorStore.content via an update listener. Reconfigures
- * the language compartment when store format changes (Story 1.10).
+ * CodeMirror 6 editor pane. Syncs document changes to useEditorStore.content
+ * via an update listener. Reconfigures the language compartment when store
+ * format changes. Esc dismisses the window after flushing any pending save.
+ * Focuses editor when the window gains focus (hotkey summon, tray click).
  */
 export function EditorPane({ className, style }: EditorPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,6 +30,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
   const format = useEditorStore((s) => s.format);
 
   useAutoSave();
+  useWindowFocus(viewRef);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -38,6 +43,17 @@ export function EditorPane({ className, style }: EditorPaneProps) {
         extensions: [
           EditorView.lineWrapping,
           langCompartment.of(initialFormat === 'markdown' ? markdown() : []),
+          keymap.of([
+            {
+              key: 'Escape',
+              run: () => {
+                flushSave()
+                  .catch((e) => console.error('Esc save flush failed:', e))
+                  .then(() => commands.dismissWindow());
+                return true;
+              },
+            },
+          ]),
           keymap.of(defaultKeymap),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -64,7 +80,6 @@ export function EditorPane({ className, style }: EditorPaneProps) {
     });
 
     viewRef.current = view;
-    view.focus();
 
     return () => {
       view.destroy();
