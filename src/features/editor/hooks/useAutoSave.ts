@@ -85,6 +85,9 @@ export function useAutoSave(): void {
     // No-op: empty content with no existing note
     if (content.trim() === '' && useEditorStore.getState().activeNoteId === null) return;
 
+    // Skip auto-save when content was set by loadNote hydration, not user typing
+    if (useEditorStore.getState().isHydrating) return;
+
     sharedDebounceRef = setTimeout(async () => {
       sharedDebounceRef = null;
 

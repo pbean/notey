@@ -67,6 +67,21 @@ pub fn update_note(
     get_note(conn, id)
 }
 
+/// Soft-delete a note by setting `is_trashed = 1` and `deleted_at` to the current timestamp.
+pub fn trash_note(conn: &Connection, id: i64) -> Result<Note, NoteyError> {
+    let now = Utc::now().to_rfc3339();
+    let rows_changed = conn.execute(
+        "UPDATE notes SET is_trashed = 1, deleted_at = ?1, updated_at = ?2 WHERE id = ?3 AND is_trashed = 0",
+        params![now, now, id],
+    )?;
+
+    if rows_changed == 0 {
+        return Err(NoteyError::NotFound);
+    }
+
+    get_note(conn, id)
+}
+
 pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, NoteyError> {
     let mut stmt = conn.prepare(
         "SELECT id, title, content, format, workspace_id, created_at, updated_at, deleted_at, is_trashed
@@ -167,12 +182,7 @@ mod tests {
     fn test_list_notes_filters_trashed() {
         let conn = setup_test_db();
         let note = create_note(&conn, "markdown").expect("create_note failed");
-        // Mark note as trashed
-        conn.execute(
-            "UPDATE notes SET is_trashed = 1 WHERE id = ?",
-            params![note.id],
-        )
-        .expect("failed to trash note");
+        trash_note(&conn, note.id).expect("trash_note failed");
 
         let notes = list_notes(&conn).expect("list_notes failed");
         assert!(
@@ -180,6 +190,42 @@ mod tests {
             "list_notes should not return trashed notes"
         );
         assert!(!notes.iter().any(|n| n.id == note.id));
+    }
+
+    // P0-UNIT-002: Soft-delete sets is_trashed + deleted_at
+    #[test]
+    fn test_trash_note_sets_fields() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown").expect("create_note failed");
+        assert!(!note.is_trashed);
+        assert!(note.deleted_at.is_none());
+
+        let trashed = trash_note(&conn, note.id).expect("trash_note failed");
+        assert!(trashed.is_trashed, "is_trashed should be true");
+        assert!(trashed.deleted_at.is_some(), "deleted_at should be set");
+        assert!(
+            trashed.deleted_at.as_ref().unwrap().contains('T'),
+            "deleted_at should be ISO8601"
+        );
+    }
+
+    #[test]
+    fn test_trash_note_not_found() {
+        let conn = setup_test_db();
+        let result = trash_note(&conn, 99999);
+        assert!(matches!(result, Err(NoteyError::NotFound)));
+    }
+
+    #[test]
+    fn test_trash_note_already_trashed() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown").expect("create_note failed");
+        trash_note(&conn, note.id).expect("first trash should succeed");
+        let result = trash_note(&conn, note.id);
+        assert!(
+            matches!(result, Err(NoteyError::NotFound)),
+            "trashing an already-trashed note should return NotFound"
+        );
     }
 
     #[test]
@@ -204,5 +250,28 @@ mod tests {
         // note2 should be first (more recent)
         assert_eq!(notes[0].id, note2.id);
         assert_eq!(notes[1].id, note1.id);
+    }
+
+    // P1-UNIT-005: Note format toggle persists
+    #[test]
+    fn test_format_toggle_persists() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown").expect("create_note failed");
+        assert_eq!(note.format, "markdown");
+
+        let toggled =
+            update_note(&conn, note.id, None, None, Some("plaintext".to_string()))
+                .expect("toggle to plaintext failed");
+        assert_eq!(toggled.format, "plaintext");
+
+        // Reload from DB to verify persistence
+        let reloaded = get_note(&conn, note.id).expect("get_note after toggle failed");
+        assert_eq!(reloaded.format, "plaintext");
+
+        // Toggle back
+        let toggled_back =
+            update_note(&conn, note.id, None, None, Some("markdown".to_string()))
+                .expect("toggle back to markdown failed");
+        assert_eq!(toggled_back.format, "markdown");
     }
 }

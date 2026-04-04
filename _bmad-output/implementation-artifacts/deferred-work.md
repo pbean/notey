@@ -49,3 +49,11 @@ Source: `_bmad-output/implementation-artifacts/epic-1-retro-2026-04-04.md`
 - **CI pipeline** — GitHub Actions with xvfb + multi-platform matrix (Windows x64, macOS x64+ARM64, Linux x64+ARM64).
 - **Story template process update** — Each story file must include "Required Tests" section mapping to test IDs from test design handoff.
 - **Document `patches/specta/` directory** — Dead artifact containing a stable-Rust-compatible fork of specta (replaces `fmt::from_fn` with wrapper struct pattern). Not wired into build (`Cargo.toml` has no `[patch]` section). Either document as fallback plan or remove.
+
+### Deferred from: Epic 1 Retro Prep Sprint review (2026-04-04)
+
+- **`useNoteHydration` viewRef null guard** — When `viewRef.current` is null during hydration, the hook clears `isHydrating` and silently drops the content push. Currently safe (EditorPane is always mounted), but will need retry logic when note-loading UI is built.
+- **`create_temp_db` collision risk** — Uses `SystemTime::now().as_nanos()` for temp dir names. On Windows (coarse timers) under parallel test execution, collisions are possible. Consider `tempfile::TempDir` or UUID.
+- **Esc dismiss on flushSave failure** — `EditorPane.tsx` Escape handler chains `.catch().then(dismissWindow)` — window dismisses even when save fails. Should only dismiss on success.
+- **`flushSave` leaks `isCreating` on throw** — If `commands.createNote` throws (vs. returning error status), `isCreating` is permanently stuck `true`, blocking all subsequent saves.
+- **`useWindowFocus` StrictMode double-listener** — Async `appWindow.listen()` can create duplicate listeners under React StrictMode double-invoke.

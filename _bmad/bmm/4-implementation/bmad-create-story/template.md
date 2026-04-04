@@ -14,6 +14,15 @@ so that {{benefit}}.
 
 1. [Add acceptance criteria from epics/PRD]
 
+## Required Tests
+
+<!-- Map test IDs from test-design handoff (e.g. _bmad-output/test-artifacts/test-design/notey-handoff.md).
+     Story cannot be marked "done" unless mapped P0/P1 tests are passing. -->
+
+| Test ID | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| | | | |
+
 ## Tasks / Subtasks
 
 - [ ] Task 1 (AC: #)

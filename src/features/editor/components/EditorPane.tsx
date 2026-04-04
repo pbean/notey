@@ -5,6 +5,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { defaultKeymap } from '@codemirror/commands';
 import { useEditorStore } from '../store';
 import { useAutoSave, flushSave } from '../hooks/useAutoSave';
+import { useNoteHydration } from '../hooks/useNoteHydration';
 import { useWindowFocus } from '../hooks/useWindowFocus';
 import { commands } from '../../../generated/bindings';
 
@@ -30,6 +31,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
   const format = useEditorStore((s) => s.format);
 
   useAutoSave();
+  useNoteHydration(viewRef);
   useWindowFocus(viewRef);
 
   useEffect(() => {
