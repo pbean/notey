@@ -1,9 +1,21 @@
+use std::path::Path;
+
 use chrono::Utc;
 use rusqlite::Connection;
 
 use crate::db::workspace_repo;
 use crate::errors::NoteyError;
 use crate::models::workspace::{DetectedWorkspace, Workspace, WorkspaceInfo};
+
+/// Convert a Path to a UTF-8 string, returning a Validation error for non-UTF-8 paths.
+fn path_to_str(path: &Path) -> Result<String, NoteyError> {
+    path.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| NoteyError::Validation(format!(
+            "Path contains invalid UTF-8: {}",
+            path.display()
+        )))
+}
 
 /// Create a workspace or return the existing one if a workspace with the same path already exists.
 pub fn create_workspace(
@@ -36,7 +48,7 @@ pub fn create_workspace(
             canonical.display()
         )));
     }
-    let canonical_str = canonical.to_string_lossy().to_string();
+    let canonical_str = path_to_str(&canonical)?;
     let now = Utc::now().to_rfc3339();
 
     match workspace_repo::insert_workspace(conn, name, &canonical_str, &now) {
@@ -76,11 +88,12 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
         if current.join(".git").exists() {
             let name = current
                 .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "workspace".to_string());
+                .and_then(|n| n.to_str())
+                .unwrap_or("workspace")
+                .to_string();
             return Ok(DetectedWorkspace {
                 name,
-                path: current.to_string_lossy().to_string(),
+                path: path_to_str(&current)?,
             });
         }
         match current.parent() {
@@ -92,11 +105,12 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
     // Fallback: use the original directory itself (FR31)
     let name = canonical
         .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "workspace".to_string());
+        .and_then(|n| n.to_str())
+        .unwrap_or("workspace")
+        .to_string();
     Ok(DetectedWorkspace {
         name,
-        path: canonical.to_string_lossy().to_string(),
+        path: path_to_str(&canonical)?,
     })
 }
 
