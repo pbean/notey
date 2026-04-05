@@ -11,6 +11,16 @@ pub fn create_workspace(
     name: &str,
     path: &str,
 ) -> Result<Workspace, NoteyError> {
+    if name.trim().is_empty() {
+        return Err(NoteyError::Validation(
+            "Workspace name cannot be empty".to_string(),
+        ));
+    }
+    if path.trim().is_empty() {
+        return Err(NoteyError::Validation(
+            "Workspace path cannot be empty".to_string(),
+        ));
+    }
     let now = Utc::now().to_rfc3339();
 
     match workspace_repo::insert_workspace(conn, name, path, &now) {

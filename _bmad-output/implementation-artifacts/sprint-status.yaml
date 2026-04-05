@@ -77,8 +77,8 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Search & Discovery
-  epic-3: backlog
-  3-1-fts5-virtual-table-sync-triggers: backlog
+  epic-3: in-progress
+  3-1-fts5-virtual-table-sync-triggers: ready-for-dev
   3-2-full-text-search-tauri-command: backlog
   3-3-searchoverlay-ui-component: backlog
   3-4-search-result-keyboard-navigation-note-opening: backlog
@@ -149,7 +149,7 @@ development_status:
   # Status: backlog | in-progress | done
   # Source format: epic-{N}-retro-item-{M}
   #
-  # Epic 1 Retro Items (7/8 resolved):
+  # Epic 1 Retro Items (all resolved):
   epic-1-retro-item-1-test-design-in-stories: done
   epic-1-retro-item-2-test-compliance-done-criteria: done
   epic-1-retro-item-3-project-context-nightly-rust: done
@@ -157,15 +157,15 @@ development_status:
   epic-1-retro-item-5-rust-test-factories: done
   epic-1-retro-item-6-ts-test-factories: done
   epic-1-retro-item-7-ci-pipeline: done
-  epic-1-retro-item-8-p0-p1-test-gaps: in-progress
+  epic-1-retro-item-8-p0-p1-test-gaps: done
 
   # Epic 2 Retro Items:
   epic-2-retro-item-1-verify-note-opening-e2e: done
   epic-2-retro-item-2-retro-tracking-in-sprint-status: done
-  epic-2-retro-item-3-workspace-input-validation: backlog
-  epic-2-retro-item-4-console-error-logging-audit: backlog
-  epic-2-retro-item-5-fts5-research: backlog
-  epic-2-retro-item-6-epic1-p0-tests: backlog
-  epic-2-retro-item-7-epic1-p1-tests: backlog
-  epic-2-retro-item-8-workspace-test-factory: backlog
-  epic-2-retro-item-9-permission-toml-docs: backlog
+  epic-2-retro-item-3-workspace-input-validation: done
+  epic-2-retro-item-4-console-error-logging-audit: done
+  epic-2-retro-item-5-fts5-research: done
+  epic-2-retro-item-6-epic1-p0-tests: done
+  epic-2-retro-item-7-epic1-p1-tests: done
+  epic-2-retro-item-8-workspace-test-factory: done
+  epic-2-retro-item-9-permission-toml-docs: done

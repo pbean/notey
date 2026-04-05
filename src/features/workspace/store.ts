@@ -104,6 +104,8 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     const listResult = await commands.listWorkspaces();
     if (listResult.status === 'ok') {
       set({ workspaces: listResult.data });
+    } else {
+      console.error('listWorkspaces failed:', listResult.error);
     }
     // Set active ��� lookup name from workspaces array
     const found = get().workspaces.find((w) => w.id === ws.id);

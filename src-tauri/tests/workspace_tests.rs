@@ -714,6 +714,54 @@ fn test_update_note_preserves_workspace_id() {
     assert_eq!(updated.workspace_id, Some(ws.id), "update_note should not clobber workspace_id");
 }
 
+// RETRO-2-003: create_workspace rejects empty name
+#[test]
+fn test_create_workspace_rejects_empty_name() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "", "/some/path");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("name")),
+        "expected Validation error for empty name, got: {:?}",
+        result
+    );
+}
+
+// RETRO-2-003: create_workspace rejects empty path
+#[test]
+fn test_create_workspace_rejects_empty_path() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "valid", "");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("path")),
+        "expected Validation error for empty path, got: {:?}",
+        result
+    );
+}
+
+// RETRO-2-003: create_workspace rejects whitespace-only name
+#[test]
+fn test_create_workspace_rejects_whitespace_name() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "   ", "/some/path");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("name")),
+        "expected Validation error for whitespace name, got: {:?}",
+        result
+    );
+}
+
+// RETRO-2-003: create_workspace rejects whitespace-only path
+#[test]
+fn test_create_workspace_rejects_whitespace_path() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "valid", " \t ");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("path")),
+        "expected Validation error for whitespace path, got: {:?}",
+        result
+    );
+}
+
 // UNIT-2.3-008: tauri-specta generates resolveWorkspace binding
 #[test]
 fn test_typescript_bindings_contain_resolve_workspace() {

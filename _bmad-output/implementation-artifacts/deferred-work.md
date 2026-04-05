@@ -68,15 +68,16 @@ Source: `_bmad-output/implementation-artifacts/epic-1-retro-2026-04-04.md`
 
 Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
-**Group B — Code fixes:**
-- **Item 3** (HIGH): Add input validation for empty name/path in `create_workspace` — `src-tauri/src/services/workspace_service.rs`
-- **Item 4** (HIGH): Audit and fix `console.error` logging gaps in frontend store actions — `src/features/workspace/store.ts`, `src/features/editor/store.ts`
-- **Item 8** (LOW): Add `buildWorkspaceInfo()` to TS test factories — `src/test-utils/factories.ts`
+**~~Group B — Code fixes:~~ DONE**
+- ~~**Item 3** (HIGH): Add input validation for empty name/path in `create_workspace` — `src-tauri/src/services/workspace_service.rs`~~
+- ~~**Item 4** (HIGH): Audit and fix `console.error` logging gaps in frontend store actions — `src/features/workspace/store.ts`, `src/features/editor/store.ts`~~
+- ~~**Item 8** (LOW): Add `buildWorkspaceInfo()` to TS test factories — `src/test-utils/factories.ts`~~
 
-**Group C — Research and documentation:**
-- **Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`
-- **Item 9** (LOW): Document permission TOML manual creation workaround — `_bmad-output/project-context.md`
+**~~Group C — Research and documentation:~~ DONE**
+- ~~**Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`~~
+- ~~**Item 9** (LOW): Document permission TOML manual creation workaround — `_bmad-output/project-context.md`~~
 
-**Group D — Test backlog:**
-- **Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage
-- **Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management
+**~~Group D — Test backlog:~~ DONE**
+- ~~**Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage~~
+- ~~**Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management~~
+- P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E) deferred — require tauri-driver infrastructure not yet set up

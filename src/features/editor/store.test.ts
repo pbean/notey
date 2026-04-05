@@ -102,6 +102,34 @@ describe('useEditorStore', () => {
     expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 1 });
   });
 
+  // P1-UNIT-005: Note format toggle persists through save/reload
+  it('loadNote restores plaintext format from backend', async () => {
+    const plaintextNote = {
+      id: 2,
+      title: 'Plain Note',
+      content: 'no markdown here',
+      format: 'plaintext',
+      workspaceId: null,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-02T00:00:00+00:00',
+      deletedAt: null,
+      isTrashed: false,
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_note') return Promise.resolve(plaintextNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    // Start with markdown (default), then load a plaintext note
+    expect(useEditorStore.getState().format).toBe('markdown');
+    await useEditorStore.getState().loadNote(2);
+
+    const state = useEditorStore.getState();
+    expect(state.format).toBe('plaintext');
+    expect(state.activeNoteId).toBe(2);
+    expect(state.content).toBe('no markdown here');
+  });
+
   it('loadNote sets saveStatus failed and logs error on command error', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockInvoke.mockImplementation((cmd: string) => {
