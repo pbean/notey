@@ -160,7 +160,7 @@ development_status:
   epic-1-retro-item-8-p0-p1-test-gaps: in-progress
 
   # Epic 2 Retro Items:
-  epic-2-retro-item-1-verify-note-opening-e2e: backlog
+  epic-2-retro-item-1-verify-note-opening-e2e: done
   epic-2-retro-item-2-retro-tracking-in-sprint-status: done
   epic-2-retro-item-3-workspace-input-validation: backlog
   epic-2-retro-item-4-console-error-logging-audit: backlog

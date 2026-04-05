@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mockInvoke } from '../../test-utils/setup';
 import { useEditorStore } from './store';
 
 // P1-UNIT-008: useEditorStore state management
@@ -70,5 +71,52 @@ describe('useEditorStore', () => {
     expect(state.saveStatus).toBe('idle');
     expect(state.lastSavedAt).toBeNull();
     expect(state.isHydrating).toBe(false);
+  });
+
+  it('loadNote sets content and isHydrating for existing note', async () => {
+    const mockNote = {
+      id: 1,
+      title: 'Test Note',
+      content: '# Hello world',
+      format: 'markdown',
+      workspaceId: 7,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-02T00:00:00+00:00',
+      deletedAt: null,
+      isTrashed: false,
+    };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_note') return Promise.resolve(mockNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await useEditorStore.getState().loadNote(1);
+
+    const state = useEditorStore.getState();
+    expect(state.activeNoteId).toBe(1);
+    expect(state.content).toBe('# Hello world');
+    expect(state.format).toBe('markdown');
+    expect(state.saveStatus).toBe('idle');
+    expect(state.lastSavedAt).toBe('2026-01-02T00:00:00+00:00');
+    expect(state.isHydrating).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 1 });
+  });
+
+  it('loadNote sets saveStatus failed and logs error on command error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_note') return Promise.reject({ type: 'NotFound', message: 'Note not found' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await useEditorStore.getState().loadNote(999);
+
+    const state = useEditorStore.getState();
+    expect(state.saveStatus).toBe('failed');
+    expect(state.isHydrating).toBe(false);
+    expect(state.activeNoteId).toBeNull(); // unchanged from default
+    expect(state.content).toBe(''); // unchanged from default
+    expect(consoleSpy).toHaveBeenCalledWith('loadNote failed:', expect.objectContaining({ type: 'NotFound' }));
+    consoleSpy.mockRestore();
   });
 });
