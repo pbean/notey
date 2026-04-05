@@ -18,6 +18,9 @@ export const commands = {
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
+	createWorkspace: (name: string, path: string) => typedError<Workspace, NoteyError>(__TAURI_INVOKE("create_workspace", { name, path })),
+	listWorkspaces: () => typedError<WorkspaceInfo[], NoteyError>(__TAURI_INVOKE("list_workspaces")),
+	getWorkspace: (id: number) => typedError<WorkspaceInfo, NoteyError>(__TAURI_INVOKE("get_workspace", { id })),
 };
 
 /* Types */
@@ -79,6 +82,23 @@ export type PartialGeneralConfig = {
 // Partial hotkey settings for selective updates.
 export type PartialHotkeyConfig = {
 	globalShortcut: string | null,
+};
+
+// A workspace maps to a project directory on disk.
+export type Workspace = {
+	id: number,
+	name: string,
+	path: string,
+	createdAt: string,
+};
+
+// A workspace with its aggregated note count (excludes trashed notes).
+export type WorkspaceInfo = {
+	id: number,
+	name: string,
+	path: string,
+	createdAt: string,
+	noteCount: number,
 };
 
 /* Tauri Specta runtime */

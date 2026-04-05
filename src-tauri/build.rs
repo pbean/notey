@@ -9,6 +9,9 @@ fn main() {
                 "get_config",
                 "update_config",
                 "dismiss_window",
+                "create_workspace",
+                "list_workspaces",
+                "get_workspace",
             ]),
         ),
     )

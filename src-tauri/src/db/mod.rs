@@ -2,21 +2,34 @@ use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 use std::path::PathBuf;
 
+pub mod workspace_repo;
+
 use crate::errors::NoteyError;
 
-const MIGRATIONS_SLICE: &[M<'static>] = &[M::up(
-    "CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL DEFAULT '',
-        content TEXT NOT NULL DEFAULT '',
-        format TEXT NOT NULL DEFAULT 'markdown' CHECK(format IN ('markdown', 'plaintext')),
-        workspace_id INTEGER NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT NULL,
-        is_trashed INTEGER NOT NULL DEFAULT 0
-    )",
-)];
+const MIGRATIONS_SLICE: &[M<'static>] = &[
+    M::up(
+        "CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            format TEXT NOT NULL DEFAULT 'markdown' CHECK(format IN ('markdown', 'plaintext')),
+            workspace_id INTEGER NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT NULL,
+            is_trashed INTEGER NOT NULL DEFAULT 0
+        )",
+    ),
+    M::up(
+        "CREATE TABLE IF NOT EXISTS workspaces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_workspaces_path ON workspaces(path);",
+    ),
+];
 
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);
 

@@ -23,6 +23,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::config::get_config,
         commands::config::update_config,
         commands::window::dismiss_window,
+        commands::workspace::create_workspace,
+        commands::workspace::list_workspaces,
+        commands::workspace::get_workspace,
     ])
 }
 

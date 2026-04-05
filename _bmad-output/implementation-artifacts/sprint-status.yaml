@@ -61,8 +61,8 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Workspace-Aware Note Organization
-  epic-2: backlog
-  2-1-workspaces-table-crud-commands: backlog
+  epic-2: in-progress
+  2-1-workspaces-table-crud-commands: done
   2-2-git-repository-detection-service: backlog
   2-3-auto-workspace-assignment-on-note-creation: backlog
   2-4-workspace-selector-in-statusbar: backlog

@@ -1,4 +1,5 @@
 pub mod config;
+pub mod workspace;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
