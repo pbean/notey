@@ -1,18 +1,17 @@
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
-import { useWorkspaceStore } from '../../workspace/store';
 import { SaveIndicator } from './SaveIndicator';
+import { WorkspaceSelector } from '../../workspace/components/WorkspaceSelector';
 import type { NoteFormat } from '../store';
 
 /**
- * Fixed 24px status bar. Left: workspace name. Right: save indicator
+ * Fixed 24px status bar. Left: workspace selector dropdown. Right: save indicator
  * and clickable format toggle (Markdown / Plain text).
  */
 export function StatusBar() {
   const format = useEditorStore((s) => s.format);
   const activeNoteId = useEditorStore((s) => s.activeNoteId);
   const setFormat = useEditorStore((s) => s.setFormat);
-  const activeWorkspaceName = useWorkspaceStore((s) => s.activeWorkspaceName);
 
   async function handleFormatToggle() {
     const newFormat: NoteFormat = format === 'markdown' ? 'plaintext' : 'markdown';
@@ -42,12 +41,7 @@ export function StatusBar() {
         flexShrink: 0,
       }}
     >
-      <span
-        data-testid="workspace-name"
-        style={{ color: 'var(--text-secondary)', fontSize: '11px' }}
-      >
-        {activeWorkspaceName ?? 'No workspace'}
-      </span>
+      <WorkspaceSelector />
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         <SaveIndicator />
         <button
