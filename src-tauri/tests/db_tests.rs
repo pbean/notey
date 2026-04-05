@@ -132,7 +132,7 @@ fn test_list_notes_filters_trashed_notes() {
     let _note1 = NoteBuilder::new().trashed().insert(&conn);
     let note2 = NoteBuilder::new().title("Visible").insert(&conn);
 
-    let result = notes::list_notes(&conn).expect("list_notes failed");
+    let result = notes::list_notes(&conn, None).expect("list_notes failed");
 
     assert_eq!(result.len(), 1, "only non-trashed notes should appear");
     assert_eq!(result[0].id, note2.id);

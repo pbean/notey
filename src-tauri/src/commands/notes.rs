@@ -44,7 +44,8 @@ pub async fn update_note(
 #[specta::specta]
 pub async fn list_notes(
     state: State<'_, Mutex<rusqlite::Connection>>,
+    workspace_id: Option<i64>,
 ) -> Result<Vec<Note>, NoteyError> {
     let conn = state.lock().unwrap_or_else(|e| e.into_inner());
-    services::notes::list_notes(&conn)
+    services::notes::list_notes(&conn, workspace_id)
 }

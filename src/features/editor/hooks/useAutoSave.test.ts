@@ -12,6 +12,7 @@ function mockCreateAndUpdate() {
   mockInvoke.mockImplementation((cmd: string) => {
     if (cmd === 'create_note') return Promise.resolve(testNote);
     if (cmd === 'update_note') return Promise.resolve(testNote);
+    if (cmd === 'list_notes') return Promise.resolve([]);
     return Promise.reject(new Error(`unmocked: ${cmd}`));
   });
 }
@@ -55,7 +56,7 @@ describe('useAutoSave', () => {
 
   // Gap: auto-save passes workspaceId from workspace store to createNote
   it('passes activeWorkspaceId to createNote', async () => {
-    useWorkspaceStore.getState().setActiveWorkspace(42, 'my-project');
+    useWorkspaceStore.getState().setActiveWorkspace(42);
     renderHook(() => useAutoSave());
 
     act(() => {
@@ -156,7 +157,7 @@ describe('flushSave', () => {
 
   // Gap: flushSave passes workspaceId from workspace store to createNote
   it('passes activeWorkspaceId to createNote', async () => {
-    useWorkspaceStore.getState().setActiveWorkspace(99, 'flush-project');
+    useWorkspaceStore.getState().setActiveWorkspace(99);
     useEditorStore.getState().setContent('Flush with workspace');
 
     await act(async () => {

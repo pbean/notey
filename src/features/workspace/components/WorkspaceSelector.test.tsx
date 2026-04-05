@@ -8,6 +8,8 @@ const MOCK_WORKSPACES = [
   { id: 2, name: 'beta', path: '/b', createdAt: '2026-01-02T00:00:00+00:00', noteCount: 7 },
 ];
 
+const MOCK_FILTERED_NOTE = { id: 1, title: 'Note', content: '', format: 'markdown', workspaceId: 1, createdAt: '2026-01-01T00:00:00+00:00', updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false };
+
 describe('WorkspaceSelector', () => {
   beforeEach(() => {
     useWorkspaceStore.setState({
@@ -15,6 +17,8 @@ describe('WorkspaceSelector', () => {
       activeWorkspaceName: 'alpha',
       workspaces: MOCK_WORKSPACES,
       isAllWorkspaces: false,
+      filteredNotes: [MOCK_FILTERED_NOTE],
+      isLoadingNotes: false,
     });
   });
 
@@ -23,16 +27,31 @@ describe('WorkspaceSelector', () => {
     expect(screen.getByTestId('workspace-name')).toHaveTextContent('alpha \u00b7 1 note');
   });
 
-  it('renders "All Workspaces" with total note count when isAllWorkspaces is true', () => {
-    useWorkspaceStore.setState({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null });
+  it('renders "All Workspaces" with filtered note count when isAllWorkspaces is true', () => {
+    useWorkspaceStore.setState({
+      isAllWorkspaces: true,
+      activeWorkspaceId: null,
+      activeWorkspaceName: null,
+      filteredNotes: [MOCK_FILTERED_NOTE, { ...MOCK_FILTERED_NOTE, id: 2 }],
+    });
     render(<WorkspaceSelector />);
-    expect(screen.getByTestId('workspace-name')).toHaveTextContent('All Workspaces \u00b7 8 notes');
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent('All Workspaces \u00b7 2 notes');
   });
 
   it('renders "No workspace" when no workspace is active and not all-workspaces mode', () => {
-    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false });
+    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false, filteredNotes: [] });
     render(<WorkspaceSelector />);
     expect(screen.getByTestId('workspace-name')).toHaveTextContent('No workspace');
+  });
+
+  it('renders active workspace with 0 notes showing "0 notes"', () => {
+    useWorkspaceStore.setState({
+      activeWorkspaceId: 1,
+      activeWorkspaceName: 'alpha',
+      filteredNotes: [],
+    });
+    render(<WorkspaceSelector />);
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent('alpha \u00b7 0 notes');
   });
 
   it('has aria-label for accessibility', () => {
@@ -80,7 +99,7 @@ describe('WorkspaceSelector', () => {
   });
 
   it('shows check icon next to "All Workspaces" when isAllWorkspaces is true', async () => {
-    useWorkspaceStore.setState({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null });
+    useWorkspaceStore.setState({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null, filteredNotes: [] });
     render(<WorkspaceSelector />);
     fireEvent.click(screen.getByTestId('workspace-name'));
 

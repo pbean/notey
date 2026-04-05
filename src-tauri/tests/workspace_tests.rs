@@ -617,6 +617,58 @@ fn test_resolve_workspace_then_create_note_with_workspace_id() {
     assert_eq!(fetched.workspace_id, Some(ws.id), "workspace_id should persist in DB");
 }
 
+// ============================================================================
+// Story 2.5: Workspace-Filtered Note Views — Integration Tests
+// ============================================================================
+
+// Gap: list_notes filtered by workspace_id returns only scoped notes (integration test)
+#[test]
+fn test_list_notes_filtered_by_workspace_integration() {
+    let conn = setup_test_db();
+    let ws_a = workspace_service::create_workspace(&conn, "Alpha", "/path/alpha")
+        .expect("create alpha");
+    let ws_b = workspace_service::create_workspace(&conn, "Bravo", "/path/bravo")
+        .expect("create bravo");
+
+    let note_a1 = NoteBuilder::new().title("A1").workspace_id(ws_a.id).insert(&conn);
+    let _note_a2 = NoteBuilder::new().title("A2").workspace_id(ws_a.id).insert(&conn);
+    let _note_b1 = NoteBuilder::new().title("B1").workspace_id(ws_b.id).insert(&conn);
+    let _note_null = NoteBuilder::new().title("Unscoped").insert(&conn); // workspace_id = NULL
+
+    let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws_a.id))
+        .expect("list_notes filtered");
+    assert_eq!(result.len(), 2, "should return only notes in ws_a");
+    assert!(
+        result.iter().all(|n| n.workspace_id == Some(ws_a.id)),
+        "all returned notes should belong to ws_a"
+    );
+    // Verify ws_b notes and NULL workspace_id notes are excluded
+    assert!(
+        !result.iter().any(|n| n.title == "B1"),
+        "ws_b notes should be excluded"
+    );
+    assert!(
+        !result.iter().any(|n| n.title == "Unscoped"),
+        "NULL workspace_id notes should be excluded"
+    );
+}
+
+// Gap: list_notes filtered by workspace excludes trashed notes (integration test)
+#[test]
+fn test_list_notes_filtered_excludes_trashed_integration() {
+    let conn = setup_test_db();
+    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+        .expect("create workspace");
+
+    NoteBuilder::new().title("Active").workspace_id(ws.id).insert(&conn);
+    NoteBuilder::new().title("Trashed").workspace_id(ws.id).trashed().insert(&conn);
+
+    let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws.id))
+        .expect("list_notes filtered");
+    assert_eq!(result.len(), 1, "trashed note should be excluded");
+    assert_eq!(result[0].title, "Active");
+}
+
 // Gap: list_notes returns notes with workspace_id populated
 #[test]
 fn test_list_notes_preserves_workspace_id() {
@@ -628,7 +680,7 @@ fn test_list_notes_preserves_workspace_id() {
     NoteBuilder::new().workspace_id(ws.id).title("Scoped").insert(&conn);
     NoteBuilder::new().title("Unscoped").insert(&conn);
 
-    let notes = tauri_app_lib::services::notes::list_notes(&conn).expect("list_notes failed");
+    let notes = tauri_app_lib::services::notes::list_notes(&conn, None).expect("list_notes failed");
     assert_eq!(notes.len(), 2);
 
     let scoped = notes.iter().find(|n| n.title == "Scoped").expect("scoped note missing");

@@ -82,15 +82,13 @@ pub fn trash_note(conn: &Connection, id: i64) -> Result<Note, NoteyError> {
     get_note(conn, id)
 }
 
-pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, NoteyError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, content, format, workspace_id, created_at, updated_at, deleted_at, is_trashed
-         FROM notes
-         WHERE is_trashed = 0
-         ORDER BY updated_at DESC",
-    )?;
-
-    let notes = stmt.query_map([], |row| {
+/// Lists non-trashed notes, optionally filtered by workspace.
+///
+/// When `workspace_id` is `Some(id)`, returns only notes belonging to that workspace.
+/// When `workspace_id` is `None`, returns all non-trashed notes across all workspaces.
+/// Results are always ordered by `updated_at` DESC.
+pub fn list_notes(conn: &Connection, workspace_id: Option<i64>) -> Result<Vec<Note>, NoteyError> {
+    let row_mapper = |row: &rusqlite::Row| -> rusqlite::Result<Note> {
         Ok(Note {
             id: row.get(0)?,
             title: row.get(1)?,
@@ -102,13 +100,32 @@ pub fn list_notes(conn: &Connection) -> Result<Vec<Note>, NoteyError> {
             deleted_at: row.get(7)?,
             is_trashed: row.get::<_, i64>(8)? != 0,
         })
-    })?;
+    };
 
-    let mut result = Vec::new();
-    for note in notes {
-        result.push(note?);
-    }
-    Ok(result)
+    let notes: Vec<Note> = match workspace_id {
+        Some(ws_id) => {
+            let mut stmt = conn.prepare(
+                "SELECT id, title, content, format, workspace_id, created_at, updated_at, deleted_at, is_trashed
+                 FROM notes WHERE is_trashed = 0 AND workspace_id = ?1
+                 ORDER BY updated_at DESC",
+            )?;
+            let rows = stmt.query_map(params![ws_id], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows
+        }
+        None => {
+            let mut stmt = conn.prepare(
+                "SELECT id, title, content, format, workspace_id, created_at, updated_at, deleted_at, is_trashed
+                 FROM notes WHERE is_trashed = 0
+                 ORDER BY updated_at DESC",
+            )?;
+            let rows = stmt.query_map([], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?;
+            rows
+        }
+    };
+
+    Ok(notes)
 }
 
 #[cfg(test)]
@@ -184,7 +201,7 @@ mod tests {
         let note = create_note(&conn, "markdown", None).expect("create_note failed");
         trash_note(&conn, note.id).expect("trash_note failed");
 
-        let notes = list_notes(&conn).expect("list_notes failed");
+        let notes = list_notes(&conn, None).expect("list_notes failed");
         assert!(
             notes.iter().all(|n| !n.is_trashed),
             "list_notes should not return trashed notes"
@@ -245,7 +262,7 @@ mod tests {
         )
         .expect("failed to update note2");
 
-        let notes = list_notes(&conn).expect("list_notes failed");
+        let notes = list_notes(&conn, None).expect("list_notes failed");
         assert_eq!(notes.len(), 2);
         // note2 should be first (more recent)
         assert_eq!(notes[0].id, note2.id);
@@ -282,6 +299,115 @@ mod tests {
         let conn = setup_test_db();
         let note = create_note(&conn, "markdown", Some(99999)).expect("create_note should succeed even with non-existent workspace_id");
         assert_eq!(note.workspace_id, Some(99999));
+    }
+
+    // UNIT-2.5-001: list_notes with workspace_id returns only notes in that workspace
+    #[test]
+    fn test_list_notes_filtered_by_workspace() {
+        let conn = setup_test_db();
+        // Create two workspaces
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-a", "/tmp/ws-a", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-a");
+        let ws_a_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-b", "/tmp/ws-b", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-b");
+        let ws_b_id = conn.last_insert_rowid();
+
+        // Create notes in each workspace
+        let note_a = create_note(&conn, "markdown", Some(ws_a_id)).expect("create note in ws-a");
+        let _note_b = create_note(&conn, "markdown", Some(ws_b_id)).expect("create note in ws-b");
+
+        let result = list_notes(&conn, Some(ws_a_id)).expect("list_notes filtered");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, note_a.id);
+        assert_eq!(result[0].workspace_id, Some(ws_a_id));
+    }
+
+    // UNIT-2.5-004: list_notes with workspace_id excludes trashed notes
+    #[test]
+    fn test_list_notes_filtered_excludes_trashed() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-trash", "/tmp/ws-trash", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+
+        let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
+        assert!(result.is_empty(), "trashed notes should be excluded from filtered results");
+    }
+
+    // UNIT-2.5-005: list_notes with workspace_id that has no notes returns empty vec
+    #[test]
+    fn test_list_notes_filtered_empty_workspace() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-empty", "/tmp/ws-empty", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
+        assert!(result.is_empty(), "empty workspace should return empty vec, not error");
+    }
+
+    // UNIT-2.5-002: list_notes with None workspace_id returns all non-trashed notes
+    #[test]
+    fn test_list_notes_unfiltered_returns_all() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-all", "/tmp/ws-all", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let _note1 = create_note(&conn, "markdown", Some(ws_id)).expect("create note 1");
+        let _note2 = create_note(&conn, "markdown", None).expect("create note 2 (no workspace)");
+
+        let result = list_notes(&conn, None).expect("list_notes unfiltered");
+        assert_eq!(result.len(), 2, "unfiltered should return all non-trashed notes");
+    }
+
+    // UNIT-2.5-003: list_notes results are ordered by updated_at DESC
+    #[test]
+    fn test_list_notes_filtered_ordered_by_updated_at_desc() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-order", "/tmp/ws-order", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note1 = create_note(&conn, "markdown", Some(ws_id)).expect("create note1");
+        conn.execute(
+            "UPDATE notes SET updated_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
+            params![note1.id],
+        )
+        .expect("backdate note1");
+        let note2 = create_note(&conn, "markdown", Some(ws_id)).expect("create note2");
+        conn.execute(
+            "UPDATE notes SET updated_at = '2020-01-02T00:00:00+00:00' WHERE id = ?",
+            params![note2.id],
+        )
+        .expect("backdate note2");
+
+        let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].id, note2.id, "more recently updated note should come first");
+        assert_eq!(result[1].id, note1.id);
     }
 
     // P1-UNIT-005: Note format toggle persists

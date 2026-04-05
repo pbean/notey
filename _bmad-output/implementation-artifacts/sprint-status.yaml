@@ -66,7 +66,7 @@ development_status:
   2-2-git-repository-detection-service: done
   2-3-auto-workspace-assignment-on-note-creation: done
   2-4-workspace-selector-in-statusbar: done
-  2-5-workspace-filtered-note-views: backlog
+  2-5-workspace-filtered-note-views: done
   2-6-manual-workspace-reassignment: backlog
   epic-2-retrospective: optional
 

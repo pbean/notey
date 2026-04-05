@@ -18,6 +18,7 @@ export function WorkspaceSelector() {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const activeWorkspaceName = useWorkspaceStore((s) => s.activeWorkspaceName);
   const isAllWorkspaces = useWorkspaceStore((s) => s.isAllWorkspaces);
+  const filteredNotes = useWorkspaceStore((s) => s.filteredNotes);
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const setAllWorkspaces = useWorkspaceStore((s) => s.setAllWorkspaces);
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
@@ -28,11 +29,9 @@ export function WorkspaceSelector() {
 
   let displayText: string;
   if (isAllWorkspaces) {
-    displayText = `All Workspaces \u00b7 ${totalNoteCount} ${noteLabel(totalNoteCount)}`;
+    displayText = `All Workspaces \u00b7 ${filteredNotes.length} ${noteLabel(filteredNotes.length)}`;
   } else if (activeWorkspaceName) {
-    const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
-    const count = activeWs?.noteCount ?? 0;
-    displayText = `${activeWorkspaceName} \u00b7 ${count} ${noteLabel(count)}`;
+    displayText = `${activeWorkspaceName} \u00b7 ${filteredNotes.length} ${noteLabel(filteredNotes.length)}`;
   } else {
     displayText = 'No workspace';
   }

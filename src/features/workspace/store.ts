@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { commands } from '../../generated/bindings';
-import type { WorkspaceInfo } from '../../generated/bindings';
+import type { WorkspaceInfo, Note } from '../../generated/bindings';
 
 /** Workspace state for tracking the active workspace context. */
 interface WorkspaceState {
@@ -8,6 +8,8 @@ interface WorkspaceState {
   activeWorkspaceName: string | null;
   workspaces: WorkspaceInfo[];
   isAllWorkspaces: boolean;
+  filteredNotes: Note[];
+  isLoadingNotes: boolean;
 }
 
 /** Actions for managing workspace state. */
@@ -16,6 +18,7 @@ interface WorkspaceActions {
   setAllWorkspaces: () => void;
   clearActiveWorkspace: () => void;
   loadWorkspaces: () => Promise<void>;
+  loadFilteredNotes: () => Promise<void>;
   initWorkspace: () => Promise<void>;
 }
 
@@ -29,6 +32,8 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   activeWorkspaceName: null,
   workspaces: [],
   isAllWorkspaces: false,
+  filteredNotes: [],
+  isLoadingNotes: false,
 
   setActiveWorkspace: (id) => {
     const found = get().workspaces.find((w) => w.id === id);
@@ -37,13 +42,29 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       activeWorkspaceName: found?.name ?? null,
       isAllWorkspaces: false,
     });
+    get().loadFilteredNotes();
   },
 
-  setAllWorkspaces: () =>
-    set({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null }),
+  setAllWorkspaces: () => {
+    set({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null });
+    get().loadFilteredNotes();
+  },
 
   clearActiveWorkspace: () =>
-    set({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false }),
+    set({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false, filteredNotes: [] }),
+
+  loadFilteredNotes: async () => {
+    set({ isLoadingNotes: true });
+    const { activeWorkspaceId, isAllWorkspaces } = get();
+    const workspaceId = isAllWorkspaces ? null : activeWorkspaceId;
+    const result = await commands.listNotes(workspaceId);
+    if (result.status === 'ok') {
+      set({ filteredNotes: result.data, isLoadingNotes: false });
+    } else {
+      console.error('listNotes failed:', result.error);
+      set({ filteredNotes: [], isLoadingNotes: false });
+    }
+  },
 
   loadWorkspaces: async () => {
     const result = await commands.listWorkspaces();
@@ -71,11 +92,12 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     if (listResult.status === 'ok') {
       set({ workspaces: listResult.data });
     }
-    // Set active — lookup name from workspaces array
+    // Set active ��� lookup name from workspaces array
     const found = get().workspaces.find((w) => w.id === ws.id);
     set({
       activeWorkspaceId: ws.id,
       activeWorkspaceName: found?.name ?? ws.name,
     });
+    get().loadFilteredNotes();
   },
 }));

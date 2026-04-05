@@ -1,114 +1,118 @@
-# Test Automation Summary — Stories 2.1–2.4
+# Test Automation Summary — Stories 2.1–2.5
 
 **Date:** 2026-04-04
-**Stories:** 2.1 — Workspaces Table & CRUD, 2.2 — Git Repository Detection, 2.3 — Auto-Workspace Assignment, 2.4 — Workspace Selector in StatusBar
+**Stories:** 2.1 — Workspaces Table & CRUD, 2.2 — Git Repository Detection, 2.3 — Auto-Workspace Assignment, 2.4 — Workspace Selector in StatusBar, 2.5 — Workspace-Filtered Note Views
 **Test Frameworks:** Rust `#[test]` (cargo test), Vitest (frontend)
 
-## Story 2.4: Gap Tests Added (3 new tests)
+## Story 2.5: Gap Tests Added (6 new tests)
 
-### Frontend — WorkspaceSelector Component (2 tests)
+### Backend — Rust Integration Tests (2 tests in workspace_tests.rs)
 
-- [x] `shows check icon next to the active workspace in dropdown` — Verifies Check SVG appears for active workspace (alpha) and not for inactive (beta)
-- [x] `shows check icon next to "All Workspaces" when isAllWorkspaces is true` — Verifies Check SVG on "All Workspaces" item and absence on individual workspaces
+- [x] `test_list_notes_filtered_by_workspace_integration` — Verifies `list_notes(conn, Some(ws_id))` returns only scoped notes, excludes other workspace notes AND NULL workspace_id notes
+- [x] `test_list_notes_filtered_excludes_trashed_integration` — Verifies filtered `list_notes` excludes trashed notes using NoteBuilder + file-backed DB
 
-### Frontend — useWorkspaceStore (1 test)
+### Frontend — useWorkspaceStore (2 tests in store.test.ts)
 
-- [x] `initWorkspace falls back to resolve name when workspace not in list` — Tests `found?.name ?? ws.name` fallback path when listWorkspaces returns a list that doesn't include the resolved workspace ID
+- [x] `loadFilteredNotes sends null workspaceId when no workspace active and not all-workspaces` — Tests initial state edge case (activeWorkspaceId=null, isAllWorkspaces=false)
+- [x] `loadFilteredNotes replaces previous filteredNotes with new results` — Verifies old notes are fully replaced on workspace switch, not accumulated
 
-### Frontend — WorkspaceSelector Test Quality Improvement
+### Frontend — WorkspaceSelector Component (1 test in WorkspaceSelector.test.tsx)
 
-- [x] `renders all workspaces and "All Workspaces" option in dropdown with note counts` — Strengthened: now asserts full `"[name] · [N] notes"` format (was only regex-matching workspace name)
+- [x] `renders active workspace with 0 notes showing "0 notes"` — Verifies zero-count display with correct plural form
 
-## Story 2.4: Pre-existing Tests (8 WorkspaceSelector + 10 store + 6 StatusBar = 24 tests)
+### Frontend — StatusBar Component (1 test in StatusBar.test.tsx)
 
-### useWorkspaceStore (10 tests in store.test.ts)
+- [x] `renders singular "1 note" for single note count` — Verifies `noteLabel(1)` returns singular form, confirms no "1 notes" regression
 
-- [x] `starts with null workspace state and empty workspaces` — Default state
-- [x] `setActiveWorkspace sets id, looks up name from workspaces, and clears isAllWorkspaces` — UNIT-2.4-002
-- [x] `setActiveWorkspace sets name to null when id not found in workspaces` — Edge case
-- [x] `setAllWorkspaces sets flag and clears active workspace` — UNIT-2.4-003
-- [x] `clearActiveWorkspace resets to null and clears isAllWorkspaces` — Inherited from 2.3
-- [x] `loadWorkspaces calls listWorkspaces and populates state` — UNIT-2.4-001
-- [x] `loadWorkspaces handles error gracefully` — Error path
-- [x] `initWorkspace resolves cwd, loads workspaces, and sets active workspace` — UNIT-2.4-004
-- [x] `initWorkspace handles getCurrentDir error gracefully` — Error path
-- [x] `initWorkspace handles resolveWorkspace error gracefully` — Error path
+## Story 2.5: Pre-existing Tests (9 mapped test IDs + 6 story tests = 15 tests)
 
-### WorkspaceSelector Component (8 tests in WorkspaceSelector.test.tsx)
+### Rust Unit Tests (7 tests in services/notes.rs)
 
-- [x] `renders active workspace name and note count` — COMP-2.4-001
-- [x] `renders "All Workspaces" with total note count when isAllWorkspaces is true` — COMP-2.4-006
-- [x] `renders "No workspace" when no workspace is active` — Fallback
-- [x] `has aria-label for accessibility` — COMP-2.4-002 (accessibility)
-- [x] `calls loadWorkspaces when dropdown opens` — Refresh on open
-- [x] `calls setActiveWorkspace when a workspace is selected` — COMP-2.4-004
-- [x] `calls setAllWorkspaces when "All Workspaces" is selected` — COMP-2.4-005
+- [x] UNIT-2.5-001: `test_list_notes_filtered_by_workspace` — P0
+- [x] UNIT-2.5-002: `test_list_notes_unfiltered_returns_all` — P0
+- [x] UNIT-2.5-003: `test_list_notes_filtered_ordered_by_updated_at_desc` — P0
+- [x] UNIT-2.5-004: `test_list_notes_filtered_excludes_trashed` — P0
+- [x] UNIT-2.5-005: `test_list_notes_filtered_empty_workspace` — P1
+- [x] Updated: `test_list_notes_filters_trashed` — passes `None` (no regression)
+- [x] Updated: `test_list_notes_ordered_by_updated_at_desc` — passes `None` (no regression)
 
-### StatusBar Component (6 tests in StatusBar.test.tsx)
+### Frontend Store Tests (6 tests in store.test.ts)
 
-- [x] `renders "No workspace" when no workspace is active` — Fallback
-- [x] `renders workspace name with note count in "[name] · [N] notes" format` — COMP-2.4-001 integration
-- [x] `renders "All Workspaces" with total note count when isAllWorkspaces is true` — COMP-2.4-006 integration
-- [x] `workspace trigger is clickable (button element)` — COMP-2.4-002
-- [x] `renders format toggle showing current format` — Pre-existing
-- [x] `has status role for accessibility` — Pre-existing
+- [x] UNIT-2.5-006: `loadFilteredNotes calls listNotes with activeWorkspaceId when workspace active` — P0
+- [x] UNIT-2.5-007: `loadFilteredNotes calls listNotes with null when isAllWorkspaces` — P0
+- [x] UNIT-2.5-008: `setActiveWorkspace triggers loadFilteredNotes` — P1
+- [x] `setAllWorkspaces triggers loadFilteredNotes` — P1
+- [x] `loadFilteredNotes handles error gracefully` — Error path
+- [x] UNIT-2.5-009: StatusBar note count verified in StatusBar.test.tsx and WorkspaceSelector.test.tsx
 
-## Stories 2.1–2.3: Previous Tests (unchanged)
+### Frontend Component Tests (updated)
+
+- [x] WorkspaceSelector: `renders active workspace name and note count` — uses `filteredNotes.length`
+- [x] WorkspaceSelector: `renders "All Workspaces" with filtered note count` — uses `filteredNotes.length`
+- [x] StatusBar: `renders workspace name with note count` — uses `filteredNotes` from store
+- [x] StatusBar: `renders "All Workspaces" with total note count` — uses `filteredNotes` from store
+
+## Stories 2.1–2.4: Previous Tests (unchanged)
+
+### Story 2.4 (3 gap + 24 pre-existing = 27 tests)
+
+- [x] 2 check-icon indicator gap tests + 1 store fallback gap test
+- [x] 10 store tests, 8 WorkspaceSelector tests, 6 StatusBar tests
 
 ### Story 2.3 (14 gap + 9 pre-existing = 23 tests)
 
-- [x] 4 backend integration gap tests (resolve error, end-to-end, list preserves workspace_id, update preserves)
-- [x] 6 frontend store tests
-- [x] 4 frontend auto-save workspace integration tests
-- [x] 9 pre-existing (3 unit + 6 integration)
+- [x] 4 backend integration gap tests + 6 frontend store tests + 4 auto-save tests + 9 pre-existing
 
-### Story 2.2 (12 tests — 9 pre-existing + 3 gap)
+### Story 2.2 (12 tests)
 
-- [x] All 9 detection tests + 3 gap tests
+- [x] 9 detection tests + 3 gap tests
 
-### Story 2.1 (15 tests — 11 pre-existing + 4 gap)
+### Story 2.1 (15 tests)
 
-- [x] All 10 CRUD tests + 4 gap tests + 1 note count
+- [x] 10 CRUD tests + 4 gap tests + 1 note count test
 
 ## Coverage
 
 | Area | Covered | Notes |
 |------|---------|-------|
-| Story 2.4 required test IDs | 11/11 | All P0, P1, P2 tests from spec |
-| Story 2.4 gap tests | 3/3 | 2 check-icon indicator + 1 store fallback |
-| WorkspaceSelector component | 11/11 | Display, dropdown, selection, icons, accessibility |
-| useWorkspaceStore (2.4 actions) | 11/11 | load, setActive, setAll, init, fallback, errors |
-| StatusBar integration | 6/6 | Format, workspace display, clickable, a11y |
-| P2-COMP-002 | 1/1 | StatusBar workspace + note count — resolved |
+| Story 2.5 required test IDs | 9/9 | All P0/P1 tests passing |
+| Story 2.5 gap tests | 6/6 | 2 Rust integration + 2 store + 1 component + 1 StatusBar |
+| `list_notes` filtered path | 7 tests | Unit (5) + Integration (2) |
+| `loadFilteredNotes` action | 5 tests | Active workspace, all workspaces, initial state, replace, error |
+| WorkspaceSelector filtered counts | 4 tests | Active, all, zero, no-workspace |
+| StatusBar filtered counts | 4 tests | Plural, singular, all-workspaces, no-workspace |
 
 ## Full Suite Results
 
 ```
-Backend: 82 tests passed, 0 failed
-  - lib (unit): 44 passed
+Backend: 89 tests passed, 0 failed
+  - lib (unit): 32 passed
   - ACL tests: 4 passed
   - DB tests: 13 passed
-  - Workspace tests: 42 passed
+  - Workspace tests: 40 passed
 
-Frontend: 42 tests passed, 0 failed
+Frontend: 51 tests passed, 0 failed
   - editor/store.test.ts: 7 passed
   - editor/hooks/useAutoSave.test.ts: 8 passed
-  - workspace/store.test.ts: 12 passed
-  - workspace/components/WorkspaceSelector.test.tsx: 11 passed
-  - editor/components/StatusBar.test.tsx: 6 passed
+  - workspace/store.test.ts: 15 passed
+  - workspace/components/WorkspaceSelector.test.tsx: 12 passed
+  - editor/components/StatusBar.test.tsx: 7 passed
+  - settings tests: 2 passed
+
+Total: 140 tests, 0 failures, 0 regressions
 ```
 
 ## Checklist Validation
 
-- [x] API tests generated (if applicable) — Backend unchanged for 2.4 (frontend-only story)
-- [x] E2E tests generated (if UI exists) — 3 gap tests auto-applied
-- [x] Tests use standard test framework APIs — Vitest `describe/it/expect`
-- [x] Tests cover happy path — workspace display, dropdown, selection, icons
-- [x] Tests cover 1-2 critical error cases — loadWorkspaces error, initWorkspace fallback
-- [x] All generated tests run successfully — 82 backend + 42 frontend = 124 total
-- [x] Tests use proper locators (semantic, accessible) — `getByTestId`, `getByRole`, `getAllByRole`, `getByLabelText`, `querySelector('svg')`
-- [x] Tests have clear descriptions — descriptive names
-- [x] No hardcoded waits or sleeps — `waitFor` only
+- [x] API tests generated (if applicable) — 2 Rust integration tests for `list_notes` filtered path
+- [x] E2E tests generated (if UI exists) — 4 frontend gap tests auto-applied
+- [x] Tests use standard test framework APIs — Vitest `describe/it/expect`, Rust `#[test]` + `assert!`
+- [x] Tests cover happy path — filtered notes, workspace switch, note counts
+- [x] Tests cover 1-2 critical error cases — error handling, empty workspace, zero notes
+- [x] All generated tests run successfully — 89 backend + 51 frontend = 140 total
+- [x] Tests use proper locators (semantic, accessible) — `getByTestId`, `getByRole`, `getByLabelText`
+- [x] Tests have clear descriptions — descriptive names matching gap descriptions
+- [x] No hardcoded waits or sleeps — `waitFor` for async, no `setTimeout`
 - [x] Tests are independent (no order dependency) — store reset in `beforeEach`
 - [x] Test summary created — this file
 - [x] Tests saved to appropriate directories — co-located per project convention
@@ -117,5 +121,5 @@ Frontend: 42 tests passed, 0 failed
 ## Next Steps
 
 - Run tests in CI
-- All Story 2.4 required test IDs are passing
-- Story 2.4 has comprehensive coverage for workspace selector UI + store
+- All Story 2.5 required test IDs are passing
+- Story 2.5 has comprehensive coverage for filtered note views (backend + frontend + components)

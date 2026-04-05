@@ -7,7 +7,7 @@ export const commands = {
 	createNote: (format: string, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("create_note", { format, workspaceId })),
 	getNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("get_note", { id })),
 	updateNote: (id: number, title: string | null, content: string | null, format: string | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("update_note", { id, title, content, format })),
-	listNotes: () => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes")),
+	listNotes: (workspaceId: number | null) => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes", { workspaceId })),
 	// Returns the full application config.
 	getConfig: () => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("get_config")),
 	/**

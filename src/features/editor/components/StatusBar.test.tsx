@@ -17,6 +17,8 @@ describe('StatusBar', () => {
       activeWorkspaceName: null,
       workspaces: [],
       isAllWorkspaces: false,
+      filteredNotes: [],
+      isLoadingNotes: false,
     });
   });
 
@@ -26,24 +28,54 @@ describe('StatusBar', () => {
   });
 
   it('renders workspace name with note count in "[name] \u00b7 [N] notes" format', () => {
+    const mockNotes = Array.from({ length: 4 }, (_, i) => ({
+      id: i + 1, title: `Note ${i}`, content: '', format: 'markdown',
+      workspaceId: 1, createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+    }));
     useWorkspaceStore.setState({
       activeWorkspaceId: 1,
       activeWorkspaceName: 'my-project',
       workspaces: MOCK_WORKSPACES,
+      filteredNotes: mockNotes,
     });
     render(<StatusBar />);
     expect(screen.getByTestId('workspace-name')).toHaveTextContent('my-project \u00b7 4 notes');
   });
 
   it('renders "All Workspaces" with total note count when isAllWorkspaces is true', () => {
+    const mockNotes = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1, title: `Note ${i}`, content: '', format: 'markdown',
+      workspaceId: i < 4 ? 1 : 2, createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+    }));
     useWorkspaceStore.setState({
       isAllWorkspaces: true,
       activeWorkspaceId: null,
       activeWorkspaceName: null,
       workspaces: MOCK_WORKSPACES,
+      filteredNotes: mockNotes,
     });
     render(<StatusBar />);
     expect(screen.getByTestId('workspace-name')).toHaveTextContent('All Workspaces \u00b7 10 notes');
+  });
+
+  it('renders singular "1 note" for single note count', () => {
+    const singleNote = {
+      id: 1, title: 'Solo', content: '', format: 'markdown',
+      workspaceId: 1, createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+    };
+    useWorkspaceStore.setState({
+      activeWorkspaceId: 1,
+      activeWorkspaceName: 'my-project',
+      workspaces: MOCK_WORKSPACES,
+      filteredNotes: [singleNote],
+    });
+    render(<StatusBar />);
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent('my-project \u00b7 1 note');
+    // Verify it's NOT "1 notes" (plural)
+    expect(screen.getByTestId('workspace-name').textContent).not.toContain('1 notes');
   });
 
   it('workspace trigger is clickable (button element)', () => {
