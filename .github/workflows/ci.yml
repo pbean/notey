@@ -67,7 +67,13 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy -- -D warnings
 
-      - name: Rust tests
+      - name: Rust tests (Windows)
+        if: runner.os == 'Windows'
+        working-directory: src-tauri
+        run: cargo test --no-default-features --features "wry,tray-icon"
+
+      - name: Rust tests (non-Windows)
+        if: runner.os != 'Windows'
         working-directory: src-tauri
         run: cargo test
 
