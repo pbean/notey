@@ -33,6 +33,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-04-03
+          components: clippy
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'

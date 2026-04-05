@@ -2,3 +2,4 @@
 # specta =2.0.0-rc.24 requires nightly for fmt::from_fn (debug_closure_helpers)
 # and TypeId::of as const fn. Pinned to specific date for reproducible builds.
 channel = "nightly-2026-04-03"
+components = ["clippy"]
