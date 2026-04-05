@@ -91,3 +91,10 @@ jobs:
       - name: Frontend tests (non-Linux)
         if: runner.os != 'Linux'
         run: npx vitest run
+
+      - name: E2E tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo install tauri-driver || true
+          npx tauri build --debug 2>&1 | tail -5 || true
+          xvfb-run node e2e/run.mjs

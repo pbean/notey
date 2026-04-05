@@ -87,4 +87,4 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 **~~Group D — Test backlog:~~ DONE**
 - ~~**Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage~~
 - ~~**Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management~~
-- P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E) deferred — require tauri-driver infrastructure not yet set up
+- ~~P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E)~~ DONE — `e2e/run.mjs` via tauri-driver, 7/7 tests pass (requires `npx tauri build --debug` for embedded frontend binary)
