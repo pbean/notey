@@ -11,6 +11,15 @@ pub struct Workspace {
     pub created_at: String,
 }
 
+/// Result of workspace detection from a filesystem path.
+/// Contains the detected workspace name and canonical path, but no database id.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedWorkspace {
+    pub name: String,
+    pub path: String,
+}
+
 /// A workspace with its aggregated note count (excludes trashed notes).
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

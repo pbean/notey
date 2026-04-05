@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::errors::NoteyError;
-use crate::models::workspace::{Workspace, WorkspaceInfo};
+use crate::models::workspace::{DetectedWorkspace, Workspace, WorkspaceInfo};
 use crate::services;
 
 #[tauri::command]
@@ -34,4 +34,12 @@ pub async fn get_workspace(
 ) -> Result<WorkspaceInfo, NoteyError> {
     let conn = state.lock().unwrap_or_else(|e| e.into_inner());
     services::workspace_service::get_workspace(&conn, id)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn detect_workspace(
+    path: String,
+) -> Result<DetectedWorkspace, NoteyError> {
+    services::workspace_service::detect_workspace(&path)
 }

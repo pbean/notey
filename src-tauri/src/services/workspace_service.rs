@@ -3,7 +3,7 @@ use rusqlite::Connection;
 
 use crate::db::workspace_repo;
 use crate::errors::NoteyError;
-use crate::models::workspace::{Workspace, WorkspaceInfo};
+use crate::models::workspace::{DetectedWorkspace, Workspace, WorkspaceInfo};
 
 /// Create a workspace or return the existing one if a workspace with the same path already exists.
 pub fn create_workspace(
@@ -29,6 +29,49 @@ pub fn create_workspace(
         }
         Err(e) => Err(e),
     }
+}
+
+/// Detect a workspace by walking up from the given path looking for a `.git` directory.
+/// Falls back to the given directory itself if no git repository is found (FR31).
+pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| NoteyError::Validation(format!("Cannot resolve path '{}': {}", path, e)))?;
+
+    if !canonical.is_dir() {
+        return Err(NoteyError::Validation(format!(
+            "Path is not a directory: {}",
+            canonical.display()
+        )));
+    }
+
+    // Walk up from canonical path looking for .git
+    let mut current = canonical.clone();
+    loop {
+        if current.join(".git").exists() {
+            let name = current
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "workspace".to_string());
+            return Ok(DetectedWorkspace {
+                name,
+                path: current.to_string_lossy().to_string(),
+            });
+        }
+        match current.parent() {
+            Some(parent) if parent != current => current = parent.to_path_buf(),
+            _ => break, // Reached filesystem root
+        }
+    }
+
+    // Fallback: use the original directory itself (FR31)
+    let name = canonical
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "workspace".to_string());
+    Ok(DetectedWorkspace {
+        name,
+        path: canonical.to_string_lossy().to_string(),
+    })
 }
 
 /// List all workspaces with their non-trashed note counts, ordered by name ASC.

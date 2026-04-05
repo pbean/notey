@@ -18,6 +18,7 @@
     "allow-dismiss-window",
     "allow-create-workspace",
     "allow-list-workspaces",
-    "allow-get-workspace"
+    "allow-get-workspace",
+    "allow-detect-workspace"
   ]
 }

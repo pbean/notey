@@ -21,6 +21,7 @@ export const commands = {
 	createWorkspace: (name: string, path: string) => typedError<Workspace, NoteyError>(__TAURI_INVOKE("create_workspace", { name, path })),
 	listWorkspaces: () => typedError<WorkspaceInfo[], NoteyError>(__TAURI_INVOKE("list_workspaces")),
 	getWorkspace: (id: number) => typedError<WorkspaceInfo, NoteyError>(__TAURI_INVOKE("get_workspace", { id })),
+	detectWorkspace: (path: string) => typedError<DetectedWorkspace, NoteyError>(__TAURI_INVOKE("detect_workspace", { path })),
 };
 
 /* Types */
@@ -29,6 +30,15 @@ export type AppConfig = {
 	general?: GeneralConfig,
 	editor?: EditorConfig,
 	hotkey?: HotkeyConfig,
+};
+
+/**
+ *  Result of workspace detection from a filesystem path.
+ *  Contains the detected workspace name and canonical path, but no database id.
+ */
+export type DetectedWorkspace = {
+	name: string,
+	path: string,
 };
 
 // Editor-specific settings.

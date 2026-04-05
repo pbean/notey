@@ -3,6 +3,7 @@ mod helpers;
 use helpers::factories::{create_temp_db, setup_test_db, NoteBuilder};
 use tauri_app_lib::errors::NoteyError;
 use tauri_app_lib::services::workspace_service;
+use tempfile::TempDir;
 
 // UNIT-2.1-001: workspaces table created with correct schema by migration
 #[test]
@@ -286,4 +287,226 @@ fn test_unassigned_notes_not_counted_in_workspaces() {
 
     let list = workspace_service::list_workspaces(&conn).expect("list_workspaces failed");
     assert_eq!(list[0].note_count, 1, "unassigned notes should not appear in list counts");
+}
+
+// ============================================================================
+// Story 2.2: Git Repository Detection Service
+// ============================================================================
+
+/// Helper: create a temp dir with a .git subdirectory to simulate a git repo.
+fn make_git_repo() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    std::fs::create_dir(dir.path().join(".git")).unwrap();
+    dir
+}
+
+/// Helper: create a temp git repo with nested subdirectories.
+fn make_nested_git_repo() -> (TempDir, std::path::PathBuf) {
+    let dir = TempDir::new().unwrap();
+    std::fs::create_dir(dir.path().join(".git")).unwrap();
+    let nested = dir.path().join("src").join("deep");
+    std::fs::create_dir_all(&nested).unwrap();
+    (dir, nested)
+}
+
+// P1-UNIT-003: detect_workspace finds git repo root from nested path
+#[test]
+fn test_detect_workspace_finds_git_root_from_nested_path() {
+    let (dir, nested) = make_nested_git_repo();
+
+    let result = workspace_service::detect_workspace(nested.to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(result.path, expected_path.to_string_lossy().to_string());
+    assert_eq!(
+        result.name,
+        expected_path.file_name().unwrap().to_string_lossy().to_string()
+    );
+}
+
+// P1-UNIT-004: detect_workspace falls back to given directory for non-git paths
+#[test]
+fn test_detect_workspace_fallback_no_git() {
+    let dir = TempDir::new().unwrap();
+    // No .git directory created
+
+    let result = workspace_service::detect_workspace(dir.path().to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(result.path, expected_path.to_string_lossy().to_string());
+    assert_eq!(
+        result.name,
+        expected_path.file_name().unwrap().to_string_lossy().to_string()
+    );
+}
+
+// UNIT-2.2-003: detect_workspace returns correct name (directory basename) from git root
+#[test]
+fn test_detect_workspace_returns_correct_basename() {
+    let dir = make_git_repo();
+
+    let result = workspace_service::detect_workspace(dir.path().to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    let expected_name = expected_path.file_name().unwrap().to_string_lossy().to_string();
+    assert_eq!(result.name, expected_name);
+}
+
+// UNIT-2.2-004: detect_workspace canonicalizes paths (resolves symlinks/./.. )
+#[test]
+fn test_detect_workspace_canonicalizes_paths() {
+    let (dir, _nested) = make_nested_git_repo();
+
+    // Use a path with ".." segments
+    let dotdot_path = dir.path().join("src").join("deep").join("..").join("..");
+    let result = workspace_service::detect_workspace(dotdot_path.to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(result.path, expected_path.to_string_lossy().to_string());
+}
+
+// UNIT-2.2-005: detect_workspace returns Validation error for non-existent path
+#[test]
+fn test_detect_workspace_error_nonexistent_path() {
+    let result = workspace_service::detect_workspace("/tmp/definitely-does-not-exist-xyz123");
+    assert!(
+        matches!(result, Err(NoteyError::Validation(_))),
+        "should return Validation error for non-existent path, got: {:?}",
+        result
+    );
+}
+
+// UNIT-2.2-006: detect_workspace returns Validation error for path that is a file, not directory
+#[test]
+fn test_detect_workspace_error_file_path() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("somefile.txt");
+    std::fs::write(&file_path, "hello").unwrap();
+
+    let result = workspace_service::detect_workspace(file_path.to_str().unwrap());
+    assert!(
+        matches!(result, Err(NoteyError::Validation(_))),
+        "should return Validation error for file path, got: {:?}",
+        result
+    );
+}
+
+// UNIT-2.2-007: detect_workspace works at filesystem root (no infinite loop)
+#[test]
+fn test_detect_workspace_filesystem_root_no_infinite_loop() {
+    // "/" exists and is a directory but typically has no .git — should fallback
+    let result = workspace_service::detect_workspace("/");
+    // This should either succeed with fallback or error — but must NOT infinite loop
+    // On most systems "/" has no .git, so fallback returns "/" with name "workspace" (root has no file_name)
+    match result {
+        Ok(ws) => {
+            assert_eq!(ws.path, "/");
+            // Root path has no file_name, so name should be fallback "workspace"
+            assert_eq!(ws.name, "workspace");
+        }
+        Err(NoteyError::Validation(_)) => {
+            // Some systems might restrict access to root — Validation error is acceptable
+        }
+        Err(other) => {
+            panic!("unexpected error type for root path: {:?}", other);
+        }
+    }
+}
+
+// UNIT-2.2-008: detect_workspace works when invoked ON the git root directory itself
+#[test]
+fn test_detect_workspace_on_git_root_itself() {
+    let dir = make_git_repo();
+
+    let result = workspace_service::detect_workspace(dir.path().to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(result.path, expected_path.to_string_lossy().to_string());
+}
+
+// Gap: inner nested git repo takes precedence over outer ancestor repo
+#[test]
+fn test_detect_workspace_inner_git_repo_takes_precedence() {
+    let outer = TempDir::new().unwrap();
+    // Outer repo has .git
+    std::fs::create_dir(outer.path().join(".git")).unwrap();
+    // Inner repo nested inside outer also has .git
+    let inner = outer.path().join("packages").join("inner-app");
+    std::fs::create_dir_all(&inner).unwrap();
+    std::fs::create_dir(inner.join(".git")).unwrap();
+    // Deeply nested path inside inner repo
+    let deep = inner.join("src").join("lib");
+    std::fs::create_dir_all(&deep).unwrap();
+
+    let result = workspace_service::detect_workspace(deep.to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(&inner).unwrap();
+    assert_eq!(
+        result.path,
+        expected_path.to_string_lossy().to_string(),
+        "should find inner repo, not outer ancestor repo"
+    );
+    assert_eq!(result.name, "inner-app");
+}
+
+// Gap: .git as a file (submodule/worktree pattern) is still detected
+#[test]
+fn test_detect_workspace_git_file_submodule_pattern() {
+    let dir = TempDir::new().unwrap();
+    // Submodules and worktrees use a .git FILE (not directory)
+    // containing "gitdir: /path/to/actual/git/dir"
+    let git_file = dir.path().join(".git");
+    std::fs::write(&git_file, "gitdir: /some/path/.git/modules/sub").unwrap();
+
+    let result = workspace_service::detect_workspace(dir.path().to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(
+        result.path,
+        expected_path.to_string_lossy().to_string(),
+        ".git file (submodule pattern) should be detected"
+    );
+}
+
+// Gap: deeply nested non-git path fallback returns original input, not a parent
+#[test]
+fn test_detect_workspace_fallback_deeply_nested_returns_input_path() {
+    let dir = TempDir::new().unwrap();
+    // No .git anywhere — deeply nested structure
+    let deep = dir.path().join("a").join("b").join("c").join("d");
+    std::fs::create_dir_all(&deep).unwrap();
+
+    let result = workspace_service::detect_workspace(deep.to_str().unwrap())
+        .expect("detect_workspace failed");
+
+    let expected_path = std::fs::canonicalize(&deep).unwrap();
+    assert_eq!(
+        result.path,
+        expected_path.to_string_lossy().to_string(),
+        "fallback should return the input directory, not any parent"
+    );
+    assert_eq!(result.name, "d", "fallback name should be the input directory basename");
+}
+
+// UNIT-2.2-009: tauri-specta generates detectWorkspace function and DetectedWorkspace type
+#[test]
+fn test_typescript_bindings_contain_detect_workspace() {
+    let bindings = std::fs::read_to_string("../src/generated/bindings.ts")
+        .expect("bindings.ts should exist after build");
+
+    assert!(
+        bindings.contains("detectWorkspace"),
+        "bindings should contain detectWorkspace command"
+    );
+    assert!(
+        bindings.contains("DetectedWorkspace"),
+        "bindings should contain DetectedWorkspace type"
+    );
 }
