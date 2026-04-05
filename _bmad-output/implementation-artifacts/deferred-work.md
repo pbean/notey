@@ -98,6 +98,6 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management~~
 - ~~P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E)~~ DONE — `e2e/run.mjs` via tauri-driver, 7/7 tests pass (requires `npx tauri build --debug` for embedded frontend binary)
 
-### Deferred from: review-pass2-cleanup code review (2026-04-05)
+### ~~Deferred from: review-pass2-cleanup code review (2026-04-05)~~ DONE
 
-- **`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.
+- ~~**`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.~~ → Awaited with `Promise.all` + `.catch()` guard so reloads complete before returning and unexpected throws don't swallow `result.data`

@@ -63,8 +63,9 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   reassignNoteWorkspace: async (noteId, workspaceId) => {
     const result = await commands.reassignNoteWorkspace(noteId, workspaceId);
     if (result.status === 'ok') {
-      get().loadFilteredNotes();
-      get().loadWorkspaces();
+      await Promise.all([get().loadFilteredNotes(), get().loadWorkspaces()]).catch(
+        (err) => console.error('Post-reassign reload failed:', err),
+      );
       return result.data;
     } else {
       console.error('reassignNoteWorkspace failed:', result.error);
