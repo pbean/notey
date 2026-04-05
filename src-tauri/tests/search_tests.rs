@@ -230,20 +230,38 @@ fn test_fts5_backfill_existing_notes() {
 fn test_fts5_empty_content_no_phantom_matches() {
     let (conn, _dir) = create_temp_db();
 
-    // Create note with empty title and content (default NoteBuilder has empty content, title "Test Note")
-    NoteBuilder::new()
+    // Verify inserting a note with empty title and content succeeds without error
+    let empty_note = NoteBuilder::new()
         .title("")
         .content("")
         .insert(&conn);
+    assert!(empty_note.id > 0, "empty note should be inserted successfully");
 
-    let count: i64 = conn
+    // Create a real note to search against
+    NoteBuilder::new()
+        .title("visible_searchable_note")
+        .content("real content for matching")
+        .insert(&conn);
+
+    // Verify only the real note matches — empty note does not phantom-match
+    let match_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["visible_searchable_note"],
+            |row| row.get(0),
+        )
+        .expect("FTS query failed");
+    assert_eq!(match_count, 1, "only the real note should match; empty note should not phantom-match");
+
+    // Verify searching for arbitrary terms returns 0 (empty note doesn't match random terms)
+    let phantom_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
             params!["nonexistentterm_xyzzy_42"],
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(count, 0, "FTS5 should return 0 matches for a term not in any note");
+    assert_eq!(phantom_count, 0, "FTS5 should return 0 matches for a term not in any note");
 }
 
 // P1-INT-001: FTS5 MATCH query returns correct results with BM25 ranking
@@ -251,16 +269,18 @@ fn test_fts5_empty_content_no_phantom_matches() {
 fn test_fts5_match_returns_ranked_results() {
     let (conn, _dir) = create_temp_db();
 
-    // Note with "rustacean" only in content (lower weight)
+    // Note with "searchterm" only in content, repeated many times (high content BM25).
+    // With default equal weights (1:1), this note would rank FIRST due to high content TF.
     NoteBuilder::new()
-        .title("generic note")
-        .content("rustacean developer writes code")
+        .title("generic note about coding")
+        .content("searchterm searchterm searchterm searchterm searchterm searchterm searchterm searchterm searchterm searchterm")
         .insert(&conn);
 
-    // Note with "rustacean" in title (higher BM25 weight = 10x)
+    // Note with "searchterm" in title only (high title BM25 with 10x weight).
+    // With bm25(10.0, 1.0), this note ranks first because title weight dominates.
     NoteBuilder::new()
-        .title("rustacean programmer")
-        .content("writes safe code")
+        .title("searchterm")
+        .content("a completely different topic here")
         .insert(&conn);
 
     let mut stmt = conn
@@ -269,22 +289,24 @@ fn test_fts5_match_returns_ranked_results() {
         )
         .expect("prepare failed");
     let ids: Vec<i64> = stmt
-        .query_map(params!["rustacean"], |row| row.get(0))
+        .query_map(params!["searchterm"], |row| row.get(0))
         .expect("query_map failed")
         .collect::<Result<Vec<_>, _>>()
         .expect("collect failed");
 
-    assert_eq!(ids.len(), 2, "both notes should match 'rustacean'");
-    // The note with 'rustacean' in the title should rank first (lower rank value = better)
-    // We just assert both results are returned and the title-match note comes first
+    assert_eq!(ids.len(), 2, "both notes should match 'searchterm'");
+    // With bm25(10.0, 1.0), the title-match note should rank first because
+    // title weight (10x) dominates over content weight (1x), even though the
+    // content-only note has many more term occurrences.
+    // With default equal weights, the content-heavy note would rank first instead.
     let title_note_id: i64 = conn
         .query_row(
-            "SELECT id FROM notes WHERE title LIKE '%rustacean programmer%'",
+            "SELECT id FROM notes WHERE title = 'searchterm'",
             [],
             |row| row.get(0),
         )
         .expect("find title note");
-    assert_eq!(ids[0], title_note_id, "title match should rank above content-only match");
+    assert_eq!(ids[0], title_note_id, "title match should rank above content-only match (verifies BM25 10:1 weighting)");
 }
 
 // P1-INT-003: FTS5 index stays consistent after multiple rapid create/update/delete cycles

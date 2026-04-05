@@ -73,6 +73,12 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Item 4** (HIGH): Audit and fix `console.error` logging gaps in frontend store actions — `src/features/workspace/store.ts`, `src/features/editor/store.ts`~~
 - ~~**Item 8** (LOW): Add `buildWorkspaceInfo()` to TS test factories — `src/test-utils/factories.ts`~~
 
+## Deferred from: code review of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)
+
+- **Workspace path format validation** — `create_workspace` rejects empty/whitespace paths but doesn't validate path format (absolute, valid chars) or existence. Scope was limited to RETRO-2-003 (empty/whitespace rejection).
+- **Workspace store error propagation** — `listWorkspaces` failure is logged via `console.error` but not surfaced to UI state. Workspace list may show stale data on failure without user feedback.
+- **loadNote format validation** — `loadNote` trusts the backend format value without validating it falls within the NoteFormat union. Backend SQL CHECK constraint provides the guard, but no frontend validation exists.
+
 **~~Group C — Research and documentation:~~ DONE**
 - ~~**Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`~~
 - ~~**Item 9** (LOW): Document permission TOML manual creation workaround — `_bmad-output/project-context.md`~~

@@ -1,6 +1,6 @@
 # Story 3.1: FTS5 Virtual Table & Sync Triggers
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -237,6 +237,15 @@ claude-sonnet-4-6
 
 - `src-tauri/src/db/mod.rs` — added 3rd migration with FTS5 virtual table, 3 sync triggers, backfill, BM25 rank config
 - `src-tauri/tests/search_tests.rs` — new file: 9 FTS5 integration tests
+
+### Review Findings
+
+- [x] [Review][Decision] Workspace validation trims for check but doesn't trim before storage — RESOLVED: trim before storing. `name` and `path` are now trimmed at the top of `create_workspace`. [src-tauri/src/services/workspace_service.rs:14-23]
+- [x] [Review][Patch] BM25 rank config persistence not directly verified — FIXED: redesigned test data so default equal BM25 weights would produce a different ordering than 10:1 config. Content-heavy note now has 10x term repetitions, ensuring the test only passes if the title weighting is active. [src-tauri/tests/search_tests.rs:249-292]
+- [x] [Review][Patch] P1-INT-002 empty content test doesn't verify the right boundary — FIXED: test now captures the empty note insert (verifies id > 0), creates a real note alongside it, and asserts only the real note matches (proving the empty note doesn't phantom-match). [src-tauri/tests/search_tests.rs:228-258]
+- [x] [Review][Defer] Workspace path validation doesn't check format or existence — FIXED: added `is_absolute()` check in `create_workspace` + test. [src-tauri/src/services/workspace_service.rs:25-28]
+- [x] [Review][Defer] listWorkspaces failure only logged, not propagated to UI state — FIXED: added `workspaceError` state field to workspace store, set on failure, cleared on success. [src/features/workspace/store.ts]
+- [x] [Review][Defer] loadNote doesn't validate format value from backend — FIXED: added `validFormats` guard in `loadNote`, defaults to 'markdown' on unknown format. [src/features/editor/store.ts:73-76]
 
 ## Change Log
 

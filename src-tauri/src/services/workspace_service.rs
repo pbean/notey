@@ -11,14 +11,21 @@ pub fn create_workspace(
     name: &str,
     path: &str,
 ) -> Result<Workspace, NoteyError> {
-    if name.trim().is_empty() {
+    let name = name.trim();
+    let path = path.trim();
+    if name.is_empty() {
         return Err(NoteyError::Validation(
             "Workspace name cannot be empty".to_string(),
         ));
     }
-    if path.trim().is_empty() {
+    if path.is_empty() {
         return Err(NoteyError::Validation(
             "Workspace path cannot be empty".to_string(),
+        ));
+    }
+    if !std::path::Path::new(path).is_absolute() {
+        return Err(NoteyError::Validation(
+            format!("Workspace path must be absolute: {}", path),
         ));
     }
     let now = Utc::now().to_rfc3339();

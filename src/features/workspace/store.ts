@@ -10,6 +10,8 @@ interface WorkspaceState {
   isAllWorkspaces: boolean;
   filteredNotes: Note[];
   isLoadingNotes: boolean;
+  /** Error message from the last failed workspace operation, or null. */
+  workspaceError: string | null;
 }
 
 /** Actions for managing workspace state. */
@@ -35,6 +37,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   isAllWorkspaces: false,
   filteredNotes: [],
   isLoadingNotes: false,
+  workspaceError: null,
 
   setActiveWorkspace: (id) => {
     const found = get().workspaces.find((w) => w.id === id);
@@ -82,9 +85,10 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   loadWorkspaces: async () => {
     const result = await commands.listWorkspaces();
     if (result.status === 'ok') {
-      set({ workspaces: result.data });
+      set({ workspaces: result.data, workspaceError: null });
     } else {
       console.error('listWorkspaces failed:', result.error);
+      set({ workspaceError: 'Failed to load workspaces' });
     }
   },
 
@@ -103,9 +107,10 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     // Load all workspaces first so setActiveWorkspace can look up the name
     const listResult = await commands.listWorkspaces();
     if (listResult.status === 'ok') {
-      set({ workspaces: listResult.data });
+      set({ workspaces: listResult.data, workspaceError: null });
     } else {
       console.error('listWorkspaces failed:', listResult.error);
+      set({ workspaceError: 'Failed to load workspaces' });
     }
     // Set active ��� lookup name from workspaces array
     const found = get().workspaces.find((w) => w.id === ws.id);

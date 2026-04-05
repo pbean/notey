@@ -71,10 +71,14 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       return;
     }
     const note = result.data;
+    const validFormats: NoteFormat[] = ['markdown', 'plaintext'];
+    const format = validFormats.includes(note.format as NoteFormat)
+      ? (note.format as NoteFormat)
+      : 'markdown';
     set({
       activeNoteId: note.id,
       content: note.content,
-      format: note.format as NoteFormat,
+      format,
       saveStatus: 'idle',
       lastSavedAt: note.updatedAt,
       isHydrating: true,

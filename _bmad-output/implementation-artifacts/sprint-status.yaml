@@ -1,5 +1,5 @@
 # generated: 2026-04-03
-# last_updated: 2026-04-05 # story 3.1 → review
+# last_updated: 2026-04-05 # story 3.1 → done
 # project: notey
 # project_key: NOKEY
 # tracking_system: file-system
@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-05
+last_updated: 2026-04-05 # story 3.1 → done (code review)
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -78,7 +78,7 @@ development_status:
 
   # Epic 3: Search & Discovery
   epic-3: in-progress
-  3-1-fts5-virtual-table-sync-triggers: review
+  3-1-fts5-virtual-table-sync-triggers: done
   3-2-full-text-search-tauri-command: backlog
   3-3-searchoverlay-ui-component: backlog
   3-4-search-result-keyboard-navigation-note-opening: backlog

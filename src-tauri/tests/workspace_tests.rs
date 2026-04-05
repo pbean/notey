@@ -762,6 +762,18 @@ fn test_create_workspace_rejects_whitespace_path() {
     );
 }
 
+// Review: create_workspace rejects relative path
+#[test]
+fn test_create_workspace_rejects_relative_path() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "valid", "relative/path");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("absolute")),
+        "expected Validation error for relative path, got: {:?}",
+        result
+    );
+}
+
 // UNIT-2.3-008: tauri-specta generates resolveWorkspace binding
 #[test]
 fn test_typescript_bindings_contain_resolve_workspace() {
