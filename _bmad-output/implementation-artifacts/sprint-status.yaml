@@ -1,5 +1,5 @@
 # generated: 2026-04-03
-# last_updated: 2026-04-04
+# last_updated: 2026-04-05
 # project: notey
 # project_key: NOKEY
 # tracking_system: file-system
@@ -27,6 +27,11 @@
 #   - optional: Can be completed but not required
 #   - done: Retrospective has been completed
 #
+# Retro Action Item Status:
+#   - backlog: Item identified but not started
+#   - in-progress: Item actively being worked on
+#   - done: Item completed
+#
 # WORKFLOW NOTES:
 # ===============
 # - Epic transitions to 'in-progress' automatically when first story is created
@@ -35,7 +40,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-04
+last_updated: 2026-04-05
+# Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
 tracking_system: file-system
@@ -61,14 +67,14 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Workspace-Aware Note Organization
-  epic-2: in-progress
+  epic-2: done
   2-1-workspaces-table-crud-commands: done
   2-2-git-repository-detection-service: done
   2-3-auto-workspace-assignment-on-note-creation: done
   2-4-workspace-selector-in-statusbar: done
   2-5-workspace-filtered-note-views: done
   2-6-manual-workspace-reassignment: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: Search & Discovery
   epic-3: backlog
@@ -134,3 +140,32 @@ development_status:
   8-5-per-user-data-isolation: backlog
   8-6-cross-platform-verification-wayland-fallback: backlog
   epic-8-retrospective: optional
+
+  # ═══════════════════════════════════════════════
+  # RETRO ACTION ITEMS
+  # ═══════════════════════════════════════════════
+  #
+  # Tracks commitments from retrospectives.
+  # Status: backlog | in-progress | done
+  # Source format: epic-{N}-retro-item-{M}
+  #
+  # Epic 1 Retro Items (7/8 resolved):
+  epic-1-retro-item-1-test-design-in-stories: done
+  epic-1-retro-item-2-test-compliance-done-criteria: done
+  epic-1-retro-item-3-project-context-nightly-rust: done
+  epic-1-retro-item-4-note-content-load-path: done
+  epic-1-retro-item-5-rust-test-factories: done
+  epic-1-retro-item-6-ts-test-factories: done
+  epic-1-retro-item-7-ci-pipeline: done
+  epic-1-retro-item-8-p0-p1-test-gaps: in-progress
+
+  # Epic 2 Retro Items:
+  epic-2-retro-item-1-verify-note-opening-e2e: backlog
+  epic-2-retro-item-2-retro-tracking-in-sprint-status: done
+  epic-2-retro-item-3-workspace-input-validation: backlog
+  epic-2-retro-item-4-console-error-logging-audit: backlog
+  epic-2-retro-item-5-fts5-research: backlog
+  epic-2-retro-item-6-epic1-p0-tests: backlog
+  epic-2-retro-item-7-epic1-p1-tests: backlog
+  epic-2-retro-item-8-workspace-test-factory: backlog
+  epic-2-retro-item-9-permission-toml-docs: backlog

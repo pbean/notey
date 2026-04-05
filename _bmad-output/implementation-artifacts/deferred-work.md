@@ -63,3 +63,20 @@ Source: `_bmad-output/implementation-artifacts/epic-1-retro-2026-04-04.md`
 - ~~**Esc dismiss on flushSave failure**~~ → Reordered `.then().catch()` so dismiss only fires on success
 - ~~**`flushSave` leaks `isCreating` on throw**~~ → Wrapped in `try/finally` in both flushSave and debounce callback
 - ~~**`useWindowFocus` StrictMode double-listener**~~ → Replaced ref with local `cancelled` variable scoped per effect invocation
+
+## Deferred from: Epic 2 Retro Action Items — Group B/C/D (2026-04-05)
+
+Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
+
+**Group B — Code fixes:**
+- **Item 3** (HIGH): Add input validation for empty name/path in `create_workspace` — `src-tauri/src/services/workspace_service.rs`
+- **Item 4** (HIGH): Audit and fix `console.error` logging gaps in frontend store actions — `src/features/workspace/store.ts`, `src/features/editor/store.ts`
+- **Item 8** (LOW): Add `buildWorkspaceInfo()` to TS test factories — `src/test-utils/factories.ts`
+
+**Group C — Research and documentation:**
+- **Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`
+- **Item 9** (LOW): Document permission TOML manual creation workaround — `_bmad-output/project-context.md`
+
+**Group D — Test backlog:**
+- **Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage
+- **Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management
