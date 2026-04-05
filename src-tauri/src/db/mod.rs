@@ -29,6 +29,36 @@ const MIGRATIONS_SLICE: &[M<'static>] = &[
         );
         CREATE INDEX IF NOT EXISTS idx_workspaces_path ON workspaces(path);",
     ),
+    M::up(
+        "CREATE VIRTUAL TABLE notes_fts USING fts5(
+            title,
+            content,
+            content=notes,
+            content_rowid=id
+        );
+
+        CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts(rowid, title, content)
+            VALUES (NEW.id, NEW.title, NEW.content);
+        END;
+
+        CREATE TRIGGER notes_fts_ad AFTER DELETE ON notes BEGIN
+            INSERT INTO notes_fts(notes_fts, rowid, title, content)
+            VALUES ('delete', OLD.id, OLD.title, OLD.content);
+        END;
+
+        CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+            INSERT INTO notes_fts(notes_fts, rowid, title, content)
+            VALUES ('delete', OLD.id, OLD.title, OLD.content);
+            INSERT INTO notes_fts(rowid, title, content)
+            VALUES (NEW.id, NEW.title, NEW.content);
+        END;
+
+        INSERT INTO notes_fts(rowid, title, content)
+            SELECT id, title, content FROM notes;
+
+        INSERT INTO notes_fts(notes_fts, rank) VALUES('rank', 'bm25(10.0, 1.0)');",
+    ),
 ];
 
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATIONS_SLICE);

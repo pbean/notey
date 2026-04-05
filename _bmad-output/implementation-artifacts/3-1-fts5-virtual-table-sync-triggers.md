@@ -1,6 +1,6 @@
 # Story 3.1: FTS5 Virtual Table & Sync Triggers
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -46,31 +46,31 @@ So that search queries return accurate, up-to-date results.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add FTS5 migration to `MIGRATIONS_SLICE` (AC: #1, #2, #3)
-  - [ ] 1.1 In `src-tauri/src/db/mod.rs`, add 3rd migration element to `MIGRATIONS_SLICE`
-  - [ ] 1.2 Migration SQL creates `notes_fts` virtual table: `CREATE VIRTUAL TABLE notes_fts USING fts5(title, content, content=notes, content_rowid=id)`
-  - [ ] 1.3 Migration SQL creates AFTER INSERT trigger `notes_fts_ai`
-  - [ ] 1.4 Migration SQL creates AFTER DELETE trigger `notes_fts_ad` (uses FTS5 special delete syntax)
-  - [ ] 1.5 Migration SQL creates AFTER UPDATE trigger `notes_fts_au` (delete old + insert new)
-  - [ ] 1.6 Migration SQL ends with backfill: `INSERT INTO notes_fts(rowid, title, content) SELECT id, title, content FROM notes`
-  - [ ] 1.7 Set persistent BM25 rank weights: `INSERT INTO notes_fts(notes_fts, rank) VALUES('rank', 'bm25(10.0, 1.0)')` — title matches weighted 10x over content
+- [x] Task 1: Add FTS5 migration to `MIGRATIONS_SLICE` (AC: #1, #2, #3)
+  - [x] 1.1 In `src-tauri/src/db/mod.rs`, add 3rd migration element to `MIGRATIONS_SLICE`
+  - [x] 1.2 Migration SQL creates `notes_fts` virtual table: `CREATE VIRTUAL TABLE notes_fts USING fts5(title, content, content=notes, content_rowid=id)`
+  - [x] 1.3 Migration SQL creates AFTER INSERT trigger `notes_fts_ai`
+  - [x] 1.4 Migration SQL creates AFTER DELETE trigger `notes_fts_ad` (uses FTS5 special delete syntax)
+  - [x] 1.5 Migration SQL creates AFTER UPDATE trigger `notes_fts_au` (delete old + insert new)
+  - [x] 1.6 Migration SQL ends with backfill: `INSERT INTO notes_fts(rowid, title, content) SELECT id, title, content FROM notes`
+  - [x] 1.7 Set persistent BM25 rank weights: `INSERT INTO notes_fts(notes_fts, rank) VALUES('rank', 'bm25(10.0, 1.0)')` — title matches weighted 10x over content
 
-- [ ] Task 2: Write integration tests for FTS5 sync (AC: #1, #2, #3, #4)
-  - [ ] 2.1 Create `src-tauri/tests/search_tests.rs` — new integration test file
-  - [ ] 2.2 Add `mod search_tests;` in test discovery (Cargo auto-discovers files in `tests/`)
-  - [ ] 2.3 Test: `test_fts5_table_and_triggers_exist` — query `sqlite_master` for `notes_fts` (type=table) and all 3 triggers (`notes_fts_ai`, `notes_fts_ad`, `notes_fts_au`)
-  - [ ] 2.4 Test: `test_fts5_insert_trigger_indexes_new_note` — create note via `NoteBuilder`, query `notes_fts` with MATCH, verify match found
-  - [ ] 2.5 Test: `test_fts5_update_trigger_reindexes_note` — create note, update title/content via `notes::update_note`, verify old content NOT matched, new content IS matched
-  - [ ] 2.6 Test: `test_fts5_delete_trigger_removes_from_index` — create note, hard-delete row from `notes`, verify MATCH returns 0 results
-  - [ ] 2.7 Test: `test_fts5_trashed_note_still_searchable` — create note, trash via `notes::trash_note`, verify MATCH still finds it (trashed notes stay in FTS index)
-  - [ ] 2.8 Test: `test_fts5_backfill_existing_notes` — insert notes directly via SQL BEFORE migration, run migration, verify all pre-existing notes appear in FTS MATCH queries
-  - [ ] 2.9 Test: `test_fts5_empty_content_no_phantom_matches` — create note with empty title/content, verify MATCH for random term returns 0 results
-  - [ ] 2.10 Test: `test_fts5_match_returns_ranked_results` — create notes with varying keyword density, verify MATCH results ordered by rank (BM25)
-  - [ ] 2.11 Test: `test_fts5_rapid_crud_consistency` — create, update, delete multiple notes in sequence, verify final FTS state matches final notes table state
+- [x] Task 2: Write integration tests for FTS5 sync (AC: #1, #2, #3, #4)
+  - [x] 2.1 Create `src-tauri/tests/search_tests.rs` — new integration test file
+  - [x] 2.2 Add `mod search_tests;` in test discovery (Cargo auto-discovers files in `tests/`)
+  - [x] 2.3 Test: `test_fts5_table_and_triggers_exist` — query `sqlite_master` for `notes_fts` (type=table) and all 3 triggers (`notes_fts_ai`, `notes_fts_ad`, `notes_fts_au`)
+  - [x] 2.4 Test: `test_fts5_insert_trigger_indexes_new_note` — create note via `NoteBuilder`, query `notes_fts` with MATCH, verify match found
+  - [x] 2.5 Test: `test_fts5_update_trigger_reindexes_note` — create note, update title/content via `notes::update_note`, verify old content NOT matched, new content IS matched
+  - [x] 2.6 Test: `test_fts5_delete_trigger_removes_from_index` — create note, hard-delete row from `notes`, verify MATCH returns 0 results
+  - [x] 2.7 Test: `test_fts5_trashed_note_still_searchable` — create note, trash via `notes::trash_note`, verify MATCH still finds it (trashed notes stay in FTS index)
+  - [x] 2.8 Test: `test_fts5_backfill_existing_notes` — insert notes directly via SQL BEFORE migration, run migration, verify all pre-existing notes appear in FTS MATCH queries
+  - [x] 2.9 Test: `test_fts5_empty_content_no_phantom_matches` — create note with empty title/content, verify MATCH for random term returns 0 results
+  - [x] 2.10 Test: `test_fts5_match_returns_ranked_results` — create notes with varying keyword density, verify MATCH results ordered by rank (BM25)
+  - [x] 2.11 Test: `test_fts5_rapid_crud_consistency` — create, update, delete multiple notes in sequence, verify final FTS state matches final notes table state
 
-- [ ] Task 3: Verify no regressions (AC: all)
-  - [ ] 3.1 Run `cargo test` — all existing tests pass + new FTS tests pass
-  - [ ] 3.2 Run `cargo build` — clean compilation, tauri-specta bindings unchanged (no new commands in this story)
+- [x] Task 3: Verify no regressions (AC: all)
+  - [x] 3.1 Run `cargo test` — all existing tests pass + new FTS tests pass
+  - [x] 3.2 Run `cargo build` — clean compilation, tauri-specta bindings unchanged (no new commands in this story)
 
 ## Dev Notes
 
@@ -220,10 +220,24 @@ Expected commit pattern: `feat(story-3.1): FTS5 Virtual Table & Sync Triggers`
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-sonnet-4-6
 
 ### Debug Log References
 
+- Backfill test required named array binding to avoid E0716 temporary lifetime issue with `rusqlite_migration::Migrations::from_slice`. Fixed by storing `[M::up(...), M::up(...)]` in a local `pre_fts_slice` variable.
+
 ### Completion Notes List
 
+- Added 3rd migration to `MIGRATIONS_SLICE` in `src-tauri/src/db/mod.rs` creating `notes_fts` FTS5 external content virtual table, 3 sync triggers (`notes_fts_ai`, `notes_fts_ad`, `notes_fts_au`), backfill from existing notes, and BM25 rank config (10x title weight).
+- Created `src-tauri/tests/search_tests.rs` with 9 integration tests covering all P0 and P1 test IDs from the story (P0-INT-004a/b/c/d, P0-INT-005a/b, P1-INT-001/002/003).
+- All 110 tests pass (40 unit + 4 ACL + 13 DB + 9 FTS5 search + 44 workspace). Zero regressions. `cargo build` clean.
+- No new Tauri commands, no frontend changes, no bindings changes — migration + tests only as specified.
+
 ### File List
+
+- `src-tauri/src/db/mod.rs` — added 3rd migration with FTS5 virtual table, 3 sync triggers, backfill, BM25 rank config
+- `src-tauri/tests/search_tests.rs` — new file: 9 FTS5 integration tests
+
+## Change Log
+
+- 2026-04-05: feat(story-3.1): FTS5 virtual table, sync triggers, BM25 rank config, backfill migration + 9 integration tests
