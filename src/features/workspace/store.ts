@@ -18,8 +18,8 @@ interface WorkspaceState {
 
 /** Actions for managing workspace state. */
 interface WorkspaceActions {
-  setActiveWorkspace: (id: number) => void;
-  setAllWorkspaces: () => void;
+  setActiveWorkspace: (id: number) => Promise<void>;
+  setAllWorkspaces: () => Promise<void>;
   clearActiveWorkspace: () => void;
   loadWorkspaces: () => Promise<void>;
   loadFilteredNotes: () => Promise<void>;
@@ -42,19 +42,19 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   workspaceError: null,
   notesError: null,
 
-  setActiveWorkspace: (id) => {
+  setActiveWorkspace: async (id) => {
     const found = get().workspaces.find((w) => w.id === id);
     set({
       activeWorkspaceId: id,
       activeWorkspaceName: found?.name ?? null,
       isAllWorkspaces: false,
     });
-    get().loadFilteredNotes();
+    await get().loadFilteredNotes();
   },
 
-  setAllWorkspaces: () => {
+  setAllWorkspaces: async () => {
     set({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null });
-    get().loadFilteredNotes();
+    await get().loadFilteredNotes();
   },
 
   clearActiveWorkspace: () =>
@@ -122,6 +122,6 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       activeWorkspaceId: ws.id,
       activeWorkspaceName: found?.name ?? ws.name,
     });
-    get().loadFilteredNotes();
+    await get().loadFilteredNotes();
   },
 }));
