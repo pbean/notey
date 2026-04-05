@@ -67,7 +67,7 @@ fn test_pragma_cache_size() {
 #[test]
 fn test_create_note_inserts_row_with_correct_defaults() {
     let (conn, _dir) = create_temp_db();
-    let note = notes::create_note(&conn, "markdown").expect("create_note failed");
+    let note = notes::create_note(&conn, "markdown", None).expect("create_note failed");
 
     assert!(note.id > 0, "note should have a positive id");
     assert_eq!(note.title, "", "title should be empty");
@@ -109,7 +109,7 @@ fn test_get_note_not_found_returns_not_found_error() {
 #[test]
 fn test_update_note_only_updates_provided_fields() {
     let (conn, _dir) = create_temp_db();
-    let note = notes::create_note(&conn, "markdown").expect("create_note failed");
+    let note = notes::create_note(&conn, "markdown", None).expect("create_note failed");
 
     let updated = notes::update_note(
         &conn,
@@ -143,7 +143,7 @@ fn test_list_notes_filters_trashed_notes() {
 fn test_db_write_survives_reopen() {
     let (conn, dir) = create_temp_db();
 
-    let note = notes::create_note(&conn, "markdown").expect("create_note failed");
+    let note = notes::create_note(&conn, "markdown", None).expect("create_note failed");
     let note_id = note.id;
     notes::update_note(
         &conn,
@@ -180,7 +180,7 @@ fn test_integrity_check_after_concurrent_writes() {
         .expect("pragmas on conn2");
 
     // Write from both connections
-    notes::create_note(&conn, "markdown").expect("create from conn1");
+    notes::create_note(&conn, "markdown", None).expect("create from conn1");
     conn2
         .execute(
             "INSERT INTO notes (title, content, format, created_at, updated_at) VALUES ('c2', '', 'markdown', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",

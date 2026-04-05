@@ -15,6 +15,8 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-list-workspaces",
     "allow-get-workspace",
     "allow-detect-workspace",
+    "allow-resolve-workspace",
+    "allow-get-current-dir",
 ];
 
 // P0-INT-006: Tauri ACL rejects unauthorized commands

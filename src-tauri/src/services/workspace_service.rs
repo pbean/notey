@@ -74,6 +74,15 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
     })
 }
 
+/// Detect a workspace from a filesystem path and ensure it exists in the database.
+/// Returns the persisted Workspace with a database id.
+/// Chains: detect_workspace(path) → create_workspace(conn, name, detected_path)
+/// create_workspace has upsert behavior — returns existing workspace if path matches.
+pub fn resolve_workspace(conn: &Connection, path: &str) -> Result<Workspace, NoteyError> {
+    let detected = detect_workspace(path)?;
+    create_workspace(conn, &detected.name, &detected.path)
+}
+
 /// List all workspaces with their non-trashed note counts, ordered by name ASC.
 pub fn list_workspaces(conn: &Connection) -> Result<Vec<WorkspaceInfo>, NoteyError> {
     workspace_repo::list_all_with_note_counts(conn)

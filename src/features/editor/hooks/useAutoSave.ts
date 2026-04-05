@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
+import { useWorkspaceStore } from '../../workspace/store';
 
 /** Ref to the active debounce timer, shared between hook and flushSave. */
 let sharedDebounceRef: ReturnType<typeof setTimeout> | null = null;
@@ -35,7 +36,8 @@ export async function flushSave(): Promise<void> {
   if (noteId === null) {
     isCreating = true;
     try {
-      const createResult = await commands.createNote(format);
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+      const createResult = await commands.createNote(format, workspaceId);
       if (createResult.status === 'error') {
         setSaveStatus('failed');
         console.error('flushSave createNote failed:', createResult.error);
@@ -110,7 +112,8 @@ export function useAutoSave(): void {
       if (noteId === null) {
         isCreating = true;
         try {
-          const createResult = await commands.createNote(useEditorStore.getState().format);
+          const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+          const createResult = await commands.createNote(useEditorStore.getState().format, workspaceId);
           if (createResult.status === 'error') {
             setSaveStatus('failed');
             console.error('createNote failed:', createResult.error);

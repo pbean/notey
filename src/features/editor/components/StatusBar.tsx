@@ -1,5 +1,6 @@
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
+import { useWorkspaceStore } from '../../workspace/store';
 import { SaveIndicator } from './SaveIndicator';
 import type { NoteFormat } from '../store';
 
@@ -11,6 +12,7 @@ export function StatusBar() {
   const format = useEditorStore((s) => s.format);
   const activeNoteId = useEditorStore((s) => s.activeNoteId);
   const setFormat = useEditorStore((s) => s.setFormat);
+  const activeWorkspaceName = useWorkspaceStore((s) => s.activeWorkspaceName);
 
   async function handleFormatToggle() {
     const newFormat: NoteFormat = format === 'markdown' ? 'plaintext' : 'markdown';
@@ -44,7 +46,7 @@ export function StatusBar() {
         data-testid="workspace-name"
         style={{ color: 'var(--text-secondary)', fontSize: '11px' }}
       >
-        Default workspace
+        {activeWorkspaceName ?? 'No workspace'}
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         <SaveIndicator />

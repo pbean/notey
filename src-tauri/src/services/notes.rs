@@ -4,11 +4,11 @@ use rusqlite::{Connection, params};
 use crate::errors::NoteyError;
 use crate::models::Note;
 
-pub fn create_note(conn: &Connection, format: &str) -> Result<Note, NoteyError> {
+pub fn create_note(conn: &Connection, format: &str, workspace_id: Option<i64>) -> Result<Note, NoteyError> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
-        "INSERT INTO notes (title, content, format, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        params!["", "", format, now, now],
+        "INSERT INTO notes (title, content, format, workspace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        params!["", "", format, workspace_id, now, now],
     )?;
     let id = conn.last_insert_rowid();
     get_note(conn, id)
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_create_note_returns_note_with_id() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         assert!(note.id > 0);
         assert_eq!(note.title, "");
         assert_eq!(note.content, "");
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn test_create_note_timestamps_are_iso8601() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         // ISO 8601 with RFC3339 format: YYYY-MM-DDTHH:MM:SS+00:00
         assert!(note.created_at.contains('T'), "created_at should be ISO8601");
         assert!(note.updated_at.contains('T'), "updated_at should be ISO8601");
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn test_update_note_only_updates_provided_fields() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         let original_title = note.title.clone();
         let original_format = note.format.clone();
 
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_list_notes_filters_trashed() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         trash_note(&conn, note.id).expect("trash_note failed");
 
         let notes = list_notes(&conn).expect("list_notes failed");
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn test_trash_note_sets_fields() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         assert!(!note.is_trashed);
         assert!(note.deleted_at.is_none());
 
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn test_trash_note_already_trashed() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         trash_note(&conn, note.id).expect("first trash should succeed");
         let result = trash_note(&conn, note.id);
         assert!(
@@ -231,14 +231,14 @@ mod tests {
     #[test]
     fn test_list_notes_ordered_by_updated_at_desc() {
         let conn = setup_test_db();
-        let note1 = create_note(&conn, "markdown").expect("create note1");
+        let note1 = create_note(&conn, "markdown", None).expect("create note1");
         // Update note1's updated_at to be earlier
         conn.execute(
             "UPDATE notes SET updated_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
             params![note1.id],
         )
         .expect("failed to update note1");
-        let note2 = create_note(&conn, "markdown").expect("create note2");
+        let note2 = create_note(&conn, "markdown", None).expect("create note2");
         conn.execute(
             "UPDATE notes SET updated_at = '2020-01-02T00:00:00+00:00' WHERE id = ?",
             params![note2.id],
@@ -252,11 +252,43 @@ mod tests {
         assert_eq!(notes[1].id, note1.id);
     }
 
+    // UNIT-2.3-001: create_note with workspace_id stores it in DB
+    #[test]
+    fn test_create_note_with_workspace_id() {
+        let conn = setup_test_db();
+        // Create a workspace first
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["test-ws", "/tmp/test-ws", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create_note failed");
+        assert_eq!(note.workspace_id, Some(ws_id));
+    }
+
+    // UNIT-2.3-002: create_note without workspace_id stores NULL
+    #[test]
+    fn test_create_note_without_workspace_id() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
+        assert!(note.workspace_id.is_none());
+    }
+
+    // UNIT-2.3-006: create_note with non-existent workspace_id still inserts (no FK)
+    #[test]
+    fn test_create_note_with_nonexistent_workspace_id() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", Some(99999)).expect("create_note should succeed even with non-existent workspace_id");
+        assert_eq!(note.workspace_id, Some(99999));
+    }
+
     // P1-UNIT-005: Note format toggle persists
     #[test]
     fn test_format_toggle_persists() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown").expect("create_note failed");
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
         assert_eq!(note.format, "markdown");
 
         let toggled =

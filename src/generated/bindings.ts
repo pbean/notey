@@ -4,7 +4,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	createNote: (format: string) => typedError<Note, NoteyError>(__TAURI_INVOKE("create_note", { format })),
+	createNote: (format: string, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("create_note", { format, workspaceId })),
 	getNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("get_note", { id })),
 	updateNote: (id: number, title: string | null, content: string | null, format: string | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("update_note", { id, title, content, format })),
 	listNotes: () => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes")),
@@ -22,6 +22,9 @@ export const commands = {
 	listWorkspaces: () => typedError<WorkspaceInfo[], NoteyError>(__TAURI_INVOKE("list_workspaces")),
 	getWorkspace: (id: number) => typedError<WorkspaceInfo, NoteyError>(__TAURI_INVOKE("get_workspace", { id })),
 	detectWorkspace: (path: string) => typedError<DetectedWorkspace, NoteyError>(__TAURI_INVOKE("detect_workspace", { path })),
+	resolveWorkspace: (path: string) => typedError<Workspace, NoteyError>(__TAURI_INVOKE("resolve_workspace", { path })),
+	// Returns the process's current working directory as a string.
+	getCurrentDir: () => typedError<string, NoteyError>(__TAURI_INVOKE("get_current_dir")),
 };
 
 /* Types */

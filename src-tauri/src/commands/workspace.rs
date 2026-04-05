@@ -43,3 +43,13 @@ pub async fn detect_workspace(
 ) -> Result<DetectedWorkspace, NoteyError> {
     services::workspace_service::detect_workspace(&path)
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn resolve_workspace(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    path: String,
+) -> Result<Workspace, NoteyError> {
+    let conn = state.lock().unwrap_or_else(|e| e.into_inner());
+    services::workspace_service::resolve_workspace(&conn, &path)
+}

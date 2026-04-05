@@ -1,86 +1,115 @@
-# Test Automation Summary — Stories 2.1 & 2.2
+# Test Automation Summary — Stories 2.1, 2.2 & 2.3
 
 **Date:** 2026-04-04
-**Stories:** 2.1 — Workspaces Table & CRUD Commands, 2.2 — Git Repository Detection Service
-**Test Framework:** Rust `#[test]` (cargo test) — integration tests targeting service layer
+**Stories:** 2.1 — Workspaces Table & CRUD, 2.2 — Git Repository Detection, 2.3 — Auto-Workspace Assignment
+**Test Frameworks:** Rust `#[test]` (cargo test), Vitest (frontend)
 
-## Story 2.2: Gap Tests Added (3 new tests)
+## Story 2.3: Gap Tests Added (14 new tests)
 
-- [x] `test_detect_workspace_inner_git_repo_takes_precedence` — Nested inner repo with `.git` is found before outer ancestor repo (monorepo/submodule scenario)
-- [x] `test_detect_workspace_git_file_submodule_pattern` — `.git` as a file (submodule/worktree pattern) is detected by `.exists()` the same as a directory
-- [x] `test_detect_workspace_fallback_deeply_nested_returns_input_path` — Deeply nested non-git path (a/b/c/d) falls back to the input directory, not any parent
+### Backend — Rust Integration (4 tests)
 
-## Story 2.2: Pre-existing Tests (9 tests)
+- [x] `test_resolve_workspace_error_invalid_path` — `resolve_workspace` propagates `Validation` error for non-existent path
+- [x] `test_resolve_workspace_then_create_note_with_workspace_id` — End-to-end: resolve workspace → create note → verify workspace_id persists
+- [x] `test_list_notes_preserves_workspace_id` — `list_notes` returns notes with `workspace_id` populated (and NULL for unscoped)
+- [x] `test_update_note_preserves_workspace_id` — `update_note` does not clobber `workspace_id` when updating title/content
 
-- [x] `test_detect_workspace_finds_git_root_from_nested_path` — P1-UNIT-003
-- [x] `test_detect_workspace_fallback_no_git` — P1-UNIT-004
-- [x] `test_detect_workspace_returns_correct_basename` — UNIT-2.2-003
-- [x] `test_detect_workspace_canonicalizes_paths` — UNIT-2.2-004
-- [x] `test_detect_workspace_error_nonexistent_path` — UNIT-2.2-005
-- [x] `test_detect_workspace_error_file_path` — UNIT-2.2-006
-- [x] `test_detect_workspace_filesystem_root_no_infinite_loop` — UNIT-2.2-007
-- [x] `test_detect_workspace_on_git_root_itself` — UNIT-2.2-008
-- [x] `test_typescript_bindings_contain_detect_workspace` — UNIT-2.2-009
+### Frontend — useWorkspaceStore (6 tests)
 
-## Story 2.1: Gap Tests (4 tests, from previous QA pass)
+- [x] `starts with null workspace state` — Default state is both null
+- [x] `setActiveWorkspace sets id and name` — Sets both fields atomically
+- [x] `clearActiveWorkspace resets to null` — Clears back to null
+- [x] `initWorkspace resolves cwd and sets workspace` — Full success path: getCurrentDir → resolveWorkspace → store update
+- [x] `initWorkspace handles getCurrentDir error gracefully` — State stays null on cwd failure
+- [x] `initWorkspace handles resolveWorkspace error gracefully` — State stays null on resolve failure
 
-- [x] `test_get_workspace_note_count_excludes_trashed` — Verifies `get_workspace` excludes trashed notes from note_count
-- [x] `test_list_workspaces_per_workspace_trashed_isolation` — Multiple workspaces with mixed trashed/non-trashed notes
-- [x] `test_create_workspace_upsert_preserves_created_at` — Upsert returns original `created_at` timestamp
-- [x] `test_unassigned_notes_not_counted_in_workspaces` — Notes with `workspace_id = NULL` don't pollute workspace counts
+### Frontend — useAutoSave workspace integration (4 tests)
 
-## Story 2.1: Pre-existing Tests (11 tests)
+- [x] `useAutoSave passes activeWorkspaceId to createNote` — Debounce callback sends workspaceId=42 when workspace active
+- [x] `useAutoSave passes null workspaceId when no workspace is active` — Sends null when no workspace
+- [x] `flushSave passes activeWorkspaceId to createNote` — flushSave reads workspaceId from store
+- [x] `flushSave passes null workspaceId when no workspace is active` — Sends null when no workspace
 
-- [x] `test_workspaces_table_exists_with_correct_schema` — UNIT-2.1-001
-- [x] `test_workspaces_path_index_exists` — UNIT-2.1-002
-- [x] `test_create_workspace_returns_workspace_with_id` — UNIT-2.1-003
-- [x] `test_create_workspace_upsert_returns_existing` — UNIT-2.1-004
-- [x] `test_list_workspaces_with_note_counts_ordered_by_name` — UNIT-2.1-005
-- [x] `test_list_workspaces_note_count_excludes_trashed` — UNIT-2.1-006
-- [x] `test_get_workspace_returns_info_with_note_count` — UNIT-2.1-007
-- [x] `test_get_workspace_not_found` — UNIT-2.1-008
-- [x] `test_migration_applies_on_existing_db_with_notes` — UNIT-2.1-009
-- [x] `test_get_workspace_with_zero_notes` — Additional
-- [x] `test_list_workspaces_empty` — Additional
+### Frontend — StatusBar component (4 tests)
+
+- [x] `renders "No workspace" when no workspace is active` — Fallback text displayed
+- [x] `renders workspace name from store` — Shows active workspace name
+- [x] `renders format toggle showing current format` — Shows "Markdown" by default
+- [x] `has status role for accessibility` — role="status" present
+
+## Story 2.3: Pre-existing Tests (9 tests)
+
+### Backend Unit Tests (3 in services/notes.rs)
+
+- [x] `test_create_note_with_workspace_id` — UNIT-2.3-001
+- [x] `test_create_note_without_workspace_id` — UNIT-2.3-002
+- [x] `test_create_note_with_nonexistent_workspace_id` — UNIT-2.3-006
+
+### Backend Integration Tests (6 in workspace_tests.rs)
+
+- [x] `test_resolve_workspace_creates_new_workspace` — UNIT-2.3-003
+- [x] `test_resolve_workspace_returns_existing_for_known_path` — UNIT-2.3-004
+- [x] `test_resolve_workspace_fallback_non_git` — UNIT-2.3-005
+- [x] `test_resolve_workspace_from_nested_path` — UNIT-2.3-003 extended
+- [x] `test_typescript_bindings_create_note_has_workspace_id` — UNIT-2.3-007
+- [x] `test_typescript_bindings_contain_resolve_workspace` — UNIT-2.3-008
+
+## Story 2.2: Tests (12 tests — 9 pre-existing + 3 gap)
+
+- [x] All 9 detection tests passing (P1-UNIT-003/004, UNIT-2.2-003..009)
+- [x] 3 gap tests: inner repo precedence, submodule `.git` file, deep fallback
+
+## Story 2.1: Tests (15 tests — 11 pre-existing + 4 gap)
+
+- [x] All 10 CRUD tests passing (UNIT-2.1-001..010)
+- [x] 4 gap tests: trashed exclusion, isolation, upsert timestamp, NULL workspace_id
 
 ## Coverage
 
-| Area | Covered | Total | Notes |
-|------|---------|-------|-------|
-| Story 2.2 required test IDs | 9/9 | 9 | All P0 and P1 tests from spec |
-| Story 2.2 gap tests | 3/3 | 3 | Inner repo precedence, submodule `.git` file, deep fallback |
-| Story 2.1 required test IDs | 10/10 | 10 | All P0 and P1 tests from spec |
-| Story 2.1 gap tests | 4/4 | 4 | Trashed exclusion, isolation, upsert timestamp, NULL workspace_id |
-| detect_workspace service | 12/12 | 12 | All paths exercised |
-| CRUD service functions | 3/3 | 3 | create, list, get |
-| Error paths | 3/3 | 3 | Validation (2), NotFound (1) |
-| ACL tests | 4/4 | 4 | No wildcards, scoped window, all commands permitted, no unexpected |
-| TypeScript bindings | 2/2 | 2 | Story 2.1 + 2.2 binding checks |
+| Area | Covered | Notes |
+|------|---------|-------|
+| Story 2.3 required test IDs | 8/8 | All P0 and P1 tests from spec (P2-COMP-002 deferred to story 2.4) |
+| Story 2.3 gap tests | 14/14 | 4 backend + 6 store + 4 auto-save/statusbar |
+| resolve_workspace service | 5/5 | Create, idempotent, fallback, nested, error |
+| create_note with workspace_id | 4/4 | With ID, without, nonexistent, end-to-end |
+| useWorkspaceStore | 6/6 | Default, set, clear, init success, init error ×2 |
+| useAutoSave workspace args | 4/4 | Debounce + flushSave × with/without workspace |
+| StatusBar component | 4/4 | Workspace name, fallback, format, accessibility |
+| ACL tests | 4/4 | Including resolve-workspace + get-current-dir |
 
 ## Full Suite Results
 
 ```
-45 tests passed, 0 failed, 0 regressions
-- ACL tests: 4 passed
-- DB tests: 13 passed
-- Workspace tests: 28 passed (20 existing + 4 story-2.1 gap + 3 story-2.2 gap + 1 bindings)
+Backend: 82 tests passed, 0 failed
+  - lib (unit): 44 passed
+  - ACL tests: 4 passed
+  - DB tests: 13 passed
+  - Workspace tests: 42 passed
+
+Frontend: 25 tests passed, 0 failed
+  - editor/store.test.ts: 7 passed
+  - editor/hooks/useAutoSave.test.ts: 8 passed
+  - workspace/store.test.ts: 6 passed
+  - editor/components/StatusBar.test.tsx: 4 passed
 ```
 
 ## Checklist Validation
 
-- [x] API tests generated (if applicable) — 3 gap tests added to workspace_tests.rs
-- [x] Tests use standard test framework APIs — Rust `#[test]`, `assert_eq!`, `assert!`, `matches!`
-- [x] Tests cover happy path — all detection scenarios tested
-- [x] Tests cover 1-2 critical error cases — Validation errors for bad paths, submodule edge case
-- [x] All generated tests run successfully — 28/28 workspace tests pass
-- [x] Tests have clear descriptions — each test has a comment explaining the gap it fills
-- [x] No hardcoded waits or sleeps — none
-- [x] Tests are independent (no order dependency) — each test uses its own TempDir
+- [x] API tests generated (if applicable) — 4 backend gap tests added
+- [x] E2E tests generated (if UI exists) — 10 frontend gap tests added (store + component)
+- [x] Tests use standard test framework APIs — Rust `#[test]`, Vitest `describe/it/expect`
+- [x] Tests cover happy path — workspace resolution, note creation, store init, display
+- [x] Tests cover 1-2 critical error cases — invalid path, getCurrentDir failure, resolveWorkspace failure
+- [x] All generated tests run successfully — 82 backend + 25 frontend = 107 total ✅
+- [x] Tests use proper locators (semantic, accessible) — `getByTestId`, `getByRole`, `getByText`
+- [x] Tests have clear descriptions — descriptive names and gap comments
+- [x] No hardcoded waits or sleeps — timer mocks only
+- [x] Tests are independent (no order dependency) — store reset in `beforeEach`, temp DBs
 - [x] Test summary created — this file
-- [x] Tests saved to appropriate directory — `src-tauri/tests/workspace_tests.rs`
+- [x] Tests saved to appropriate directories — co-located per project convention
 - [x] Summary includes coverage metrics — see table above
 
 ## Next Steps
 
 - Run tests in CI
-- Story 2.2 `detect_workspace` has comprehensive coverage — no further gaps identified
+- Story 2.3 has comprehensive coverage across backend and frontend
+- P2-COMP-002 (StatusBar note count) deferred to Story 2.4

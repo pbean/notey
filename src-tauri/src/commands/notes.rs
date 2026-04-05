@@ -11,9 +11,10 @@ use crate::services;
 pub async fn create_note(
     state: State<'_, Mutex<rusqlite::Connection>>,
     format: String,
+    workspace_id: Option<i64>,
 ) -> Result<Note, NoteyError> {
     let conn = state.lock().unwrap_or_else(|e| e.into_inner());
-    services::notes::create_note(&conn, &format)
+    services::notes::create_note(&conn, &format, workspace_id)
 }
 
 #[tauri::command]

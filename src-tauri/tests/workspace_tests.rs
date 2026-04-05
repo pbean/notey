@@ -510,3 +510,170 @@ fn test_typescript_bindings_contain_detect_workspace() {
         "bindings should contain DetectedWorkspace type"
     );
 }
+
+// ============================================================================
+// Story 2.3: Auto-Workspace Assignment on Note Creation
+// ============================================================================
+
+// UNIT-2.3-003: resolve_workspace detects + upserts → returns Workspace with DB id
+#[test]
+fn test_resolve_workspace_creates_new_workspace() {
+    let conn = setup_test_db();
+    let dir = make_git_repo();
+
+    let ws = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
+        .expect("resolve_workspace failed");
+
+    assert!(ws.id > 0, "workspace should have a positive DB id");
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(ws.path, expected_path.to_string_lossy().to_string());
+    assert!(ws.created_at.contains('T'), "created_at should be ISO 8601");
+}
+
+// UNIT-2.3-004: resolve_workspace for already-known path returns existing workspace
+#[test]
+fn test_resolve_workspace_returns_existing_for_known_path() {
+    let conn = setup_test_db();
+    let dir = make_git_repo();
+
+    let ws1 = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
+        .expect("first resolve_workspace failed");
+    let ws2 = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
+        .expect("second resolve_workspace failed");
+
+    assert_eq!(ws1.id, ws2.id, "should return same workspace on repeated calls");
+    assert_eq!(ws1.path, ws2.path);
+}
+
+// UNIT-2.3-005: resolve_workspace for non-git path falls back to directory itself
+#[test]
+fn test_resolve_workspace_fallback_non_git() {
+    let conn = setup_test_db();
+    let dir = TempDir::new().unwrap();
+    // No .git directory
+
+    let ws = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
+        .expect("resolve_workspace failed");
+
+    assert!(ws.id > 0);
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(ws.path, expected_path.to_string_lossy().to_string());
+}
+
+// UNIT-2.3-003 extended: resolve_workspace from nested path resolves to git root
+#[test]
+fn test_resolve_workspace_from_nested_path() {
+    let conn = setup_test_db();
+    let (dir, nested) = make_nested_git_repo();
+
+    let ws = workspace_service::resolve_workspace(&conn, nested.to_str().unwrap())
+        .expect("resolve_workspace failed");
+
+    let expected_path = std::fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(ws.path, expected_path.to_string_lossy().to_string());
+}
+
+// UNIT-2.3-007: tauri-specta generates updated createNote(format, workspaceId) binding
+#[test]
+fn test_typescript_bindings_create_note_has_workspace_id() {
+    let bindings = std::fs::read_to_string("../src/generated/bindings.ts")
+        .expect("bindings.ts should exist after build");
+
+    assert!(
+        bindings.contains("workspaceId"),
+        "createNote binding should include workspaceId parameter"
+    );
+}
+
+// Gap: resolve_workspace propagates Validation error for invalid path
+#[test]
+fn test_resolve_workspace_error_invalid_path() {
+    let conn = setup_test_db();
+    let result = workspace_service::resolve_workspace(&conn, "/tmp/definitely-does-not-exist-xyz123");
+    assert!(
+        matches!(result, Err(NoteyError::Validation(_))),
+        "resolve_workspace should propagate Validation error for non-existent path, got: {:?}",
+        result
+    );
+}
+
+// Gap: end-to-end resolve_workspace → create_note with workspace_id
+#[test]
+fn test_resolve_workspace_then_create_note_with_workspace_id() {
+    let conn = setup_test_db();
+    let dir = make_git_repo();
+
+    let ws = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
+        .expect("resolve_workspace failed");
+
+    let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
+        .expect("create_note failed");
+
+    assert_eq!(note.workspace_id, Some(ws.id), "note should be assigned to the resolved workspace");
+
+    // Verify via independent get_note
+    let fetched = tauri_app_lib::services::notes::get_note(&conn, note.id)
+        .expect("get_note failed");
+    assert_eq!(fetched.workspace_id, Some(ws.id), "workspace_id should persist in DB");
+}
+
+// Gap: list_notes returns notes with workspace_id populated
+#[test]
+fn test_list_notes_preserves_workspace_id() {
+    let conn = setup_test_db();
+    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+        .expect("create_workspace failed");
+
+    // One note with workspace, one without
+    NoteBuilder::new().workspace_id(ws.id).title("Scoped").insert(&conn);
+    NoteBuilder::new().title("Unscoped").insert(&conn);
+
+    let notes = tauri_app_lib::services::notes::list_notes(&conn).expect("list_notes failed");
+    assert_eq!(notes.len(), 2);
+
+    let scoped = notes.iter().find(|n| n.title == "Scoped").expect("scoped note missing");
+    let unscoped = notes.iter().find(|n| n.title == "Unscoped").expect("unscoped note missing");
+
+    assert_eq!(scoped.workspace_id, Some(ws.id), "scoped note should have workspace_id");
+    assert!(unscoped.workspace_id.is_none(), "unscoped note should have NULL workspace_id");
+}
+
+// Gap: update_note does not clobber workspace_id
+#[test]
+fn test_update_note_preserves_workspace_id() {
+    let conn = setup_test_db();
+    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+        .expect("create_workspace failed");
+
+    let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
+        .expect("create_note failed");
+    assert_eq!(note.workspace_id, Some(ws.id));
+
+    // Update title and content — workspace_id should remain unchanged
+    let updated = tauri_app_lib::services::notes::update_note(
+        &conn,
+        note.id,
+        Some("Updated Title".to_string()),
+        Some("Updated content".to_string()),
+        None,
+    )
+    .expect("update_note failed");
+
+    assert_eq!(updated.workspace_id, Some(ws.id), "update_note should not clobber workspace_id");
+}
+
+// UNIT-2.3-008: tauri-specta generates resolveWorkspace binding
+#[test]
+fn test_typescript_bindings_contain_resolve_workspace() {
+    let bindings = std::fs::read_to_string("../src/generated/bindings.ts")
+        .expect("bindings.ts should exist after build");
+
+    assert!(
+        bindings.contains("resolveWorkspace"),
+        "bindings should contain resolveWorkspace command"
+    );
+    assert!(
+        bindings.contains("getCurrentDir"),
+        "bindings should contain getCurrentDir command"
+    );
+}

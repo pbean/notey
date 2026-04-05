@@ -19,6 +19,8 @@
     "allow-create-workspace",
     "allow-list-workspaces",
     "allow-get-workspace",
-    "allow-detect-workspace"
+    "allow-detect-workspace",
+    "allow-resolve-workspace",
+    "allow-get-current-dir"
   ]
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
 import { useEditorStore } from '../store';
+import { useWorkspaceStore } from '../../workspace/store';
 import { useAutoSave, flushSave } from './useAutoSave';
 import { buildNote } from '../../../test-utils/factories';
 
@@ -19,6 +20,7 @@ describe('useAutoSave', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEditorStore.getState().resetNote();
+    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null });
     mockCreateAndUpdate();
   });
 
@@ -50,12 +52,44 @@ describe('useAutoSave', () => {
 
     expect(mockInvoke).toHaveBeenCalledWith('create_note', expect.anything());
   });
+
+  // Gap: auto-save passes workspaceId from workspace store to createNote
+  it('passes activeWorkspaceId to createNote', async () => {
+    useWorkspaceStore.getState().setActiveWorkspace(42, 'my-project');
+    renderHook(() => useAutoSave());
+
+    act(() => {
+      useEditorStore.getState().setContent('workspace test');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('create_note', { format: 'markdown', workspaceId: 42 });
+  });
+
+  // Gap: auto-save passes null workspaceId when no workspace is active
+  it('passes null workspaceId when no workspace is active', async () => {
+    renderHook(() => useAutoSave());
+
+    act(() => {
+      useEditorStore.getState().setContent('no workspace');
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('create_note', { format: 'markdown', workspaceId: null });
+  });
 });
 
 describe('flushSave', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEditorStore.getState().resetNote();
+    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null });
     mockCreateAndUpdate();
   });
 
@@ -118,5 +152,28 @@ describe('flushSave', () => {
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('create_note', expect.anything());
+  });
+
+  // Gap: flushSave passes workspaceId from workspace store to createNote
+  it('passes activeWorkspaceId to createNote', async () => {
+    useWorkspaceStore.getState().setActiveWorkspace(99, 'flush-project');
+    useEditorStore.getState().setContent('Flush with workspace');
+
+    await act(async () => {
+      await flushSave();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('create_note', { format: 'markdown', workspaceId: 99 });
+  });
+
+  // Gap: flushSave passes null workspaceId when no workspace
+  it('passes null workspaceId when no workspace is active', async () => {
+    useEditorStore.getState().setContent('Flush no workspace');
+
+    await act(async () => {
+      await flushSave();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('create_note', { format: 'markdown', workspaceId: null });
   });
 });
