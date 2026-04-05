@@ -251,6 +251,69 @@ describe('useWorkspaceStore', () => {
     });
   });
 
+  // UNIT-2.6-006: reassignNoteWorkspace calls command and refreshes filteredNotes
+  it('reassignNoteWorkspace calls command, refreshes filteredNotes and workspaces on success', async () => {
+    const updatedNote = { ...MOCK_NOTES[0], workspaceId: 8 };
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'reassign_note_workspace') return Promise.resolve(updatedNote);
+      if (cmd === 'list_notes') return Promise.resolve([]);
+      if (cmd === 'list_workspaces') return Promise.resolve(MOCK_WORKSPACES);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useWorkspaceStore.setState({ activeWorkspaceId: 7, workspaces: MOCK_WORKSPACES });
+
+    const result = await useWorkspaceStore.getState().reassignNoteWorkspace(1, 8);
+
+    expect(result).toEqual(updatedNote);
+    expect(mockInvoke).toHaveBeenCalledWith('reassign_note_workspace', { id: 1, workspaceId: 8 });
+    // Verify loadFilteredNotes and loadWorkspaces were called
+    await vi.waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('list_notes', { workspaceId: 7 });
+      expect(mockInvoke).toHaveBeenCalledWith('list_workspaces');
+    });
+  });
+
+  // UNIT-2.6-007: reassignNoteWorkspace refreshes workspaces (dropdown counts)
+  it('reassignNoteWorkspace refreshes workspace list for dropdown counts', async () => {
+    const updatedNote = { ...MOCK_NOTES[0], workspaceId: null };
+    const updatedWorkspaces = [
+      { ...MOCK_WORKSPACES[0], noteCount: 4 },
+      MOCK_WORKSPACES[1],
+    ];
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'reassign_note_workspace') return Promise.resolve(updatedNote);
+      if (cmd === 'list_notes') return Promise.resolve([]);
+      if (cmd === 'list_workspaces') return Promise.resolve(updatedWorkspaces);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useWorkspaceStore.setState({ activeWorkspaceId: 7, workspaces: MOCK_WORKSPACES });
+
+    await useWorkspaceStore.getState().reassignNoteWorkspace(1, null);
+
+    await vi.waitFor(() => {
+      expect(useWorkspaceStore.getState().workspaces).toEqual(updatedWorkspaces);
+    });
+  });
+
+  // UNIT-2.6-008: reassignNoteWorkspace returns null and logs error on failure
+  it('reassignNoteWorkspace returns null on error and does not refresh', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'reassign_note_workspace') return Promise.reject({ type: 'NotFound' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useWorkspaceStore.setState({ activeWorkspaceId: 7 });
+
+    const result = await useWorkspaceStore.getState().reassignNoteWorkspace(99999, 8);
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledOnce();
+    // Neither loadFilteredNotes nor loadWorkspaces should have been called
+    expect(mockInvoke).not.toHaveBeenCalledWith('list_notes', expect.anything());
+    expect(mockInvoke).not.toHaveBeenCalledWith('list_workspaces');
+    consoleSpy.mockRestore();
+  });
+
   // Gap: loadFilteredNotes with no workspace active and isAllWorkspaces=false (initial state)
   it('loadFilteredNotes sends null workspaceId when no workspace active and not all-workspaces', async () => {
     mockInvoke.mockImplementation((cmd: string) => {

@@ -19,6 +19,7 @@ interface WorkspaceActions {
   clearActiveWorkspace: () => void;
   loadWorkspaces: () => Promise<void>;
   loadFilteredNotes: () => Promise<void>;
+  reassignNoteWorkspace: (noteId: number, workspaceId: number | null) => Promise<Note | null>;
   initWorkspace: () => Promise<void>;
 }
 
@@ -52,6 +53,18 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
 
   clearActiveWorkspace: () =>
     set({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false, filteredNotes: [] }),
+
+  reassignNoteWorkspace: async (noteId, workspaceId) => {
+    const result = await commands.reassignNoteWorkspace(noteId, workspaceId);
+    if (result.status === 'ok') {
+      get().loadFilteredNotes();
+      get().loadWorkspaces();
+      return result.data;
+    } else {
+      console.error('reassignNoteWorkspace failed:', result.error);
+      return null;
+    }
+  },
 
   loadFilteredNotes: async () => {
     set({ isLoadingNotes: true });

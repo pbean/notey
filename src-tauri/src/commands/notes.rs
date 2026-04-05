@@ -40,6 +40,18 @@ pub async fn update_note(
     services::notes::update_note(&conn, id, title, content, format)
 }
 
+/// Reassign a note to a different workspace or unscope it.
+#[tauri::command]
+#[specta::specta]
+pub async fn reassign_note_workspace(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    id: i64,
+    workspace_id: Option<i64>,
+) -> Result<Note, NoteyError> {
+    let conn = state.lock().unwrap_or_else(|e| e.into_inner());
+    services::notes::reassign_note_workspace(&conn, id, workspace_id)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn list_notes(

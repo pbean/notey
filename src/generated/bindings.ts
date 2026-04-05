@@ -8,6 +8,8 @@ export const commands = {
 	getNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("get_note", { id })),
 	updateNote: (id: number, title: string | null, content: string | null, format: string | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("update_note", { id, title, content, format })),
 	listNotes: (workspaceId: number | null) => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes", { workspaceId })),
+	// Reassign a note to a different workspace or unscope it.
+	reassignNoteWorkspace: (id: number, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("reassign_note_workspace", { id, workspaceId })),
 	// Returns the full application config.
 	getConfig: () => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("get_config")),
 	/**

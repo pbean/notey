@@ -67,7 +67,7 @@ development_status:
   2-3-auto-workspace-assignment-on-note-creation: done
   2-4-workspace-selector-in-statusbar: done
   2-5-workspace-filtered-note-views: done
-  2-6-manual-workspace-reassignment: backlog
+  2-6-manual-workspace-reassignment: done
   epic-2-retrospective: optional
 
   # Epic 3: Search & Discovery

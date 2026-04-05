@@ -82,6 +82,23 @@ pub fn trash_note(conn: &Connection, id: i64) -> Result<Note, NoteyError> {
     get_note(conn, id)
 }
 
+/// Reassign a note to a different workspace, or unscope it by passing None.
+pub fn reassign_note_workspace(
+    conn: &Connection,
+    id: i64,
+    workspace_id: Option<i64>,
+) -> Result<Note, NoteyError> {
+    let now = Utc::now().to_rfc3339();
+    let rows = conn.execute(
+        "UPDATE notes SET workspace_id = ?1, updated_at = ?2 WHERE id = ?3 AND is_trashed = 0",
+        params![workspace_id, now, id],
+    )?;
+    if rows == 0 {
+        return Err(NoteyError::NotFound);
+    }
+    get_note(conn, id)
+}
+
 /// Lists non-trashed notes, optionally filtered by workspace.
 ///
 /// When `workspace_id` is `Some(id)`, returns only notes belonging to that workspace.
@@ -408,6 +425,194 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].id, note2.id, "more recently updated note should come first");
         assert_eq!(result[1].id, note1.id);
+    }
+
+    // UNIT-2.6-001: reassign_note_workspace updates workspace_id and updated_at
+    #[test]
+    fn test_reassign_note_workspace() {
+        let conn = setup_test_db();
+        // Create two workspaces
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-a", "/tmp/ws-a", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-a");
+        let ws_a_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-b", "/tmp/ws-b", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-b");
+        let ws_b_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_a_id)).expect("create note in ws-a");
+        assert_eq!(note.workspace_id, Some(ws_a_id));
+        let old_updated_at = note.updated_at.clone();
+
+        let reassigned = reassign_note_workspace(&conn, note.id, Some(ws_b_id))
+            .expect("reassign should succeed");
+        assert_eq!(reassigned.workspace_id, Some(ws_b_id));
+        assert_ne!(reassigned.updated_at, old_updated_at, "updated_at should be refreshed");
+    }
+
+    // UNIT-2.6-002: reassign_note_workspace with None sets workspace_id to NULL
+    #[test]
+    fn test_reassign_note_workspace_to_null() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-unscope", "/tmp/ws-unscope", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+        assert_eq!(note.workspace_id, Some(ws_id));
+
+        let reassigned = reassign_note_workspace(&conn, note.id, None)
+            .expect("reassign to null should succeed");
+        assert!(reassigned.workspace_id.is_none(), "workspace_id should be None after unscopying");
+    }
+
+    // UNIT-2.6-003: reassign_note_workspace for nonexistent note returns NotFound
+    #[test]
+    fn test_reassign_note_workspace_nonexistent() {
+        let conn = setup_test_db();
+        let result = reassign_note_workspace(&conn, 99999, Some(1));
+        assert!(matches!(result, Err(NoteyError::NotFound)));
+    }
+
+    // UNIT-2.6-004: reassign_note_workspace for trashed note returns NotFound
+    #[test]
+    fn test_reassign_note_workspace_trashed() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-trash", "/tmp/ws-trash", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+
+        let result = reassign_note_workspace(&conn, note.id, Some(ws_id));
+        assert!(
+            matches!(result, Err(NoteyError::NotFound)),
+            "trashed notes cannot be reassigned"
+        );
+    }
+
+    // UNIT-2.6-005: reassign_note_workspace returns the updated note with new workspace_id
+    #[test]
+    fn test_reassign_note_workspace_returns_updated_note() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-ret", "/tmp/ws-ret", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        assert!(note.workspace_id.is_none());
+
+        let reassigned = reassign_note_workspace(&conn, note.id, Some(ws_id))
+            .expect("reassign should succeed");
+        assert_eq!(reassigned.id, note.id);
+        assert_eq!(reassigned.workspace_id, Some(ws_id));
+        assert_eq!(reassigned.title, note.title);
+        assert_eq!(reassigned.content, note.content);
+        assert_eq!(reassigned.format, note.format);
+        assert!(!reassigned.is_trashed);
+    }
+
+    // GAP: Idempotent reassign to same workspace succeeds and updates timestamp
+    #[test]
+    fn test_reassign_note_workspace_same_workspace_idempotent() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-same", "/tmp/ws-same", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+        let old_updated_at = note.updated_at.clone();
+
+        let reassigned = reassign_note_workspace(&conn, note.id, Some(ws_id))
+            .expect("reassign to same workspace should succeed");
+        assert_eq!(reassigned.workspace_id, Some(ws_id));
+        assert_ne!(
+            reassigned.updated_at, old_updated_at,
+            "updated_at should still be refreshed even when workspace doesn't change"
+        );
+    }
+
+    // GAP AC#2: After reassignment, note leaves old workspace view and appears in new
+    #[test]
+    fn test_reassign_note_workspace_note_moves_between_views() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-old", "/tmp/ws-old", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-old");
+        let ws_old = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-new", "/tmp/ws-new", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert ws-new");
+        let ws_new = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_old)).expect("create note in ws-old");
+
+        // Before reassignment: note in ws-old, not in ws-new
+        let old_list = list_notes(&conn, Some(ws_old)).expect("list ws-old");
+        assert!(old_list.iter().any(|n| n.id == note.id), "note should be in ws-old before reassign");
+        let new_list = list_notes(&conn, Some(ws_new)).expect("list ws-new");
+        assert!(!new_list.iter().any(|n| n.id == note.id), "note should not be in ws-new before reassign");
+
+        reassign_note_workspace(&conn, note.id, Some(ws_new)).expect("reassign");
+
+        // After reassignment: note NOT in ws-old, IS in ws-new
+        let old_list = list_notes(&conn, Some(ws_old)).expect("list ws-old after");
+        assert!(!old_list.iter().any(|n| n.id == note.id), "note should NOT be in ws-old after reassign");
+        let new_list = list_notes(&conn, Some(ws_new)).expect("list ws-new after");
+        assert!(new_list.iter().any(|n| n.id == note.id), "note should be in ws-new after reassign");
+    }
+
+    // GAP AC#3: Unscoped note no longer in workspace view, but appears in all-workspaces view
+    #[test]
+    fn test_reassign_note_workspace_unscoped_visibility() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-vis", "/tmp/ws-vis", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+
+        // Unscope the note
+        reassign_note_workspace(&conn, note.id, None).expect("unscope note");
+
+        // Should NOT appear in workspace-filtered view
+        let ws_list = list_notes(&conn, Some(ws_id)).expect("list workspace");
+        assert!(
+            !ws_list.iter().any(|n| n.id == note.id),
+            "unscoped note should NOT appear in workspace-filtered view"
+        );
+
+        // SHOULD appear in all-workspaces view (null filter)
+        let all_list = list_notes(&conn, None).expect("list all");
+        assert!(
+            all_list.iter().any(|n| n.id == note.id),
+            "unscoped note should appear in all-workspaces view"
+        );
     }
 
     // P1-UNIT-005: Note format toggle persists
