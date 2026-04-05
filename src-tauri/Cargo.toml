@@ -14,11 +14,18 @@ edition = "2021"
 name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["common-controls-v6"]
+# common-controls-v6 manifest is only linked into the main binary, not test
+# binaries, causing STATUS_ENTRYPOINT_NOT_FOUND on Windows CI.
+# See: https://github.com/tauri-apps/tauri/issues/13419
+common-controls-v6 = ["tauri/common-controls-v6"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", default-features = false, features = ["wry", "compression", "dynamic-acl", "x11", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
