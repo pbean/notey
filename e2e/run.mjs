@@ -54,13 +54,20 @@ function assert(condition, message) {
 
 // --- Setup ---
 
-function startDriver() {
-  return new Promise((resolve, reject) => {
-    tauriDriver = spawn('tauri-driver', [], { stdio: ['ignore', 'pipe', 'pipe'] });
-    tauriDriver.on('error', reject);
-    // Wait for driver to be ready
-    setTimeout(resolve, 2000);
-  });
+async function startDriver() {
+  tauriDriver = spawn('tauri-driver', [], { stdio: ['ignore', 'pipe', 'pipe'] });
+  tauriDriver.on('error', (e) => { throw e; });
+
+  // Poll until the driver is accepting connections
+  for (let i = 0; i < 30; i++) {
+    try {
+      await fetch('http://127.0.0.1:4444/status');
+      return;
+    } catch {
+      await pause(500);
+    }
+  }
+  throw new Error('tauri-driver did not start within 15 seconds');
 }
 
 function stopDriver() {

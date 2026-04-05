@@ -92,9 +92,16 @@ jobs:
         if: runner.os != 'Linux'
         run: npx vitest run
 
+      - name: Install tauri-driver (Linux)
+        if: runner.os == 'Linux'
+        run: cargo install tauri-driver || true
+
+      - name: Build debug binary (Linux)
+        if: runner.os == 'Linux'
+        run: npx tauri build --debug || true
+
       - name: E2E tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          cargo install tauri-driver || true
-          npx tauri build --debug 2>&1 | tail -5 || true
+          test -f src-tauri/target/debug/tauri-app || { echo "Debug binary not found"; exit 1; }
           xvfb-run node e2e/run.mjs
