@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rebuild-fts-index"
+description = "Enables the rebuild_fts_index command without any pre-configured scope."
+commands.allow = ["rebuild_fts_index"]
+
+[[permission]]
+identifier = "deny-rebuild-fts-index"
+description = "Denies the rebuild_fts_index command without any pre-configured scope."
+commands.deny = ["rebuild_fts_index"]

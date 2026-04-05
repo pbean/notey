@@ -21,6 +21,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::notes::update_note,
         commands::notes::list_notes,
         commands::notes::reassign_note_workspace,
+        commands::notes::rebuild_fts_index,
         commands::config::get_config,
         commands::config::update_config,
         commands::window::dismiss_window,

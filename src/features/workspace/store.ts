@@ -12,6 +12,8 @@ interface WorkspaceState {
   isLoadingNotes: boolean;
   /** Error message from the last failed workspace operation, or null. */
   workspaceError: string | null;
+  /** Error message from the last failed notes load, or null. */
+  notesError: string | null;
 }
 
 /** Actions for managing workspace state. */
@@ -38,6 +40,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   filteredNotes: [],
   isLoadingNotes: false,
   workspaceError: null,
+  notesError: null,
 
   setActiveWorkspace: (id) => {
     const found = get().workspaces.find((w) => w.id === id);
@@ -55,7 +58,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   },
 
   clearActiveWorkspace: () =>
-    set({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false, filteredNotes: [] }),
+    set({ activeWorkspaceId: null, activeWorkspaceName: null, isAllWorkspaces: false, filteredNotes: [], notesError: null }),
 
   reassignNoteWorkspace: async (noteId, workspaceId) => {
     const result = await commands.reassignNoteWorkspace(noteId, workspaceId);
@@ -70,15 +73,15 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   },
 
   loadFilteredNotes: async () => {
-    set({ isLoadingNotes: true });
+    set({ isLoadingNotes: true, notesError: null });
     const { activeWorkspaceId, isAllWorkspaces } = get();
     const workspaceId = isAllWorkspaces ? null : activeWorkspaceId;
     const result = await commands.listNotes(workspaceId);
     if (result.status === 'ok') {
-      set({ filteredNotes: result.data, isLoadingNotes: false });
+      set({ filteredNotes: result.data, isLoadingNotes: false, notesError: null });
     } else {
       console.error('listNotes failed:', result.error);
-      set({ filteredNotes: [], isLoadingNotes: false });
+      set({ isLoadingNotes: false, notesError: 'Failed to load notes' });
     }
   },
 

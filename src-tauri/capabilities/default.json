@@ -21,6 +21,7 @@
     "allow-get-workspace",
     "allow-detect-workspace",
     "allow-resolve-workspace",
-    "allow-get-current-dir"
+    "allow-get-current-dir",
+    "allow-rebuild-fts-index"
   ]
 }

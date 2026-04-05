@@ -52,6 +52,16 @@ pub async fn reassign_note_workspace(
     services::notes::reassign_note_workspace(&conn, id, workspace_id)
 }
 
+/// Rebuild the FTS5 index from the content table. Use for recovery if the index drifts.
+#[tauri::command]
+#[specta::specta]
+pub async fn rebuild_fts_index(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+) -> Result<(), NoteyError> {
+    let conn = state.lock().unwrap_or_else(|e| e.into_inner());
+    services::notes::rebuild_fts_index(&conn)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn list_notes(

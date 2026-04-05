@@ -313,6 +313,100 @@ fn test_fts5_match_returns_ranked_results() {
     assert_eq!(ids[0], title_note_id, "title match should rank above content-only match (verifies BM25 10:1 weighting)");
 }
 
+// FTS5 rebuild restores index from content table
+#[test]
+fn test_fts5_rebuild_restores_index() {
+    let (conn, _dir) = create_temp_db();
+
+    let note1 = NoteBuilder::new()
+        .title("rebuild_alpha_unique")
+        .content("content alpha")
+        .insert(&conn);
+    let _note2 = NoteBuilder::new()
+        .title("rebuild_beta_unique")
+        .content("content beta")
+        .insert(&conn);
+
+    // Verify both notes are in the FTS index before rebuild
+    let pre_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["rebuild_alpha_unique"],
+            |row| row.get(0),
+        )
+        .expect("pre-rebuild FTS query failed");
+    assert_eq!(pre_count, 1, "note should be in FTS before rebuild");
+
+    // Simulate FTS drift: drop the insert trigger, add a note bypassing FTS,
+    // then restore the trigger. The new note will be in `notes` but not in `notes_fts`.
+    conn.execute_batch("DROP TRIGGER notes_fts_ai").expect("drop trigger failed");
+    conn.execute(
+        "INSERT INTO notes (title, content, format, created_at, updated_at)
+         VALUES ('drift_note_unique', 'drifted content', 'markdown', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+        [],
+    ).expect("insert bypassing FTS failed");
+    conn.execute_batch(
+        "CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts(rowid, title, content)
+            VALUES (NEW.id, NEW.title, NEW.content);
+        END"
+    ).expect("recreate trigger failed");
+
+    // Verify drift: the bypassed note should NOT be in FTS
+    let drift_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["drift_note_unique"],
+            |row| row.get(0),
+        )
+        .expect("drift check query failed");
+    assert_eq!(drift_count, 0, "note inserted while trigger was dropped should NOT be in FTS");
+
+    // Rebuild the FTS index — should recover the drifted note
+    notes::rebuild_fts_index(&conn).expect("rebuild_fts_index failed");
+
+    // Verify all notes are searchable after rebuild (including the drifted one)
+    let drift_recovered: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["drift_note_unique"],
+            |row| row.get(0),
+        )
+        .expect("drift recovery query failed");
+    assert_eq!(drift_recovered, 1, "drifted note should be recoverable via FTS rebuild");
+    let alpha_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["rebuild_alpha_unique"],
+            |row| row.get(0),
+        )
+        .expect("FTS query alpha failed");
+    assert_eq!(alpha_count, 1, "note alpha should be findable after FTS rebuild");
+
+    let beta_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["rebuild_beta_unique"],
+            |row| row.get(0),
+        )
+        .expect("FTS query beta failed");
+    assert_eq!(beta_count, 1, "note beta should be findable after FTS rebuild");
+
+    // Update a note and rebuild again to verify triggers + rebuild coexist
+    notes::update_note(&conn, note1.id, Some("rebuild_gamma_unique".to_string()), None, None)
+        .expect("update note failed");
+    notes::rebuild_fts_index(&conn).expect("second rebuild failed");
+
+    let gamma_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+            params!["rebuild_gamma_unique"],
+            |row| row.get(0),
+        )
+        .expect("FTS query gamma failed");
+    assert_eq!(gamma_count, 1, "updated note should be findable after second FTS rebuild");
+}
+
 // P1-INT-003: FTS5 index stays consistent after multiple rapid create/update/delete cycles
 #[test]
 fn test_fts5_rapid_crud_consistency() {

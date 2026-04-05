@@ -99,6 +99,13 @@ pub fn reassign_note_workspace(
     get_note(conn, id)
 }
 
+/// Rebuild the FTS5 index from the content table.
+/// Use as a recovery mechanism if the FTS index drifts out of sync with the notes table.
+pub fn rebuild_fts_index(conn: &Connection) -> Result<(), NoteyError> {
+    conn.execute_batch("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")?;
+    Ok(())
+}
+
 /// Lists non-trashed notes, optionally filtered by workspace.
 ///
 /// When `workspace_id` is `Some(id)`, returns only notes belonging to that workspace.

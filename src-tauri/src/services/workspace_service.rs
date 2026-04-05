@@ -40,7 +40,7 @@ pub fn create_workspace(
             format!("Workspace path must be absolute: {}", path),
         ));
     }
-    let canonical = std::fs::canonicalize(path)
+    let canonical = dunce::canonicalize(path)
         .map_err(|e| NoteyError::Validation(format!("Cannot resolve path '{}': {}", path, e)))?;
     if !canonical.is_dir() {
         return Err(NoteyError::Validation(format!(
@@ -49,20 +49,30 @@ pub fn create_workspace(
         )));
     }
     let canonical_str = path_to_str(&canonical)?;
+    upsert_workspace(conn, name, &canonical_str)
+}
+
+/// Internal: create or return existing workspace for an already-canonical path.
+/// Skips canonicalization and is_dir checks — caller must guarantee the path is valid.
+fn upsert_workspace(
+    conn: &Connection,
+    name: &str,
+    canonical_path: &str,
+) -> Result<Workspace, NoteyError> {
     let now = Utc::now().to_rfc3339();
 
-    match workspace_repo::insert_workspace(conn, name, &canonical_str, &now) {
+    match workspace_repo::insert_workspace(conn, name, canonical_path, &now) {
         Ok(id) => Ok(Workspace {
             id,
             name: name.to_string(),
-            path: canonical_str,
+            path: canonical_path.to_string(),
             created_at: now,
         }),
         Err(NoteyError::Database(rusqlite::Error::SqliteFailure(err, _)))
             if err.code == rusqlite::ErrorCode::ConstraintViolation =>
         {
             // UNIQUE constraint on path — return existing workspace
-            workspace_repo::find_by_path(conn, &canonical_str)?
+            workspace_repo::find_by_path(conn, canonical_path)?
                 .ok_or(NoteyError::NotFound)
         }
         Err(e) => Err(e),
@@ -72,7 +82,7 @@ pub fn create_workspace(
 /// Detect a workspace by walking up from the given path looking for a `.git` directory.
 /// Falls back to the given directory itself if no git repository is found (FR31).
 pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
-    let canonical = std::fs::canonicalize(path)
+    let canonical = dunce::canonicalize(path)
         .map_err(|e| NoteyError::Validation(format!("Cannot resolve path '{}': {}", path, e)))?;
 
     if !canonical.is_dir() {
@@ -116,11 +126,11 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
 
 /// Detect a workspace from a filesystem path and ensure it exists in the database.
 /// Returns the persisted Workspace with a database id.
-/// Chains: detect_workspace(path) → create_workspace(conn, name, detected_path)
-/// create_workspace has upsert behavior — returns existing workspace if path matches.
+/// Chains: detect_workspace(path) → upsert_workspace(conn, name, detected_path)
+/// Skips re-canonicalization since detect_workspace already returns a canonical path.
 pub fn resolve_workspace(conn: &Connection, path: &str) -> Result<Workspace, NoteyError> {
     let detected = detect_workspace(path)?;
-    create_workspace(conn, &detected.name, &detected.path)
+    upsert_workspace(conn, &detected.name, &detected.path)
 }
 
 /// List all workspaces with their non-trashed note counts, ordered by name ASC.

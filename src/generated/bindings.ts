@@ -10,6 +10,8 @@ export const commands = {
 	listNotes: (workspaceId: number | null) => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes", { workspaceId })),
 	// Reassign a note to a different workspace or unscope it.
 	reassignNoteWorkspace: (id: number, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("reassign_note_workspace", { id, workspaceId })),
+	// Rebuild the FTS5 index from the content table. Use for recovery if the index drifts.
+	rebuildFtsIndex: () => typedError<null, NoteyError>(__TAURI_INVOKE("rebuild_fts_index")),
 	// Returns the full application config.
 	getConfig: () => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("get_config")),
 	/**

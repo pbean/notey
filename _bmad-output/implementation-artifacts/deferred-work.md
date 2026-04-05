@@ -2,22 +2,22 @@
 
 ## Deferred from: Epic 1 — Instant Note Capture (2026-04-03)
 
-### Cluster 2: Frontend Core (Stories 1.6–1.10)
+### ~~Cluster 2: Frontend Core (Stories 1.6–1.10)~~ DONE
 
-Depends on: Backend Foundation (Stories 1.1–1.5)
+~~Depends on: Backend Foundation (Stories 1.1–1.5)~~
 
-- **Story 1.6** — Design Token System (CSS Custom Properties)
-- **Story 1.7** — App Shell Layout (CaptureWindow + StatusBar)
-- **Story 1.8** — CodeMirror 6 Markdown Editor
-- **Story 1.9** — Auto-Save with Debounce & Save Indicator
-- **Story 1.10** — Note Format Toggle (Markdown / Plain Text)
+- ~~**Story 1.6** — Design Token System (CSS Custom Properties)~~
+- ~~**Story 1.7** — App Shell Layout (CaptureWindow + StatusBar)~~
+- ~~**Story 1.8** — CodeMirror 6 Markdown Editor~~
+- ~~**Story 1.9** — Auto-Save with Debounce & Save Indicator~~
+- ~~**Story 1.10** — Note Format Toggle (Markdown / Plain Text)~~
 
-### Cluster 2b: Auto-Save & Format Toggle (Stories 1.9–1.10)
+### ~~Cluster 2b: Auto-Save & Format Toggle (Stories 1.9–1.10)~~ DONE
 
-Depends on: Frontend Core Visual Foundation (Stories 1.6–1.8)
+~~Depends on: Frontend Core Visual Foundation (Stories 1.6–1.8)~~
 
-- **Story 1.9** — Auto-Save with Debounce & Save Indicator (300ms debounce, SaveIndicator 3-state display, `flushSave()` for Esc)
-- **Story 1.10** — Note Format Toggle (Markdown / Plain Text, CodeMirror compartment swap, persisted per note)
+- ~~**Story 1.9** — Auto-Save with Debounce & Save Indicator (300ms debounce, SaveIndicator 3-state display, `flushSave()` for Esc)~~
+- ~~**Story 1.10** — Note Format Toggle (Markdown / Plain Text, CodeMirror compartment swap, persisted per note)~~
 
 ### ~~Deferred from: Stories 1.6–1.8 review (2026-04-03)~~ DONE (commit 9cbaebe)
 
@@ -80,14 +80,14 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**loadNote format validation** — `loadNote` trusts the backend format value without validating it falls within the NoteFormat union. Backend SQL CHECK constraint provides the guard, but no frontend validation exists.~~ → Already implemented (editor/store.ts lines 74-77)
 - ~~**`to_string_lossy` non-UTF-8 path corruption** — `create_workspace`, `detect_workspace`, and `resolve_workspace` all use `to_string_lossy()` to convert canonical paths to strings. On Linux, paths with non-UTF-8 bytes get silently mangled (U+FFFD replacement). Should use `to_str()` with a proper error on non-UTF-8 paths.~~ → Replaced all `to_string_lossy()` with `path_to_str()` helper that returns `Validation` error on non-UTF-8
 
-### Deferred from: code review pass 2 of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)
+### ~~Deferred from: code review pass 2 of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)~~ DONE
 
-- **Double-canonicalize in resolve_workspace chain** — `resolve_workspace` calls `detect_workspace` (which canonicalizes) then `create_workspace` (which canonicalizes again). Pre-existing architecture, redundant syscall, tiny TOCTOU window.
-- **FTS5 external content drift risk** — No `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` or periodic integrity check. If notes are ever modified bypassing triggers, the FTS index silently desyncs with no recovery mechanism.
-- **FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.
-- **FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command.
-- **`loadFilteredNotes` error handling inconsistency** — On error, `loadFilteredNotes` clears `filteredNotes` to `[]` (causing UI flash), while `loadWorkspaces` retains stale data. Asymmetric error UX.
-- **Windows `canonicalize` UNC prefix** — `std::fs::canonicalize` on Windows returns `\\?\C:\...` paths, which display in the UI. All lookups are consistent (both use canonical form) so no functional bug, but UX issue on Windows.
+- ~~**Double-canonicalize in resolve_workspace chain** — `resolve_workspace` calls `detect_workspace` (which canonicalizes) then `create_workspace` (which canonicalizes again). Pre-existing architecture, redundant syscall, tiny TOCTOU window.~~ → Extracted `upsert_workspace` internal function; `resolve_workspace` bypasses re-canonicalization
+- ~~**FTS5 external content drift risk** — No `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` or periodic integrity check. If notes are ever modified bypassing triggers, the FTS index silently desyncs with no recovery mechanism.~~ → Added `rebuild_fts_index` service function + Tauri command
+- ~~**FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.~~ → Closed as by-design: forward-only migration strategy, SQLite transaction wrapping prevents partial application
+- **FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command. _(Stays deferred to story 3.2)_
+- ~~**`loadFilteredNotes` error handling inconsistency** — On error, `loadFilteredNotes` clears `filteredNotes` to `[]` (causing UI flash), while `loadWorkspaces` retains stale data. Asymmetric error UX.~~ → Aligned to retain stale data + `notesError` field
+- ~~**Windows `canonicalize` UNC prefix** — `std::fs::canonicalize` on Windows returns `\\?\C:\...` paths, which display in the UI. All lookups are consistent (both use canonical form) so no functional bug, but UX issue on Windows.~~ → Replaced with `dunce::canonicalize` which strips UNC prefixes on Windows
 
 **~~Group C — Research and documentation:~~ DONE**
 - ~~**Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`~~
@@ -97,3 +97,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage~~
 - ~~**Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management~~
 - ~~P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E)~~ DONE — `e2e/run.mjs` via tauri-driver, 7/7 tests pass (requires `npx tauri build --debug` for embedded frontend binary)
+
+### Deferred from: review-pass2-cleanup code review (2026-04-05)
+
+- **`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.
