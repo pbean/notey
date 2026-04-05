@@ -73,11 +73,12 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Item 4** (HIGH): Audit and fix `console.error` logging gaps in frontend store actions — `src/features/workspace/store.ts`, `src/features/editor/store.ts`~~
 - ~~**Item 8** (LOW): Add `buildWorkspaceInfo()` to TS test factories — `src/test-utils/factories.ts`~~
 
-## Deferred from: code review of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)
+### ~~Deferred from: code review of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)~~ DONE
 
-- **Workspace path format validation** — `create_workspace` rejects empty/whitespace paths but doesn't validate path format (absolute, valid chars) or existence. Scope was limited to RETRO-2-003 (empty/whitespace rejection).
-- **Workspace store error propagation** — `listWorkspaces` failure is logged via `console.error` but not surfaced to UI state. Workspace list may show stale data on failure without user feedback.
-- **loadNote format validation** — `loadNote` trusts the backend format value without validating it falls within the NoteFormat union. Backend SQL CHECK constraint provides the guard, but no frontend validation exists.
+- ~~**Workspace path format validation** — `create_workspace` rejects empty/whitespace paths but doesn't validate path format (absolute, valid chars) or existence. Scope was limited to RETRO-2-003 (empty/whitespace rejection).~~ → Added `canonicalize` + `is_dir` validation to `create_workspace`
+- ~~**Workspace store error propagation** — `listWorkspaces` failure is logged via `console.error` but not surfaced to UI state. Workspace list may show stale data on failure without user feedback.~~ → `workspaceError` displayed inline in `WorkspaceSelector` dropdown
+- ~~**loadNote format validation** — `loadNote` trusts the backend format value without validating it falls within the NoteFormat union. Backend SQL CHECK constraint provides the guard, but no frontend validation exists.~~ → Already implemented (editor/store.ts lines 74-77)
+- **`to_string_lossy` non-UTF-8 path corruption** — `create_workspace`, `detect_workspace`, and `resolve_workspace` all use `to_string_lossy()` to convert canonical paths to strings. On Linux, paths with non-UTF-8 bytes get silently mangled (U+FFFD replacement). Should use `to_str()` with a proper error on non-UTF-8 paths.
 
 **~~Group C — Research and documentation:~~ DONE**
 - ~~**Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`~~

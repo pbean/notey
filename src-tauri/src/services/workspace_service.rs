@@ -28,20 +28,29 @@ pub fn create_workspace(
             format!("Workspace path must be absolute: {}", path),
         ));
     }
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| NoteyError::Validation(format!("Cannot resolve path '{}': {}", path, e)))?;
+    if !canonical.is_dir() {
+        return Err(NoteyError::Validation(format!(
+            "Path is not a directory: {}",
+            canonical.display()
+        )));
+    }
+    let canonical_str = canonical.to_string_lossy().to_string();
     let now = Utc::now().to_rfc3339();
 
-    match workspace_repo::insert_workspace(conn, name, path, &now) {
+    match workspace_repo::insert_workspace(conn, name, &canonical_str, &now) {
         Ok(id) => Ok(Workspace {
             id,
             name: name.to_string(),
-            path: path.to_string(),
+            path: canonical_str,
             created_at: now,
         }),
         Err(NoteyError::Database(rusqlite::Error::SqliteFailure(err, _)))
             if err.code == rusqlite::ErrorCode::ConstraintViolation =>
         {
             // UNIQUE constraint on path — return existing workspace
-            workspace_repo::find_by_path(conn, path)?
+            workspace_repo::find_by_path(conn, &canonical_str)?
                 .ok_or(NoteyError::NotFound)
         }
         Err(e) => Err(e),

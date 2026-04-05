@@ -41,12 +41,14 @@ fn test_workspaces_path_index_exists() {
 #[test]
 fn test_create_workspace_returns_workspace_with_id() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "My Project", "/home/user/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "My Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
+    let canonical = std::fs::canonicalize(dir.path()).unwrap();
     assert!(ws.id > 0, "workspace should have a positive id");
     assert_eq!(ws.name, "My Project");
-    assert_eq!(ws.path, "/home/user/project");
+    assert_eq!(ws.path, canonical.to_string_lossy().to_string());
     assert!(ws.created_at.contains('T'), "created_at should be ISO 8601");
 }
 
@@ -54,23 +56,27 @@ fn test_create_workspace_returns_workspace_with_id() {
 #[test]
 fn test_create_workspace_upsert_returns_existing() {
     let conn = setup_test_db();
-    let ws1 = workspace_service::create_workspace(&conn, "Project A", "/home/user/project")
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().to_str().unwrap();
+    let ws1 = workspace_service::create_workspace(&conn, "Project A", path)
         .expect("first create_workspace failed");
-    let ws2 = workspace_service::create_workspace(&conn, "Project B", "/home/user/project")
+    let ws2 = workspace_service::create_workspace(&conn, "Project B", path)
         .expect("second create_workspace (upsert) failed");
 
     assert_eq!(ws1.id, ws2.id, "upsert should return same workspace id");
     assert_eq!(ws2.name, "Project A", "upsert should return original name");
-    assert_eq!(ws2.path, "/home/user/project");
+    assert_eq!(ws2.path, ws1.path);
 }
 
 // UNIT-2.1-005: list_workspaces returns all workspaces with correct note counts, ordered by name ASC
 #[test]
 fn test_list_workspaces_with_note_counts_ordered_by_name() {
     let conn = setup_test_db();
-    let ws_b = workspace_service::create_workspace(&conn, "Bravo", "/path/bravo")
+    let dir_b = TempDir::new().unwrap();
+    let dir_a = TempDir::new().unwrap();
+    let ws_b = workspace_service::create_workspace(&conn, "Bravo", dir_b.path().to_str().unwrap())
         .expect("create bravo");
-    let ws_a = workspace_service::create_workspace(&conn, "Alpha", "/path/alpha")
+    let ws_a = workspace_service::create_workspace(&conn, "Alpha", dir_a.path().to_str().unwrap())
         .expect("create alpha");
 
     // Add notes to workspaces
@@ -92,7 +98,8 @@ fn test_list_workspaces_with_note_counts_ordered_by_name() {
 #[test]
 fn test_list_workspaces_note_count_excludes_trashed() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
@@ -107,7 +114,8 @@ fn test_list_workspaces_note_count_excludes_trashed() {
 #[test]
 fn test_get_workspace_returns_info_with_note_count() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
@@ -116,7 +124,7 @@ fn test_get_workspace_returns_info_with_note_count() {
     let info = workspace_service::get_workspace(&conn, ws.id).expect("get_workspace failed");
     assert_eq!(info.id, ws.id);
     assert_eq!(info.name, "Project");
-    assert_eq!(info.path, "/path/project");
+    assert_eq!(info.path, ws.path);
     assert_eq!(info.note_count, 2);
 }
 
@@ -167,7 +175,8 @@ fn test_migration_applies_on_existing_db_with_notes() {
 #[test]
 fn test_get_workspace_with_zero_notes() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Empty", "/path/empty")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Empty", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     let info = workspace_service::get_workspace(&conn, ws.id).expect("get_workspace failed");
@@ -186,7 +195,8 @@ fn test_list_workspaces_empty() {
 #[test]
 fn test_get_workspace_note_count_excludes_trashed() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
@@ -201,9 +211,11 @@ fn test_get_workspace_note_count_excludes_trashed() {
 #[test]
 fn test_list_workspaces_per_workspace_trashed_isolation() {
     let conn = setup_test_db();
-    let ws_a = workspace_service::create_workspace(&conn, "Alpha", "/path/alpha")
+    let dir_a = TempDir::new().unwrap();
+    let dir_b = TempDir::new().unwrap();
+    let ws_a = workspace_service::create_workspace(&conn, "Alpha", dir_a.path().to_str().unwrap())
         .expect("create alpha");
-    let ws_b = workspace_service::create_workspace(&conn, "Bravo", "/path/bravo")
+    let ws_b = workspace_service::create_workspace(&conn, "Bravo", dir_b.path().to_str().unwrap())
         .expect("create bravo");
 
     // Alpha: 2 active, 1 trashed
@@ -228,12 +240,14 @@ fn test_list_workspaces_per_workspace_trashed_isolation() {
 #[test]
 fn test_create_workspace_upsert_preserves_created_at() {
     let conn = setup_test_db();
-    let ws1 = workspace_service::create_workspace(&conn, "Original", "/path/same")
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().to_str().unwrap();
+    let ws1 = workspace_service::create_workspace(&conn, "Original", path)
         .expect("first create failed");
     let original_created_at = ws1.created_at.clone();
 
     // Second create with same path should return original, preserving created_at
-    let ws2 = workspace_service::create_workspace(&conn, "Different Name", "/path/same")
+    let ws2 = workspace_service::create_workspace(&conn, "Different Name", path)
         .expect("upsert failed");
 
     assert_eq!(ws2.created_at, original_created_at, "upsert should preserve original created_at");
@@ -274,7 +288,8 @@ fn test_typescript_bindings_contain_workspace_commands_and_types() {
 #[test]
 fn test_unassigned_notes_not_counted_in_workspaces() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     // One note assigned to workspace, two unassigned (workspace_id = NULL)
@@ -625,9 +640,11 @@ fn test_resolve_workspace_then_create_note_with_workspace_id() {
 #[test]
 fn test_list_notes_filtered_by_workspace_integration() {
     let conn = setup_test_db();
-    let ws_a = workspace_service::create_workspace(&conn, "Alpha", "/path/alpha")
+    let dir_a = TempDir::new().unwrap();
+    let dir_b = TempDir::new().unwrap();
+    let ws_a = workspace_service::create_workspace(&conn, "Alpha", dir_a.path().to_str().unwrap())
         .expect("create alpha");
-    let ws_b = workspace_service::create_workspace(&conn, "Bravo", "/path/bravo")
+    let ws_b = workspace_service::create_workspace(&conn, "Bravo", dir_b.path().to_str().unwrap())
         .expect("create bravo");
 
     let note_a1 = NoteBuilder::new().title("A1").workspace_id(ws_a.id).insert(&conn);
@@ -657,7 +674,8 @@ fn test_list_notes_filtered_by_workspace_integration() {
 #[test]
 fn test_list_notes_filtered_excludes_trashed_integration() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create workspace");
 
     NoteBuilder::new().title("Active").workspace_id(ws.id).insert(&conn);
@@ -673,7 +691,8 @@ fn test_list_notes_filtered_excludes_trashed_integration() {
 #[test]
 fn test_list_notes_preserves_workspace_id() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     // One note with workspace, one without
@@ -694,7 +713,8 @@ fn test_list_notes_preserves_workspace_id() {
 #[test]
 fn test_update_note_preserves_workspace_id() {
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(&conn, "Project", "/path/project")
+    let dir = TempDir::new().unwrap();
+    let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
     let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
@@ -771,6 +791,65 @@ fn test_create_workspace_rejects_relative_path() {
         matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("absolute")),
         "expected Validation error for relative path, got: {:?}",
         result
+    );
+}
+
+// Review-3.1: create_workspace rejects non-existent path
+#[test]
+fn test_create_workspace_rejects_nonexistent_path() {
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(&conn, "test", "/tmp/notey-does-not-exist-xyz");
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("Cannot resolve path")),
+        "expected Validation error for non-existent path, got: {:?}",
+        result
+    );
+}
+
+// Review-3.1: create_workspace rejects path pointing to a file
+#[test]
+fn test_create_workspace_rejects_file_path() {
+    let dir = TempDir::new().expect("create temp dir");
+    let file_path = dir.path().join("not-a-dir.txt");
+    std::fs::write(&file_path, "hello").expect("create temp file");
+
+    let conn = setup_test_db();
+    let result = workspace_service::create_workspace(
+        &conn,
+        "test",
+        file_path.to_str().unwrap(),
+    );
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("not a directory")),
+        "expected Validation error for file path, got: {:?}",
+        result
+    );
+}
+
+// Review-3.1: create_workspace canonicalizes symlink to target directory
+#[cfg(unix)]
+#[test]
+fn test_create_workspace_canonicalizes_symlink() {
+    let target_dir = TempDir::new().expect("create target dir");
+    let link_dir = TempDir::new().expect("create link dir");
+    let link_path = link_dir.path().join("symlink");
+    std::os::unix::fs::symlink(target_dir.path(), &link_path).expect("create symlink");
+
+    let conn = setup_test_db();
+    let ws = workspace_service::create_workspace(
+        &conn,
+        "symlinked",
+        link_path.to_str().unwrap(),
+    )
+    .expect("create_workspace with symlink should succeed");
+
+    let canonical_target = std::fs::canonicalize(target_dir.path())
+        .expect("canonicalize target")
+        .to_string_lossy()
+        .to_string();
+    assert_eq!(
+        ws.path, canonical_target,
+        "workspace path should be the canonical target, not the symlink"
     );
 }
 
