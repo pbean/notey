@@ -80,6 +80,15 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**loadNote format validation** — `loadNote` trusts the backend format value without validating it falls within the NoteFormat union. Backend SQL CHECK constraint provides the guard, but no frontend validation exists.~~ → Already implemented (editor/store.ts lines 74-77)
 - ~~**`to_string_lossy` non-UTF-8 path corruption** — `create_workspace`, `detect_workspace`, and `resolve_workspace` all use `to_string_lossy()` to convert canonical paths to strings. On Linux, paths with non-UTF-8 bytes get silently mangled (U+FFFD replacement). Should use `to_str()` with a proper error on non-UTF-8 paths.~~ → Replaced all `to_string_lossy()` with `path_to_str()` helper that returns `Validation` error on non-UTF-8
 
+### Deferred from: code review pass 2 of 3-1-fts5-virtual-table-sync-triggers (2026-04-05)
+
+- **Double-canonicalize in resolve_workspace chain** — `resolve_workspace` calls `detect_workspace` (which canonicalizes) then `create_workspace` (which canonicalizes again). Pre-existing architecture, redundant syscall, tiny TOCTOU window.
+- **FTS5 external content drift risk** — No `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` or periodic integrity check. If notes are ever modified bypassing triggers, the FTS index silently desyncs with no recovery mechanism.
+- **FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.
+- **FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command.
+- **`loadFilteredNotes` error handling inconsistency** — On error, `loadFilteredNotes` clears `filteredNotes` to `[]` (causing UI flash), while `loadWorkspaces` retains stale data. Asymmetric error UX.
+- **Windows `canonicalize` UNC prefix** — `std::fs::canonicalize` on Windows returns `\\?\C:\...` paths, which display in the UI. All lookups are consistent (both use canonical form) so no functional bug, but UX issue on Windows.
+
 **~~Group C — Research and documentation:~~ DONE**
 - ~~**Item 5** (HIGH): FTS5 external content table research document — `_bmad-output/implementation-artifacts/fts5-research.md`~~
 - ~~**Item 9** (LOW): Document permission TOML manual creation workaround — `_bmad-output/project-context.md`~~

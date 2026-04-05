@@ -247,6 +247,19 @@ claude-sonnet-4-6
 - [x] [Review][Defer] listWorkspaces failure only logged, not propagated to UI state — FIXED: added `workspaceError` state field to workspace store, set on failure, cleared on success. [src/features/workspace/store.ts]
 - [x] [Review][Defer] loadNote doesn't validate format value from backend — FIXED: added `validFormats` guard in `loadNote`, defaults to 'markdown' on unknown format. [src/features/editor/store.ts:73-76]
 
+### Review Findings (Pass 2 — 2026-04-05)
+
+- [x] [Review][Patch] Symlink test uses `to_string_lossy()` to verify a fix that removes it — FIXED: changed to `.to_str().unwrap()` [src-tauri/tests/workspace_tests.rs:846-849]
+- [x] [Review][Patch] `loadNote` silently coerces unknown format to `'markdown'` with no `console.warn` — FIXED: added warning log before defaulting [src/features/editor/store.ts:74-76]
+- [x] [Review][Patch] Backfill test duplicates migration 1+2 SQL — FIXED: added comment explaining why duplication is required [src-tauri/tests/search_tests.rs:161-165]
+- [x] [Review][Patch] No test for `detect_workspace` with non-UTF-8 paths — FIXED: added `test_detect_workspace_rejects_non_utf8_canonical_path` via symlink-to-non-UTF-8-dir [src-tauri/tests/workspace_tests.rs:856-882]
+- [x] [Review][Defer] Double-canonicalize in `resolve_workspace` → `create_workspace` chain — pre-existing architecture, redundant syscall [src-tauri/src/services/workspace_service.rs]
+- [x] [Review][Defer] FTS5 external content can drift if notes modified via raw SQL (no rebuild mechanism) — by-design FTS5 limitation
+- [x] [Review][Defer] FTS5 migration has no down migration — pre-existing pattern, no migrations have down
+- [x] [Review][Defer] FTS5 MATCH with special characters will cause syntax errors — story 3.2 scope
+- [x] [Review][Defer] `loadFilteredNotes` clears notes on error vs `loadWorkspaces` keeping stale data — pre-existing inconsistency [src/features/workspace/store.ts:79-82]
+- [x] [Review][Defer] Windows `canonicalize` returns UNC-prefixed paths in UI — pre-existing platform issue [src-tauri/src/services/workspace_service.rs:43]
+
 ## Change Log
 
 - 2026-04-05: feat(story-3.1): FTS5 virtual table, sync triggers, BM25 rank config, backfill migration + 9 integration tests

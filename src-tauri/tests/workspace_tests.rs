@@ -845,11 +845,41 @@ fn test_create_workspace_canonicalizes_symlink() {
 
     let canonical_target = std::fs::canonicalize(target_dir.path())
         .expect("canonicalize target")
-        .to_string_lossy()
+        .to_str()
+        .expect("canonical path should be valid UTF-8")
         .to_string();
     assert_eq!(
         ws.path, canonical_target,
         "workspace path should be the canonical target, not the symlink"
+    );
+}
+
+// Review-3.1-pass2: detect_workspace rejects paths that canonicalize to non-UTF-8.
+// The API takes &str, so direct non-UTF-8 input is impossible. The real edge case
+// is a UTF-8 symlink resolving to a directory with non-UTF-8 bytes in its name.
+#[cfg(unix)]
+#[test]
+fn test_detect_workspace_rejects_non_utf8_canonical_path() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = TempDir::new().expect("create temp dir");
+    // Create a target directory with non-UTF-8 bytes in its name
+    let bad_name = OsStr::from_bytes(b"bad\xff\xfedir");
+    let bad_dir = dir.path().join(bad_name);
+    std::fs::create_dir(&bad_dir).expect("create non-UTF-8 dir");
+
+    // Create a UTF-8 symlink pointing to the non-UTF-8 directory
+    let link_path = dir.path().join("utf8-link");
+    std::os::unix::fs::symlink(&bad_dir, &link_path).expect("create symlink");
+
+    // detect_workspace receives valid UTF-8, but canonicalize resolves
+    // through the symlink to a non-UTF-8 path — path_to_str should reject it
+    let result = workspace_service::detect_workspace(link_path.to_str().unwrap());
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("invalid UTF-8")),
+        "detect_workspace should return Validation error for non-UTF-8 canonical path, got: {:?}",
+        result
     );
 }
 

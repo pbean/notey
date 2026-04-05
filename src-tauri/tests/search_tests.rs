@@ -158,7 +158,11 @@ fn test_fts5_backfill_existing_notes() {
         )
         .expect("pragmas failed");
 
-        // Apply only migrations 1 and 2 (notes table + workspaces table)
+        // Apply only migrations 1 and 2 (notes table + workspaces table).
+        // SQL is duplicated here because MIGRATIONS_SLICE is a static &[M] and
+        // rusqlite_migration::Migrations::from_slice cannot take a sub-slice of it.
+        // The backfill test requires a two-phase setup: first apply pre-FTS5
+        // migrations, insert notes, then re-open with init_db to apply migration 3.
         let pre_fts_slice = [
             rusqlite_migration::M::up(
                 "CREATE TABLE IF NOT EXISTS notes (

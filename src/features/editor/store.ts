@@ -72,6 +72,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     }
     const note = result.data;
     const validFormats: NoteFormat[] = ['markdown', 'plaintext'];
+    if (!validFormats.includes(note.format as NoteFormat)) {
+      console.warn(`loadNote: unknown format "${note.format}" for note ${note.id}, defaulting to markdown`);
+    }
     const format = validFormats.includes(note.format as NoteFormat)
       ? (note.format as NoteFormat)
       : 'markdown';
