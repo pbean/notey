@@ -420,8 +420,12 @@ fn test_detect_workspace_filesystem_root_no_infinite_loop() {
     match result {
         Ok(ws) => {
             assert_eq!(ws.path, "/");
-            // Root path has no file_name, so name should be fallback "workspace"
-            assert_eq!(ws.name, "workspace");
+            // Root path has no file_name, so name uses hash-based fallback
+            assert!(
+                ws.name.starts_with("workspace_"),
+                "root fallback should use hash-based name, got: {}",
+                ws.name
+            );
         }
         Err(NoteyError::Validation(_)) => {
             // Some systems might restrict access to root — Validation error is acceptable
@@ -901,4 +905,77 @@ fn test_typescript_bindings_contain_resolve_workspace() {
         bindings.contains("getCurrentDir"),
         "bindings should contain getCurrentDir command"
     );
+}
+
+
+// Review-3.1-pass3: resolve_workspace rejects deleted directory.
+// Note: the upsert_workspace TOCTOU is_dir guard is defense-in-depth and cannot be
+// reliably unit-tested without thread coordination. This test validates the overall
+// error path — detect_workspace's canonicalize fails before reaching the guard.
+#[test]
+fn test_resolve_workspace_rejects_deleted_directory() {
+    let conn = setup_test_db();
+    let dir = TempDir::new().expect("create temp dir");
+    let dir_path = dir.path().to_str().unwrap().to_string();
+
+    // First call succeeds while directory exists
+    let ws = workspace_service::create_workspace(&conn, "ephemeral", &dir_path)
+        .expect("first create should succeed");
+    assert_eq!(ws.name, "ephemeral");
+
+    // Delete the directory, then try resolve_workspace on the now-gone path
+    drop(dir);
+    let result = workspace_service::resolve_workspace(&conn, &dir_path);
+    assert!(
+        matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("Cannot resolve path")),
+        "resolve_workspace should return Validation error for deleted directory, got: {:?}",
+        result
+    );
+}
+
+// Review-3.1-pass3: detect_workspace depth limit — .git beyond limit is NOT found
+#[test]
+fn test_detect_workspace_respects_depth_limit() {
+    let base = TempDir::new().expect("create temp dir");
+    // Place .git at the base (25 levels up from leaf) — beyond MAX_DETECT_DEPTH (20)
+    std::fs::create_dir(base.path().join(".git")).expect("create .git at base");
+
+    // Create a directory 25 levels deep
+    let mut deep = base.path().to_path_buf();
+    for i in 0..25 {
+        deep = deep.join(format!("d{}", i));
+    }
+    std::fs::create_dir_all(&deep).expect("create deep directory");
+
+    let result = workspace_service::detect_workspace(deep.to_str().unwrap())
+        .expect("detect_workspace should succeed with fallback");
+
+    // .git is 25 levels up — beyond the 20-level limit, so it should NOT be found.
+    // Should fall back to the leaf directory name instead.
+    assert_eq!(result.name, "d24", "should use leaf directory name, not find .git 25 levels up");
+    assert!(
+        result.path.contains("d24"),
+        "fallback path should be the deep directory itself"
+    );
+}
+
+// Review-3.1-pass3: detect_workspace finds .git within depth limit
+#[test]
+fn test_detect_workspace_finds_git_within_depth_limit() {
+    let base = TempDir::new().expect("create temp dir");
+    // Place .git at base (15 levels up from leaf) — within MAX_DETECT_DEPTH (20)
+    std::fs::create_dir(base.path().join(".git")).expect("create .git at base");
+
+    let mut deep = base.path().to_path_buf();
+    for i in 0..15 {
+        deep = deep.join(format!("d{}", i));
+    }
+    std::fs::create_dir_all(&deep).expect("create deep directory");
+
+    let result = workspace_service::detect_workspace(deep.to_str().unwrap())
+        .expect("detect_workspace should succeed");
+
+    // .git is 15 levels up — within the 20-level limit, so it SHOULD be found
+    let base_name = base.path().file_name().unwrap().to_str().unwrap();
+    assert_eq!(result.name, base_name, "should find .git within depth limit");
 }

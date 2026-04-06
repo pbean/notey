@@ -16,7 +16,10 @@ pub struct ConfigDir(pub std::path::PathBuf);
 pub async fn get_config(
     state: State<'_, Mutex<AppConfig>>,
 ) -> Result<AppConfig, NoteyError> {
-    let config = state.lock().unwrap_or_else(|e| e.into_inner());
+    let config = state.lock().unwrap_or_else(|e| {
+        eprintln!("warning: config mutex poisoned, recovering: {e}");
+        e.into_inner()
+    });
     Ok(config.clone())
 }
 
@@ -51,7 +54,10 @@ pub async fn update_config(
 
     // Read current config under lock, then drop lock before I/O
     let (existing, old_shortcut_str) = {
-        let config = config_state.lock().unwrap_or_else(|e| e.into_inner());
+        let config = config_state.lock().unwrap_or_else(|e| {
+            eprintln!("warning: config mutex poisoned, recovering: {e}");
+            e.into_inner()
+        });
         (config.clone(), config.hotkey.global_shortcut.clone())
     };
 
@@ -60,7 +66,10 @@ pub async fn update_config(
 
     // Re-acquire lock to update in-memory state
     {
-        let mut config = config_state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut config = config_state.lock().unwrap_or_else(|e| {
+            eprintln!("warning: config mutex poisoned, recovering: {e}");
+            e.into_inner()
+        });
         *config = merged.clone();
     }
 

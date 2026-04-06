@@ -112,6 +112,10 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - **`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs** — Extremely unlikely edge case (.git at root or non-UTF-8 dir names), no data corruption. [src-tauri/src/services/workspace_service.rs:99-103]
 - **`initWorkspace` continues after `listWorkspaces` failure** — Gracefully degraded state, design decision needed for failure modes. [src/features/workspace/store.ts:112-125]
 
+### Deferred from: backend robustness review (2026-04-06)
+
+- **Mutex poison recovery on inconsistent DB state** — After a panic that poisons the DB mutex, `into_inner()` recovery may yield a connection with an open/partial transaction. No `ROLLBACK` or connection health check is performed before reuse. Pre-existing pattern across all Tauri commands. [src-tauri/src/commands/notes.rs, workspace.rs, config.rs]
+
 ### ~~Deferred from: fix-linux-ci-e2e-timeout review (2026-04-05)~~ DONE
 
 - ~~**`cargo install tauri-driver || true` swallows install failures** — If cargo install fails (network, compilation), the CI silently proceeds and E2E times out with no diagnostic. Remove `|| true` or add `which tauri-driver` post-install check. (`ci.yml:97`)~~ → Removed `|| true`

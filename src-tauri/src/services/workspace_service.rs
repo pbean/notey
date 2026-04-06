@@ -7,6 +7,9 @@ use crate::db::workspace_repo;
 use crate::errors::NoteyError;
 use crate::models::workspace::{DetectedWorkspace, Workspace, WorkspaceInfo};
 
+/// Maximum number of parent directories to traverse when searching for `.git`.
+const MAX_DETECT_DEPTH: usize = 20;
+
 /// Convert a Path to a UTF-8 string, returning a Validation error for non-UTF-8 paths.
 fn path_to_str(path: &Path) -> Result<String, NoteyError> {
     path.to_str()
@@ -52,13 +55,31 @@ pub fn create_workspace(
     upsert_workspace(conn, name, &canonical_str)
 }
 
+/// Generate a deterministic fallback workspace name from a path using FNV-1a.
+/// Stable across Rust versions (unlike DefaultHasher). Used when `.git` is at filesystem root.
+fn fallback_workspace_name(path: &Path) -> String {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    let mut hash: u64 = 0xcbf29ce484222325; // FNV-1a offset basis
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3); // FNV-1a prime
+    }
+    format!("workspace_{:08x}", hash as u32)
+}
+
 /// Internal: create or return existing workspace for an already-canonical path.
-/// Skips canonicalization and is_dir checks — caller must guarantee the path is valid.
+/// Re-checks that the directory still exists to guard against TOCTOU races.
 fn upsert_workspace(
     conn: &Connection,
     name: &str,
     canonical_path: &str,
 ) -> Result<Workspace, NoteyError> {
+    if !Path::new(canonical_path).is_dir() {
+        return Err(NoteyError::Validation(format!(
+            "Directory no longer exists: {}",
+            canonical_path
+        )));
+    }
     let name = name.trim();
     let now = Utc::now().to_rfc3339();
 
@@ -93,19 +114,24 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
         )));
     }
 
-    // Walk up from canonical path looking for .git
+    // Walk up from canonical path looking for .git (capped at MAX_DETECT_DEPTH levels)
     let mut current = canonical.clone();
+    let mut depth = 0;
     loop {
         if current.join(".git").exists() {
             let name = current
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("workspace")
-                .to_string();
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| fallback_workspace_name(&current));
             return Ok(DetectedWorkspace {
                 name,
                 path: path_to_str(&current)?,
             });
+        }
+        depth += 1;
+        if depth >= MAX_DETECT_DEPTH {
+            break;
         }
         match current.parent() {
             Some(parent) if parent != current => current = parent.to_path_buf(),
@@ -117,8 +143,8 @@ pub fn detect_workspace(path: &str) -> Result<DetectedWorkspace, NoteyError> {
     let name = canonical
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("workspace")
-        .to_string();
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| fallback_workspace_name(&canonical));
     Ok(DetectedWorkspace {
         name,
         path: path_to_str(&canonical)?,
