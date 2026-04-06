@@ -98,7 +98,7 @@ jobs:
 
       - name: Build debug binary (Linux)
         if: runner.os == 'Linux'
-        run: npx tauri build --debug
+        run: npx tauri build --debug --no-bundle
 
       - name: E2E tests (Linux)
         if: runner.os == 'Linux'
