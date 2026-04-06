@@ -104,13 +104,13 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 ### Deferred from: code review pass 3 of 3-1-fts5-virtual-table-sync-triggers (2026-04-06)
 
-- **CI/E2E/bindings changes beyond story scope** — Infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command addition.
-- **`upsert_workspace` TOCTOU gap** — Directory could be deleted between `detect_workspace` canonicalizing and `upsert_workspace` inserting. Internal function, inherent to filesystem ops. [src-tauri/src/services/workspace_service.rs:57-80]
-- **Mutex poisoning recovery pattern** — `unwrap_or_else(|e| e.into_inner())` pre-existing across all Tauri commands, not introduced by this change. [src-tauri/src/commands/notes.rs]
-- **`reassignNoteWorkspace` .catch() swallows reload errors** — Store functions return `{status}` and handle errors internally, so `Promise.all` only rejects on unexpected exceptions. Safety net pattern. [src/features/workspace/store.ts:66-69]
-- **`detect_workspace` walks to root without depth limit** — Bounded by filesystem depth (~20 levels), local webview only. [src-tauri/src/services/workspace_service.rs]
-- **`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs** — Extremely unlikely edge case (.git at root or non-UTF-8 dir names), no data corruption. [src-tauri/src/services/workspace_service.rs:99-103]
-- **`initWorkspace` continues after `listWorkspaces` failure** — Gracefully degraded state, design decision needed for failure modes. [src/features/workspace/store.ts:112-125]
+- ~~**CI/E2E/bindings changes beyond story scope** — Infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command addition.~~ CLOSED: no action needed — bindings auto-generated, CI stable, ACL configured
+- ~~**`upsert_workspace` TOCTOU gap** — Directory could be deleted between `detect_workspace` canonicalizing and `upsert_workspace` inserting.~~ → Added `is_dir()` re-check in `upsert_workspace` (commit 77e6337)
+- ~~**Mutex poisoning recovery pattern** — `unwrap_or_else(|e| e.into_inner())` pre-existing across all Tauri commands.~~ → Added `eprintln!` warning before recovery across 13 instances (commit 77e6337)
+- ~~**`reassignNoteWorkspace` .catch() swallows reload errors** — Store functions return `{status}` and handle errors internally, so `Promise.all` only rejects on unexpected exceptions. Safety net pattern.~~ CLOSED: correct safety net — both reload functions handle errors internally via workspaceError/notesError state
+- ~~**`detect_workspace` walks to root without depth limit**~~ → Capped at MAX_DETECT_DEPTH (20 levels) (commit 77e6337)
+- ~~**`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs**~~ → Replaced with deterministic FNV-1a `workspace_<hex8>` hash (commit 77e6337)
+- ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ CLOSED: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
 
 ### Deferred from: backend robustness review (2026-04-06)
 

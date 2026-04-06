@@ -82,7 +82,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       set({ filteredNotes: result.data, isLoadingNotes: false, notesError: null });
     } else {
       console.error('listNotes failed:', result.error);
-      set({ isLoadingNotes: false, notesError: 'Failed to load notes' });
+      set({ isLoadingNotes: false, notesError: 'Failed to load notes \u2014 switch workspace to retry' });
     }
   },
 
@@ -92,7 +92,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       set({ workspaces: result.data, workspaceError: null });
     } else {
       console.error('listWorkspaces failed:', result.error);
-      set({ workspaceError: 'Failed to load workspaces' });
+      set({ workspaceError: 'Failed to load workspaces \u2014 reopen to retry' });
     }
   },
 
@@ -114,7 +114,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       set({ workspaces: listResult.data, workspaceError: null });
     } else {
       console.error('listWorkspaces failed:', listResult.error);
-      set({ workspaceError: 'Failed to load workspaces' });
+      set({ workspaceError: 'Failed to load workspaces \u2014 reopen to retry' });
     }
     // Set active ��� lookup name from workspaces array
     const found = get().workspaces.find((w) => w.id === ws.id);
