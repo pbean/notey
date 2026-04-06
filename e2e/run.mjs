@@ -6,7 +6,7 @@
  *
  * Prerequisites:
  *   - tauri-driver installed (cargo install tauri-driver)
- *   - WebKitWebDriver available (webkitgtk-6.0 package)
+ *   - WebKitWebDriver available (webkit2gtk-driver package)
  *   - Debug binary built (npx tauri build --debug --no-bundle)
  */
 

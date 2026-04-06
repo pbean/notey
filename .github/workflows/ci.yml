@@ -94,14 +94,12 @@ jobs:
 
       - name: Install tauri-driver (Linux)
         if: runner.os == 'Linux'
-        run: cargo install tauri-driver || true
+        run: cargo install tauri-driver
 
       - name: Build debug binary (Linux)
         if: runner.os == 'Linux'
-        run: npx tauri build --debug || true
+        run: npx tauri build --debug
 
       - name: E2E tests (Linux)
         if: runner.os == 'Linux'
-        run: |
-          test -f src-tauri/target/debug/tauri-app || { echo "Debug binary not found"; exit 1; }
-          xvfb-run node e2e/run.mjs
+        run: xvfb-run node e2e/run.mjs

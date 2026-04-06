@@ -102,8 +102,8 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - ~~**`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.~~ → Awaited with `Promise.all` + `.catch()` guard so reloads complete before returning and unexpected throws don't swallow `result.data`
 
-### Deferred from: fix-linux-ci-e2e-timeout review (2026-04-05)
+### ~~Deferred from: fix-linux-ci-e2e-timeout review (2026-04-05)~~ DONE
 
-- **`cargo install tauri-driver || true` swallows install failures** — If cargo install fails (network, compilation), the CI silently proceeds and E2E times out with no diagnostic. Remove `|| true` or add `which tauri-driver` post-install check. (`ci.yml:97`)
-- **`npx tauri build --debug || true` swallows build failures** — Same pattern. The `test -f` guard catches missing binaries but loses all build diagnostics. Remove `|| true` and let the step fail noisily. (`ci.yml:101`)
-- **Stale comment references webkitgtk-6.0** — `e2e/run.mjs:9` says "webkitgtk-6.0 package" but the project uses WebKitGTK 4.1. Update to reference `webkit2gtk-driver`.
+- ~~**`cargo install tauri-driver || true` swallows install failures** — If cargo install fails (network, compilation), the CI silently proceeds and E2E times out with no diagnostic. Remove `|| true` or add `which tauri-driver` post-install check. (`ci.yml:97`)~~ → Removed `|| true`
+- ~~**`npx tauri build --debug || true` swallows build failures** — Same pattern. The `test -f` guard catches missing binaries but loses all build diagnostics. Remove `|| true` and let the step fail noisily. (`ci.yml:101`)~~ → Removed `|| true` and redundant `test -f` guard
+- ~~**Stale comment references webkitgtk-6.0** — `e2e/run.mjs:9` says "webkitgtk-6.0 package" but the project uses WebKitGTK 4.1. Update to reference `webkit2gtk-driver`.~~ → Updated to `webkit2gtk-driver`
