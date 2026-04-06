@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 .claude/.story-automator-active
 .codex/auth.json
+.claude/
+.codex/
