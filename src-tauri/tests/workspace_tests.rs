@@ -857,7 +857,8 @@ fn test_create_workspace_canonicalizes_symlink() {
 // Review-3.1-pass2: detect_workspace rejects paths that canonicalize to non-UTF-8.
 // The API takes &str, so direct non-UTF-8 input is impossible. The real edge case
 // is a UTF-8 symlink resolving to a directory with non-UTF-8 bytes in its name.
-#[cfg(unix)]
+// Linux-only: macOS APFS rejects non-UTF-8 filenames (Illegal byte sequence).
+#[cfg(target_os = "linux")]
 #[test]
 fn test_detect_workspace_rejects_non_utf8_canonical_path() {
     use std::ffi::OsStr;

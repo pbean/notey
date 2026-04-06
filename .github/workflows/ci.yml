@@ -94,7 +94,7 @@ jobs:
 
       - name: Install tauri-driver (Linux)
         if: runner.os == 'Linux'
-        run: cargo install tauri-driver
+        run: cargo install --force tauri-driver
 
       - name: Build debug binary (Linux)
         if: runner.os == 'Linux'
