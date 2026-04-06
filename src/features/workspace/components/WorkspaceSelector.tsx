@@ -23,6 +23,7 @@ export function WorkspaceSelector() {
   const setAllWorkspaces = useWorkspaceStore((s) => s.setAllWorkspaces);
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const workspaceError = useWorkspaceStore((s) => s.workspaceError);
+  const notesError = useWorkspaceStore((s) => s.notesError);
 
   const totalNoteCount = workspaces.reduce((sum, ws) => sum + ws.noteCount, 0);
 
@@ -69,6 +70,18 @@ export function WorkspaceSelector() {
             }}
           >
             {workspaceError}
+          </div>
+        )}
+        {notesError && (
+          <div
+            role="alert"
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              color: 'var(--text-error, #e55)',
+            }}
+          >
+            {notesError}
           </div>
         )}
         <DropdownMenuItem onClick={() => setAllWorkspaces()} aria-current={isAllWorkspaces || undefined}>

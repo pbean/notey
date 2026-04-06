@@ -260,6 +260,23 @@ claude-sonnet-4-6
 - [x] [Review][Defer] `loadFilteredNotes` clears notes on error vs `loadWorkspaces` keeping stale data — pre-existing inconsistency [src/features/workspace/store.ts:79-82]
 - [x] [Review][Defer] Windows `canonicalize` returns UNC-prefixed paths in UI — pre-existing platform issue [src-tauri/src/services/workspace_service.rs:43]
 
+### Review Findings (Pass 3 — 2026-04-06)
+
+- [x] [Review][Decision] `rebuild_fts_index` Tauri command added beyond story scope — ACCEPTED: intentional scope expansion from review pass 2 (drift recovery). TODO: mutex held during full rebuild can freeze UI on large DBs — consider spawn_blocking or progress feedback in a future story. [src-tauri/src/commands/notes.rs:58-63, src-tauri/src/services/notes.rs:104-106]
+- [x] [Review][Decision] Workspace service refactoring beyond story scope — ACCEPTED: review-driven fixes from passes 1 and 2 (validation hardening, error propagation, async awaits, dunce crate). Each has its own spec file. Note: this diff includes substantial non-FTS5 changes surfaced during story 3.1 code review.
+- [x] [Review][Decision] `loadFilteredNotes` error path keeps stale notes — ACCEPTED: stale-data-with-error is the intended pattern (consistent with workspaceError). Gap closed by patch #4 (add notesError UI consumer). [src/features/workspace/store.ts]
+- [x] [Review][Patch] `notesError` set but never displayed in UI — FIXED: added `notesError` consumer in WorkspaceSelector.tsx, mirroring workspaceError pattern. [src/features/workspace/components/WorkspaceSelector.tsx]
+- [x] [Review][Patch] `upsert_workspace` doesn't trim name — FIXED: added `.trim()` to name in `upsert_workspace`. [src-tauri/src/services/workspace_service.rs:63]
+- [x] [Review][Patch] Test uses hardcoded path `/tmp/notey-does-not-exist-xyz` — FIXED: replaced with TempDir create+drop pattern for reliable nonexistent path. [src-tauri/tests/workspace_tests.rs]
+- [x] [Review][Defer] CI/E2E/bindings changes beyond story scope — infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command
+- [x] [Review][Defer] `upsert_workspace` TOCTOU gap — directory could be deleted between detect_workspace canonicalizing and upsert_workspace inserting. Internal function, inherent to filesystem ops. [src-tauri/src/services/workspace_service.rs:57-80]
+- [x] [Review][Defer] Mutex poisoning recovery pattern — `unwrap_or_else(|e| e.into_inner())` pre-existing across all Tauri commands, not introduced by this change [src-tauri/src/commands/notes.rs]
+- [x] [Review][Defer] `reassignNoteWorkspace` .catch() swallows reload errors — store functions return {status} and handle errors internally, so Promise.all only rejects on unexpected exceptions. Safety net pattern. [src/features/workspace/store.ts:66-69]
+- [x] [Review][Defer] `detect_workspace` walks to root without depth limit — bounded by filesystem depth (~20 levels), local webview only [src-tauri/src/services/workspace_service.rs]
+- [x] [Review][Defer] `detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs — extremely unlikely edge case, no data corruption [src-tauri/src/services/workspace_service.rs:99-103]
+- [x] [Review][Defer] `initWorkspace` continues after `listWorkspaces` failure — gracefully degraded state, design decision needed for failure modes [src/features/workspace/store.ts:112-125]
+
 ## Change Log
 
+- 2026-04-06: code review pass 3 — 3 decision-needed, 3 patch, 7 deferred, 8 dismissed
 - 2026-04-05: feat(story-3.1): FTS5 virtual table, sync triggers, BM25 rank config, backfill migration + 9 integration tests

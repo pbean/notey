@@ -102,6 +102,16 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - ~~**`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.~~ → Awaited with `Promise.all` + `.catch()` guard so reloads complete before returning and unexpected throws don't swallow `result.data`
 
+### Deferred from: code review pass 3 of 3-1-fts5-virtual-table-sync-triggers (2026-04-06)
+
+- **CI/E2E/bindings changes beyond story scope** — Infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command addition.
+- **`upsert_workspace` TOCTOU gap** — Directory could be deleted between `detect_workspace` canonicalizing and `upsert_workspace` inserting. Internal function, inherent to filesystem ops. [src-tauri/src/services/workspace_service.rs:57-80]
+- **Mutex poisoning recovery pattern** — `unwrap_or_else(|e| e.into_inner())` pre-existing across all Tauri commands, not introduced by this change. [src-tauri/src/commands/notes.rs]
+- **`reassignNoteWorkspace` .catch() swallows reload errors** — Store functions return `{status}` and handle errors internally, so `Promise.all` only rejects on unexpected exceptions. Safety net pattern. [src/features/workspace/store.ts:66-69]
+- **`detect_workspace` walks to root without depth limit** — Bounded by filesystem depth (~20 levels), local webview only. [src-tauri/src/services/workspace_service.rs]
+- **`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs** — Extremely unlikely edge case (.git at root or non-UTF-8 dir names), no data corruption. [src-tauri/src/services/workspace_service.rs:99-103]
+- **`initWorkspace` continues after `listWorkspaces` failure** — Gracefully degraded state, design decision needed for failure modes. [src/features/workspace/store.ts:112-125]
+
 ### ~~Deferred from: fix-linux-ci-e2e-timeout review (2026-04-05)~~ DONE
 
 - ~~**`cargo install tauri-driver || true` swallows install failures** — If cargo install fails (network, compilation), the CI silently proceeds and E2E times out with no diagnostic. Remove `|| true` or add `which tauri-driver` post-install check. (`ci.yml:97`)~~ → Removed `|| true`

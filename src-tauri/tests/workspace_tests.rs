@@ -798,7 +798,10 @@ fn test_create_workspace_rejects_relative_path() {
 #[test]
 fn test_create_workspace_rejects_nonexistent_path() {
     let conn = setup_test_db();
-    let result = workspace_service::create_workspace(&conn, "test", "/tmp/notey-does-not-exist-xyz");
+    let gone = TempDir::new().unwrap();
+    let gone_path = gone.path().to_str().unwrap().to_string();
+    drop(gone); // delete the directory so the path no longer exists
+    let result = workspace_service::create_workspace(&conn, "test", &gone_path);
     assert!(
         matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("Cannot resolve path")),
         "expected Validation error for non-existent path, got: {:?}",

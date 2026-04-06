@@ -59,6 +59,7 @@ fn upsert_workspace(
     name: &str,
     canonical_path: &str,
 ) -> Result<Workspace, NoteyError> {
+    let name = name.trim();
     let now = Utc::now().to_rfc3339();
 
     match workspace_repo::insert_workspace(conn, name, canonical_path, &now) {
