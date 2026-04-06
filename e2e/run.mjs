@@ -55,11 +55,16 @@ function assert(condition, message) {
 // --- Setup ---
 
 async function startDriver() {
-  tauriDriver = spawn('tauri-driver', [], { stdio: ['ignore', 'pipe', 'pipe'] });
-  tauriDriver.on('error', (e) => { throw e; });
+  tauriDriver = spawn('tauri-driver', [], { stdio: ['ignore', 'ignore', 'pipe'] });
 
-  // Poll until the driver is accepting connections
-  for (let i = 0; i < 30; i++) {
+  let driverStderr = '';
+  let spawnError = null;
+  tauriDriver.stderr.on('data', (chunk) => { driverStderr += chunk; });
+  tauriDriver.on('error', (e) => { spawnError = e; });
+
+  // Poll until the driver is accepting connections (30s — CI runners are slow to cold-start)
+  for (let i = 0; i < 60; i++) {
+    if (spawnError) break;
     try {
       await fetch('http://127.0.0.1:4444/status');
       return;
@@ -67,7 +72,10 @@ async function startDriver() {
       await pause(500);
     }
   }
-  throw new Error('tauri-driver did not start within 15 seconds');
+
+  // Log captured stderr before throwing so CI shows why the driver failed
+  if (driverStderr) console.error('tauri-driver stderr:\n' + driverStderr);
+  throw spawnError || new Error('tauri-driver did not start within 30 seconds');
 }
 
 function stopDriver() {
