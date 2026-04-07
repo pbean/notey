@@ -7,6 +7,13 @@
 
 @theme inline {
 
+    --text-xs: 11px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-lg: 16px;
+    --text-xl: 18px;
+    --text-2xl: 22px;
+
     --font-heading: var(--font-sans);
 
     --font-sans: 'Geist Variable', sans-serif;

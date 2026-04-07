@@ -9,6 +9,8 @@ import { SearchResultItem } from './SearchResultItem';
  */
 export function SearchOverlay() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
   const query = useSearchStore((s) => s.query);
   const results = useSearchStore((s) => s.results);
   const selectedIndex = useSearchStore((s) => s.selectedIndex);
@@ -24,6 +26,9 @@ export function SearchOverlay() {
       if (e.key === 'Escape') {
         e.preventDefault();
         useSearchStore.getState().closeSearch();
+        // Return focus to the editor (AC 8)
+        const editor = document.querySelector<HTMLElement>('.cm-content');
+        editor?.focus();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         useSearchStore.getState().selectNext();
@@ -36,18 +41,34 @@ export function SearchOverlay() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Scroll selected item into view
+  useEffect(() => {
+    if (!listRef.current || results.length === 0 || selectedIndex < 0) return;
+    const selected = listRef.current.children[selectedIndex] as HTMLElement | undefined;
+    selected?.scrollIntoView?.({ block: 'nearest' });
+  }, [selectedIndex, results.length]);
+
   /** Handle input changes — search immediately, no debounce. */
   const handleInput = async (value: string) => {
+    const requestId = ++requestIdRef.current;
     useSearchStore.getState().setQuery(value);
     if (value === '') {
       useSearchStore.getState().setResults([]);
       return;
     }
-    const result = await commands.searchNotes(value, null);
-    if (result.status === 'ok') {
-      useSearchStore.getState().setResults(result.data);
-    } else {
-      console.error('searchNotes failed:', result.error);
+    try {
+      const result = await commands.searchNotes(value, null);
+      // Guard against stale results from earlier requests
+      if (requestIdRef.current !== requestId) return;
+      if (result.status === 'ok') {
+        useSearchStore.getState().setResults(result.data);
+      } else {
+        console.error('searchNotes failed:', result.error);
+        useSearchStore.getState().setResults([]);
+      }
+    } catch (err) {
+      if (requestIdRef.current !== requestId) return;
+      console.error('searchNotes exception:', err);
       useSearchStore.getState().setResults([]);
     }
   };
@@ -104,8 +125,15 @@ export function SearchOverlay() {
             border: '1px solid var(--border-default)',
             borderRadius: '4px',
             color: 'var(--text-primary)',
-            outline: 'none',
+            outline: '2px solid transparent',
+            outlineOffset: '2px',
             width: '100%',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.outline = '2px solid var(--focus-ring)';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.outline = '2px solid transparent';
           }}
         />
 
@@ -139,6 +167,7 @@ export function SearchOverlay() {
         {/* Results list */}
         {results.length > 0 && (
           <div
+            ref={listRef}
             role="listbox"
             style={{
               marginTop: 'var(--space-3)',

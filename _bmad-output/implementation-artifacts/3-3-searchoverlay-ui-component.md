@@ -1,6 +1,6 @@
 # Story 3.3: SearchOverlay UI Component
 
-Status: review
+Status: done
 
 ## Story
 
@@ -79,6 +79,22 @@ so that I can visually identify the note I'm looking for.
   - [x] 8.1 `src/features/search/store.test.ts` — store state and actions
   - [x] 8.2 `src/features/search/components/SearchOverlay.test.tsx` — render, input, search invocation, Esc, empty state
   - [x] 8.3 `src/features/search/components/HighlightedSnippet.test.tsx` — safe HTML parsing
+
+### Review Findings
+
+- [x] [Review][Decision] "Enter open" hint shown but Enter key not implemented — dismissed: left as-is per AC 7 literal wording; story 3.4 owns the behavior
+- [x] [Review][Decision] `cursor: pointer` on result items but no click handler — dismissed: left as-is; story 3.4 adds the handler
+- [x] [Review][Decision] Font size spec contradiction — resolved: overrode Tailwind typography tokens in `@theme inline` to match UX spec (--text-base: 14px, --text-sm: 13px, --text-xs: 11px)
+- [x] [Review][Patch] Race condition: stale search results — fixed: added request counter ref with staleness guard [SearchOverlay.tsx]
+- [x] [Review][Patch] `selectNext` sets `selectedIndex` to -1 when results are empty — fixed: no-op when results empty [store.ts]
+- [x] [Review][Patch] `setResults` does not reset `selectedIndex` — fixed: reset to 0 on setResults [store.ts]
+- [x] [Review][Patch] No try/catch around `await commands.searchNotes` — fixed: wrapped in try/catch [SearchOverlay.tsx]
+- [x] [Review][Patch] Esc does not return focus to the editor — fixed: focus .cm-content after closeSearch [SearchOverlay.tsx]
+- [x] [Review][Patch] Missing focus ring on search input — fixed: 2px var(--focus-ring) outline with 2px offset on focus [SearchOverlay.tsx]
+- [x] [Review][Patch] No hover styling on result items — fixed: added onMouseEnter/onMouseLeave with var(--bg-surface) [SearchResultItem.tsx]
+- [x] [Review][Patch] `formatRelativeDate` edge cases — fixed: guard NaN and negative diffMs [SearchResultItem.tsx]
+- [x] [Review][Patch] `parseSnippet` greedy regex — fixed: changed inner match to non-greedy `(.*?)` [HighlightedSnippet.tsx]
+- [x] [Review][Patch] No scroll-into-view — fixed: added useEffect with scrollIntoView on selectedIndex change [SearchOverlay.tsx]
 
 ## Dev Notes
 

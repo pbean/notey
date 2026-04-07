@@ -40,11 +40,12 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
   closeSearch: () => set({ isOpen: false, query: '', results: [], selectedIndex: 0 }),
   selectNext: () => {
     const { selectedIndex, results } = get();
+    if (results.length === 0) return;
     set({ selectedIndex: Math.min(selectedIndex + 1, results.length - 1) });
   },
   selectPrev: () => {
     const { selectedIndex } = get();
     set({ selectedIndex: Math.max(selectedIndex - 1, 0) });
   },
-  setResults: (results) => set({ results }),
+  setResults: (results) => set({ results, selectedIndex: 0 }),
 }));

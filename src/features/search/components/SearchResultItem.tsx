@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SearchResult } from '../../../generated/bindings';
 import { HighlightedSnippet } from './HighlightedSnippet';
 
@@ -13,14 +14,19 @@ interface SearchResultItemProps {
  * Uses role="option" and aria-selected for listbox accessibility.
  */
 export function SearchResultItem({ result, isSelected }: SearchResultItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const highlighted = isSelected || isHovered;
+
   return (
     <div
       data-testid={`search-result-${result.id}`}
       role="option"
       aria-selected={isSelected}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         padding: 'var(--space-3)',
-        background: isSelected ? 'var(--bg-surface)' : 'transparent',
+        background: highlighted ? 'var(--bg-surface)' : 'transparent',
         cursor: 'pointer',
       }}
     >
@@ -73,8 +79,12 @@ export function SearchResultItem({ result, isSelected }: SearchResultItemProps) 
  */
 function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
+  if (isNaN(date.getTime())) return '';
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) {
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+  }
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);

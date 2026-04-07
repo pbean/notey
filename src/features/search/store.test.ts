@@ -97,9 +97,22 @@ describe('useSearchStore', () => {
     expect(useSearchStore.getState().results).toEqual(results);
   });
 
-  it('selectNext does not go below -1 when results are empty', () => {
-    // With empty results, results.length - 1 = -1
+  it('selectNext is a no-op when results are empty', () => {
     useSearchStore.getState().selectNext();
-    expect(useSearchStore.getState().selectedIndex).toBe(-1);
+    expect(useSearchStore.getState().selectedIndex).toBe(0);
+  });
+
+  it('setResults resets selectedIndex to 0', () => {
+    useSearchStore.getState().setResults([
+      { id: 1, title: 'A', snippet: '', workspaceName: null, updatedAt: '', format: 'markdown' },
+      { id: 2, title: 'B', snippet: '', workspaceName: null, updatedAt: '', format: 'markdown' },
+    ]);
+    useSearchStore.getState().selectNext();
+    expect(useSearchStore.getState().selectedIndex).toBe(1);
+
+    useSearchStore.getState().setResults([
+      { id: 3, title: 'C', snippet: '', workspaceName: null, updatedAt: '', format: 'markdown' },
+    ]);
+    expect(useSearchStore.getState().selectedIndex).toBe(0);
   });
 });

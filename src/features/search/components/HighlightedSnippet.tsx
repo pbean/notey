@@ -21,7 +21,7 @@ export function HighlightedSnippet({ snippet }: HighlightedSnippetProps) {
 function parseSnippet(snippet: string): ReactNode[] {
   const parts = snippet.split(/(<mark>.*?<\/mark>)/g);
   return parts.map((part, i) => {
-    const match = part.match(/^<mark>(.*)<\/mark>$/);
+    const match = part.match(/^<mark>(.*?)<\/mark>$/);
     if (match) {
       return (
         <span
