@@ -31,6 +31,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::workspace::detect_workspace,
         commands::workspace::resolve_workspace,
         commands::system::get_current_dir,
+        commands::search::search_notes,
     ])
 }
 

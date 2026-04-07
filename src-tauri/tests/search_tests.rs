@@ -5,6 +5,7 @@ use rusqlite::params;
 use helpers::factories::{create_temp_db, NoteBuilder};
 use tauri_app_lib::db;
 use tauri_app_lib::services::notes;
+use tauri_app_lib::services::search_service;
 
 // P0-INT-005b: FTS5 virtual table and all 3 triggers exist in sqlite_master
 #[test]
@@ -467,4 +468,217 @@ fn test_fts5_rapid_crud_consistency() {
         )
         .expect("query");
     assert_eq!(c_count, 0, "hard-deleted note_c should be removed from FTS");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Story 3.2: search_notes service integration tests
+// ═══════════════════════════════════════════════════════════════════════
+
+// P1-INT: Ranked results — title matches rank higher than content-only matches
+#[test]
+fn test_search_notes_ranked_results() {
+    let (conn, _dir) = create_temp_db();
+
+    // Content-heavy note (many occurrences)
+    NoteBuilder::new()
+        .title("generic coding note")
+        .content("inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank inttest_rank")
+        .insert(&conn);
+
+    // Title-match note (10x weight)
+    NoteBuilder::new()
+        .title("inttest_rank")
+        .content("a completely different topic here")
+        .insert(&conn);
+
+    let results = search_service::search_notes(&conn, "inttest_rank", None)
+        .expect("search failed");
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].title, "inttest_rank", "title match should rank first due to bm25(10.0, 1.0)");
+}
+
+// P1-INT: Workspace filter — only notes from specified workspace returned
+#[test]
+fn test_search_notes_workspace_filter() {
+    let (conn, _dir) = create_temp_db();
+
+    conn.execute(
+        "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, '2026-01-01T00:00:00+00:00')",
+        params!["ws-alpha", "/tmp/ws-alpha"],
+    ).expect("insert ws-alpha");
+    let ws_alpha = conn.last_insert_rowid();
+
+    conn.execute(
+        "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, '2026-01-01T00:00:00+00:00')",
+        params!["ws-beta", "/tmp/ws-beta"],
+    ).expect("insert ws-beta");
+    let ws_beta = conn.last_insert_rowid();
+
+    NoteBuilder::new()
+        .title("alpha workspace note")
+        .content("wsfilt_unique_term")
+        .workspace_id(ws_alpha)
+        .insert(&conn);
+
+    NoteBuilder::new()
+        .title("beta workspace note")
+        .content("wsfilt_unique_term")
+        .workspace_id(ws_beta)
+        .insert(&conn);
+
+    let results = search_service::search_notes(&conn, "wsfilt_unique_term", Some(ws_alpha))
+        .expect("search failed");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "alpha workspace note");
+    assert_eq!(results[0].workspace_name, Some("ws-alpha".to_string()));
+}
+
+// P1-INT: Trashed exclusion — trashed notes not in search results
+#[test]
+fn test_search_notes_excludes_trashed() {
+    let (conn, _dir) = create_temp_db();
+
+    let note = NoteBuilder::new()
+        .title("trashtest note")
+        .content("trashtest_unique_xyz")
+        .insert(&conn);
+
+    NoteBuilder::new()
+        .title("visible note")
+        .content("trashtest_unique_xyz")
+        .insert(&conn);
+
+    notes::trash_note(&conn, note.id).expect("trash note");
+
+    let results = search_service::search_notes(&conn, "trashtest_unique_xyz", None)
+        .expect("search failed");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "visible note");
+}
+
+// P1-INT: Empty query returns empty vec (no error)
+#[test]
+fn test_search_notes_empty_query() {
+    let (conn, _dir) = create_temp_db();
+
+    NoteBuilder::new()
+        .title("some note")
+        .content("some content")
+        .insert(&conn);
+
+    let results = search_service::search_notes(&conn, "", None).expect("search failed");
+    assert!(results.is_empty());
+
+    let results = search_service::search_notes(&conn, "   ", None).expect("search failed");
+    assert!(results.is_empty());
+}
+
+// P1-INT: Result limit 50 — more than 50 matching notes returns max 50
+#[test]
+fn test_search_notes_limit_50() {
+    let (conn, _dir) = create_temp_db();
+
+    for i in 0..55 {
+        NoteBuilder::new()
+            .title(&format!("limit_note_{}", i))
+            .content("limit_inttest_unique_xyz")
+            .insert(&conn);
+    }
+
+    let results = search_service::search_notes(&conn, "limit_inttest_unique_xyz", None)
+        .expect("search failed");
+    assert_eq!(results.len(), 50, "should return max 50 results");
+}
+
+// P1-INT: workspace_name populated via LEFT JOIN (and None for unscoped notes)
+#[test]
+fn test_search_notes_workspace_name_left_join() {
+    let (conn, _dir) = create_temp_db();
+
+    conn.execute(
+        "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, '2026-01-01T00:00:00+00:00')",
+        params!["named-workspace", "/tmp/named-ws"],
+    ).expect("insert workspace");
+    let ws_id = conn.last_insert_rowid();
+
+    NoteBuilder::new()
+        .title("scoped note")
+        .content("leftjoin_unique_xyz")
+        .workspace_id(ws_id)
+        .insert(&conn);
+
+    NoteBuilder::new()
+        .title("unscoped note")
+        .content("leftjoin_unique_xyz")
+        .insert(&conn);
+
+    let results = search_service::search_notes(&conn, "leftjoin_unique_xyz", None)
+        .expect("search failed");
+
+    assert_eq!(results.len(), 2);
+
+    let scoped = results.iter().find(|r| r.title == "scoped note").expect("scoped not found");
+    assert_eq!(scoped.workspace_name, Some("named-workspace".to_string()));
+
+    let unscoped = results.iter().find(|r| r.title == "unscoped note").expect("unscoped not found");
+    assert!(unscoped.workspace_name.is_none());
+}
+
+// P1-INT: FTS5 special characters don't cause panic
+#[test]
+fn test_search_notes_fts5_special_chars() {
+    let (conn, _dir) = create_temp_db();
+
+    NoteBuilder::new()
+        .title("safe note")
+        .content("hello world")
+        .insert(&conn);
+
+    let special = vec![
+        "hello\"world", "hello*", "NOT", "OR", "AND", "NEAR",
+        "hello:world", "(hello)", "^hello", "\"", "*", "NOT OR AND",
+    ];
+
+    for q in special {
+        let result = search_service::search_notes(&conn, q, None);
+        assert!(result.is_ok(), "query '{}' should not error: {:?}", q, result.err());
+    }
+}
+
+// P1-INT: SearchResult camelCase serialization
+#[test]
+fn test_search_notes_result_serialization() {
+    let (conn, _dir) = create_temp_db();
+
+    conn.execute(
+        "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, '2026-01-01T00:00:00+00:00')",
+        params!["serial-ws", "/tmp/serial-ws"],
+    ).expect("insert workspace");
+    let ws_id = conn.last_insert_rowid();
+
+    NoteBuilder::new()
+        .title("serial note")
+        .content("serialization_unique_xyz")
+        .workspace_id(ws_id)
+        .insert(&conn);
+
+    let results = search_service::search_notes(&conn, "serialization_unique_xyz", None)
+        .expect("search failed");
+
+    assert_eq!(results.len(), 1);
+    let json = serde_json::to_value(&results[0]).expect("serialize failed");
+
+    assert!(json.get("id").is_some());
+    assert!(json.get("title").is_some());
+    assert!(json.get("snippet").is_some());
+    assert!(json.get("workspaceName").is_some(), "should use camelCase");
+    assert!(json.get("updatedAt").is_some(), "should use camelCase");
+    assert!(json.get("format").is_some());
+
+    // Verify snippet contains <mark> tags
+    let snippet = json["snippet"].as_str().unwrap();
+    assert!(snippet.contains("<mark>"), "snippet should contain <mark> highlight tags");
 }

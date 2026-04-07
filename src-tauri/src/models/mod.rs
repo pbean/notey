@@ -17,3 +17,14 @@ pub struct Note {
     pub deleted_at: Option<String>,
     pub is_trashed: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    pub id: i64,
+    pub title: String,
+    pub snippet: String,
+    pub workspace_name: Option<String>,
+    pub updated_at: String,
+    pub format: String,
+}
