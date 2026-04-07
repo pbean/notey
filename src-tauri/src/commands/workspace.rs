@@ -10,7 +10,7 @@ use super::recover_poisoned_db;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn create_workspace(
+pub fn create_workspace(
     state: State<'_, Mutex<rusqlite::Connection>>,
     name: String,
     path: String,
@@ -21,7 +21,7 @@ pub async fn create_workspace(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_workspaces(
+pub fn list_workspaces(
     state: State<'_, Mutex<rusqlite::Connection>>,
 ) -> Result<Vec<WorkspaceInfo>, NoteyError> {
     let conn = state.lock().unwrap_or_else(recover_poisoned_db);
@@ -30,7 +30,7 @@ pub async fn list_workspaces(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_workspace(
+pub fn get_workspace(
     state: State<'_, Mutex<rusqlite::Connection>>,
     id: i64,
 ) -> Result<WorkspaceInfo, NoteyError> {
@@ -40,7 +40,7 @@ pub async fn get_workspace(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn detect_workspace(
+pub fn detect_workspace(
     path: String,
 ) -> Result<DetectedWorkspace, NoteyError> {
     services::workspace_service::detect_workspace(&path)
@@ -48,7 +48,7 @@ pub async fn detect_workspace(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn resolve_workspace(
+pub fn resolve_workspace(
     state: State<'_, Mutex<rusqlite::Connection>>,
     path: String,
 ) -> Result<Workspace, NoteyError> {

@@ -640,6 +640,9 @@ fn test_search_notes_fts5_special_chars() {
     let special = vec![
         "hello\"world", "hello*", "NOT", "OR", "AND", "NEAR",
         "hello:world", "(hello)", "^hello", "\"", "*", "NOT OR AND",
+        "to-do", "foo-bar", "C++", "C#", "hello/world", "NEAR/5",
+        "file.txt", "foo@bar.com", "#tag", "a & b", "a | b",
+        "[bracket]", "hello\\world",
     ];
 
     for q in special {

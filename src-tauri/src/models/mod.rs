@@ -18,6 +18,7 @@ pub struct Note {
     pub is_trashed: bool,
 }
 
+/// A single search result with a content snippet and workspace context.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {

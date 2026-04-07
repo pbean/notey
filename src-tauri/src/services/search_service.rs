@@ -4,14 +4,15 @@ use crate::errors::NoteyError;
 use crate::models::SearchResult;
 
 /// Sanitize user input for FTS5 MATCH syntax.
-/// Strips special characters and FTS5 keyword operators to prevent syntax errors.
+///
+/// Replaces all non-alphanumeric, non-whitespace characters with spaces, then
+/// removes FTS5 keyword operators (`AND`, `OR`, `NOT`, `NEAR`). This allowlist
+/// approach ensures unknown punctuation (hyphens, slashes, etc.) can never
+/// reach the FTS5 parser and cause syntax errors.
 fn sanitize_fts_query(query: &str) -> String {
     let cleaned: String = query
         .chars()
-        .map(|c| match c {
-            '"' | '*' | '(' | ')' | ':' | '^' => ' ',
-            _ => c,
-        })
+        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
         .collect();
 
     let fts_keywords = ["AND", "OR", "NOT", "NEAR"];
@@ -27,6 +28,10 @@ fn sanitize_fts_query(query: &str) -> String {
     tokens.join(" ")
 }
 
+/// Search notes using FTS5 full-text search with BM25 ranking.
+///
+/// Returns up to 50 results ordered by relevance (title weighted 10x over content).
+/// An empty or operator-only query returns an empty vec without hitting the database.
 pub fn search_notes(
     conn: &Connection,
     query: &str,
@@ -48,7 +53,11 @@ pub fn search_notes(
                 "SELECT
                     n.id,
                     n.title,
-                    snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32) AS snippet,
+                    CASE
+                        WHEN snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32) IN ('', '...')
+                        THEN snippet(notes_fts, 0, '<mark>', '</mark>', '...', 32)
+                        ELSE snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32)
+                    END AS snippet,
                     w.name AS workspace_name,
                     n.updated_at,
                     n.format
@@ -80,7 +89,11 @@ pub fn search_notes(
                 "SELECT
                     n.id,
                     n.title,
-                    snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32) AS snippet,
+                    CASE
+                        WHEN snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32) IN ('', '...')
+                        THEN snippet(notes_fts, 0, '<mark>', '</mark>', '...', 32)
+                        ELSE snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32)
+                    END AS snippet,
                     w.name AS workspace_name,
                     n.updated_at,
                     n.format
@@ -253,7 +266,7 @@ mod tests {
         let conn = setup_test_db();
         insert_note(&conn, "safe note", "hello world");
 
-        // These should not panic or error
+        // These should not panic or error — covers FTS5 operators, common punctuation, and edge cases
         let special_queries = vec![
             "hello\"world",
             "hello*",
@@ -267,6 +280,19 @@ mod tests {
             "\"",
             "*",
             "NOT OR AND",
+            "to-do",
+            "foo-bar",
+            "C++",
+            "C#",
+            "hello/world",
+            "NEAR/5",
+            "file.txt",
+            "foo@bar.com",
+            "#tag",
+            "a & b",
+            "a | b",
+            "[bracket]",
+            "hello\\world",
         ];
 
         for q in special_queries {
@@ -304,6 +330,14 @@ mod tests {
         assert_eq!(sanitize_fts_query("hello:world"), "hello world");
         assert_eq!(sanitize_fts_query("(test)"), "test");
         assert_eq!(sanitize_fts_query("^hello"), "hello");
+        // Allowlist catches all non-alphanumeric punctuation
+        assert_eq!(sanitize_fts_query("to-do"), "to do");
+        assert_eq!(sanitize_fts_query("C++"), "C");
+        assert_eq!(sanitize_fts_query("hello/world"), "hello world");
+        assert_eq!(sanitize_fts_query("NEAR/5"), "5");
+        assert_eq!(sanitize_fts_query("file.txt"), "file txt");
+        assert_eq!(sanitize_fts_query("foo@bar.com"), "foo bar com");
+        assert_eq!(sanitize_fts_query("#tag"), "tag");
     }
 
     #[test]

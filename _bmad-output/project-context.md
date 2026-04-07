@@ -71,7 +71,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Never use Unix timestamps — storage and JSON are always ISO 8601 strings
 - Error types via `thiserror` — `NoteyError` enum with `Serialize` derive
 - Error variants: `Database`, `NotFound`, `Workspace`, `Io`, `Validation`, `Config`
-- Tauri commands: thin handlers only — delegate all logic to service layer
+- Tauri commands: thin **synchronous** handlers only — delegate all logic to service layer. Do NOT use `async fn` for commands that only do blocking work (mutex + DB). Sync commands run on Tauri's blocking thread pool; async commands run on the tokio runtime and block it.
 - Platform code: trait-based `Platform` abstraction with `#[cfg(target_os)]` per-OS implementations
 - Database queries: parameterized only — NEVER string interpolation/concatenation
 - Use `mod.rs` pattern within module directories

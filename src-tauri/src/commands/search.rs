@@ -8,9 +8,10 @@ use crate::services;
 
 use super::recover_poisoned_db;
 
+/// Full-text search across notes, optionally filtered by workspace.
 #[tauri::command]
 #[specta::specta]
-pub async fn search_notes(
+pub fn search_notes(
     state: State<'_, Mutex<rusqlite::Connection>>,
     query: String,
     workspace_id: Option<i64>,

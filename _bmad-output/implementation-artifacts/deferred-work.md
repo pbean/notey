@@ -85,7 +85,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Double-canonicalize in resolve_workspace chain** — `resolve_workspace` calls `detect_workspace` (which canonicalizes) then `create_workspace` (which canonicalizes again). Pre-existing architecture, redundant syscall, tiny TOCTOU window.~~ → Extracted `upsert_workspace` internal function; `resolve_workspace` bypasses re-canonicalization
 - ~~**FTS5 external content drift risk** — No `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` or periodic integrity check. If notes are ever modified bypassing triggers, the FTS index silently desyncs with no recovery mechanism.~~ → Added `rebuild_fts_index` service function + Tauri command
 - ~~**FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.~~ → Closed as by-design: forward-only migration strategy, SQLite transaction wrapping prevents partial application
-- **FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command. _(Stays deferred to story 3.2)_
+- ~~**FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command.~~ → Fixed in story 3.2: allowlist-based `sanitize_fts_query` strips all non-alphanumeric characters
 - ~~**`loadFilteredNotes` error handling inconsistency** — On error, `loadFilteredNotes` clears `filteredNotes` to `[]` (causing UI flash), while `loadWorkspaces` retains stale data. Asymmetric error UX.~~ → Aligned to retain stale data + `notesError` field
 - ~~**Windows `canonicalize` UNC prefix** — `std::fs::canonicalize` on Windows returns `\\?\C:\...` paths, which display in the UI. All lookups are consistent (both use canonical form) so no functional bug, but UX issue on Windows.~~ → Replaced with `dunce::canonicalize` which strips UNC prefixes on Windows
 
@@ -111,6 +111,14 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**`detect_workspace` walks to root without depth limit**~~ → Capped at MAX_DETECT_DEPTH (20 levels) (commit 77e6337)
 - ~~**`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs**~~ → Replaced with deterministic FNV-1a `workspace_<hex8>` hash (commit 77e6337)
 - ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ CLOSED: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
+
+### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06)
+
+- **Snippet `<mark>` HTML tags — XSS risk** — `snippet()` injects raw `<mark>` HTML into the snippet field. If story 3.3's frontend renders with innerHTML, note content containing malicious HTML could execute in the webview. Story 3.3 must use safe rendering.
+- ~~**`std::Mutex` held across I/O in async handler** — Blocking mutex lock spans the full FTS5 query duration in an async context. Pre-existing pattern across all Tauri commands.~~ → Fixed: removed `async` from all 16 command handlers; Tauri now runs them on its blocking thread pool
+- **`i64`-to-`number` precision loss** — Specta 2.0.0-rc.24 maps Rust `i64` to JS `number` (IEEE 754 float). IDs beyond 2^53 lose precision silently. No BigInt support in current specta version; fixing would break 5 frontend files for zero practical risk in a notes app.
+- ~~**Title-only matches produce empty snippets** — `snippet(notes_fts, 1, ...)` targets the content column. When a match is title-only with empty content, the snippet field returns `"..."`.~~ → Fixed: SQL CASE fallback to title snippet when content snippet is empty or `...`
+- ~~**`reassign_note_workspace` not in capabilities/ACL** — Pre-existing: command registered in `collect_commands!` but missing from `default.json` and `EXPECTED_COMMANDS` in ACL tests.~~ → Fixed: added permission TOML, capability entry, and ACL test entry
 
 ### ~~Deferred from: backend robustness review (2026-04-06)~~ DONE
 

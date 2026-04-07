@@ -1,6 +1,6 @@
 # Story 3.2: Full-Text Search Tauri Command
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -401,6 +401,16 @@ Claude Opus 4.6 (1M context)
 - 8 integration tests in `search_tests.rs` covering all ACs with file-backed temp DB
 - All 137 tests pass (up from 129 baseline): +10 unit, +8 integration, -10 baseline search = net +18 new tests
 - TypeScript bindings auto-generated: `commands.searchNotes()` and `SearchResult` type confirmed in `bindings.ts`
+
+### Review Findings
+
+- [x] [Review][Patch] Incomplete FTS5 query sanitization — switched to allowlist approach (keep only alphanumeric + whitespace), added tests for hyphens, slashes, `C++`, `NEAR/5`, etc. [src-tauri/src/services/search_service.rs:sanitize_fts_query] — FIXED
+- [x] [Review][Patch] Missing mandatory rustdoc on public items — added `///` doc comments to `search_notes` command, `search_notes` service, and `SearchResult` struct — FIXED
+- [x] [Review][Defer] Snippet `<mark>` HTML tags — potential XSS if frontend renders snippets via innerHTML. Story 3.3 must use safe rendering (textContent or sanitized HTML). [src-tauri/src/services/search_service.rs:search_notes SQL] — deferred, story 3.3 concern
+- [x] [Review][Defer→Fixed] `std::Mutex` held across I/O in async command handler — removed `async` from all 16 command handlers so Tauri runs them on its blocking thread pool instead of the async runtime. Pre-existing pattern, fixed globally. — FIXED
+- [x] [Review][Defer] `i64`-to-`number` precision loss in Tauri/Specta bindings — JS `number` loses precision beyond 2^53. Specta 2.0.0-rc.24 has no BigInt mapping support; fixing would break 5 frontend files for a risk that only materializes above 9 quadrillion IDs. — not practical to fix
+- [x] [Review][Defer→Fixed] Title-only matches produce empty/ellipsis snippets — added SQL CASE fallback: when content snippet is empty or `...`, falls back to title snippet. [src-tauri/src/services/search_service.rs:search_notes SQL] — FIXED
+- [x] [Review][Defer→Fixed] Pre-existing: `reassign_note_workspace` not registered in `default.json` capabilities or `EXPECTED_COMMANDS` ACL test. Added permission TOML, capability entry, and ACL test entry. — FIXED
 
 ### File List
 

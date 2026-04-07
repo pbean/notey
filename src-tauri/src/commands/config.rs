@@ -15,7 +15,7 @@ pub struct ConfigDir(pub std::path::PathBuf);
 /// Returns the full application config.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_config(
+pub fn get_config(
     state: State<'_, Mutex<AppConfig>>,
 ) -> Result<AppConfig, NoteyError> {
     let config = state.lock().unwrap_or_else(recover_poisoned_config);
@@ -27,7 +27,7 @@ pub async fn get_config(
 /// Releases the mutex before filesystem I/O to avoid blocking concurrent reads.
 #[tauri::command]
 #[specta::specta]
-pub async fn update_config(
+pub fn update_config(
     app: tauri::AppHandle,
     config_state: State<'_, Mutex<AppConfig>>,
     config_dir_state: State<'_, ConfigDir>,

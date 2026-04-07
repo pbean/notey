@@ -29,6 +29,7 @@ export const commands = {
 	resolveWorkspace: (path: string) => typedError<Workspace, NoteyError>(__TAURI_INVOKE("resolve_workspace", { path })),
 	// Returns the process's current working directory as a string.
 	getCurrentDir: () => typedError<string, NoteyError>(__TAURI_INVOKE("get_current_dir")),
+	// Full-text search across notes, optionally filtered by workspace.
 	searchNotes: (query: string, workspaceId: number | null) => typedError<SearchResult[], NoteyError>(__TAURI_INVOKE("search_notes", { query, workspaceId })),
 };
 
@@ -102,6 +103,7 @@ export type PartialHotkeyConfig = {
 	globalShortcut: string | null,
 };
 
+// A single search result with a content snippet and workspace context.
 export type SearchResult = {
 	id: number,
 	title: string,

@@ -17,6 +17,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-detect-workspace",
     "allow-resolve-workspace",
     "allow-get-current-dir",
+    "allow-reassign-note-workspace",
     "allow-rebuild-fts-index",
     "allow-search-notes",
 ];

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reassign-note-workspace"
+description = "Enables the reassign_note_workspace command without any pre-configured scope."
+commands.allow = ["reassign_note_workspace"]
+
+[[permission]]
+identifier = "deny-reassign-note-workspace"
+description = "Denies the reassign_note_workspace command without any pre-configured scope."
+commands.deny = ["reassign_note_workspace"]

@@ -10,7 +10,7 @@ use super::recover_poisoned_db;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn create_note(
+pub fn create_note(
     state: State<'_, Mutex<rusqlite::Connection>>,
     format: String,
     workspace_id: Option<i64>,
@@ -21,7 +21,7 @@ pub async fn create_note(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_note(
+pub fn get_note(
     state: State<'_, Mutex<rusqlite::Connection>>,
     id: i64,
 ) -> Result<Note, NoteyError> {
@@ -31,7 +31,7 @@ pub async fn get_note(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn update_note(
+pub fn update_note(
     state: State<'_, Mutex<rusqlite::Connection>>,
     id: i64,
     title: Option<String>,
@@ -45,7 +45,7 @@ pub async fn update_note(
 /// Reassign a note to a different workspace or unscope it.
 #[tauri::command]
 #[specta::specta]
-pub async fn reassign_note_workspace(
+pub fn reassign_note_workspace(
     state: State<'_, Mutex<rusqlite::Connection>>,
     id: i64,
     workspace_id: Option<i64>,
@@ -57,7 +57,7 @@ pub async fn reassign_note_workspace(
 /// Rebuild the FTS5 index from the content table. Use for recovery if the index drifts.
 #[tauri::command]
 #[specta::specta]
-pub async fn rebuild_fts_index(
+pub fn rebuild_fts_index(
     state: State<'_, Mutex<rusqlite::Connection>>,
 ) -> Result<(), NoteyError> {
     let conn = state.lock().unwrap_or_else(recover_poisoned_db);
@@ -66,7 +66,7 @@ pub async fn rebuild_fts_index(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_notes(
+pub fn list_notes(
     state: State<'_, Mutex<rusqlite::Connection>>,
     workspace_id: Option<i64>,
 ) -> Result<Vec<Note>, NoteyError> {
