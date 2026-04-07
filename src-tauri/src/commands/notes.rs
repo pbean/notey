@@ -6,6 +6,8 @@ use crate::errors::NoteyError;
 use crate::models::Note;
 use crate::services;
 
+use super::recover_poisoned_db;
+
 #[tauri::command]
 #[specta::specta]
 pub async fn create_note(
@@ -13,10 +15,7 @@ pub async fn create_note(
     format: String,
     workspace_id: Option<i64>,
 ) -> Result<Note, NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::create_note(&conn, &format, workspace_id)
 }
 
@@ -26,10 +25,7 @@ pub async fn get_note(
     state: State<'_, Mutex<rusqlite::Connection>>,
     id: i64,
 ) -> Result<Note, NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::get_note(&conn, id)
 }
 
@@ -42,10 +38,7 @@ pub async fn update_note(
     content: Option<String>,
     format: Option<String>,
 ) -> Result<Note, NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::update_note(&conn, id, title, content, format)
 }
 
@@ -57,10 +50,7 @@ pub async fn reassign_note_workspace(
     id: i64,
     workspace_id: Option<i64>,
 ) -> Result<Note, NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::reassign_note_workspace(&conn, id, workspace_id)
 }
 
@@ -70,10 +60,7 @@ pub async fn reassign_note_workspace(
 pub async fn rebuild_fts_index(
     state: State<'_, Mutex<rusqlite::Connection>>,
 ) -> Result<(), NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::rebuild_fts_index(&conn)
 }
 
@@ -83,9 +70,6 @@ pub async fn list_notes(
     state: State<'_, Mutex<rusqlite::Connection>>,
     workspace_id: Option<i64>,
 ) -> Result<Vec<Note>, NoteyError> {
-    let conn = state.lock().unwrap_or_else(|e| {
-        eprintln!("warning: database mutex poisoned, recovering: {e}");
-        e.into_inner()
-    });
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::list_notes(&conn, workspace_id)
 }

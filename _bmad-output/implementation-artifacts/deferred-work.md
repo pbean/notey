@@ -112,9 +112,9 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs**~~ → Replaced with deterministic FNV-1a `workspace_<hex8>` hash (commit 77e6337)
 - ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ CLOSED: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
 
-### Deferred from: backend robustness review (2026-04-06)
+### ~~Deferred from: backend robustness review (2026-04-06)~~ DONE
 
-- **Mutex poison recovery on inconsistent DB state** — After a panic that poisons the DB mutex, `into_inner()` recovery may yield a connection with an open/partial transaction. No `ROLLBACK` or connection health check is performed before reuse. Pre-existing pattern across all Tauri commands. [src-tauri/src/commands/notes.rs, workspace.rs, config.rs]
+- ~~**Mutex poison recovery on inconsistent DB state** — After a panic that poisons the DB mutex, `into_inner()` recovery may yield a connection with an open/partial transaction. No `ROLLBACK` or connection health check is performed before reuse. Pre-existing pattern across all Tauri commands. [src-tauri/src/commands/notes.rs, workspace.rs, config.rs]~~ → Extracted `recover_poisoned_db` helper with fire-and-forget ROLLBACK across all 10 DB command handlers
 
 ### ~~Deferred from: fix-linux-ci-e2e-timeout review (2026-04-05)~~ DONE
 
