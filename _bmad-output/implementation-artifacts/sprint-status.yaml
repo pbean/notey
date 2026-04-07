@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-07 # story 3.3 → done
+last_updated: 2026-04-07 # story 3.4 → ready-for-dev
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -81,7 +81,7 @@ development_status:
   3-1-fts5-virtual-table-sync-triggers: done
   3-2-full-text-search-tauri-command: done
   3-3-searchoverlay-ui-component: done
-  3-4-search-result-keyboard-navigation-note-opening: backlog
+  3-4-search-result-keyboard-navigation-note-opening: ready-for-dev
   3-5-workspace-scoped-search-toggle: backlog
   epic-3-retrospective: optional
 
