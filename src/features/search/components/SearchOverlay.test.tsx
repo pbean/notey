@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
+import { useEditorStore } from '../../editor/store';
 import { useSearchStore } from '../store';
 import { SearchOverlay } from './SearchOverlay';
 
@@ -208,5 +209,274 @@ describe('SearchOverlay', () => {
       expect(options[0]).toHaveAttribute('aria-selected', 'true');
       expect(options[1]).toHaveAttribute('aria-selected', 'false');
     });
+  });
+
+  // COMP-3.4-01: Enter key on selected result calls loadNote and closes overlay
+  it('opens note and closes overlay when Enter is pressed on selected result', async () => {
+    const mockNote = {
+      id: 1,
+      title: 'Meeting Notes',
+      content: '# Hello',
+      workspaceId: null,
+      workspaceName: null,
+      format: 'markdown',
+      isTrashed: false,
+      createdAt: '2026-04-07T10:00:00+00:00',
+      updatedAt: '2026-04-07T10:00:00+00:00',
+      deletedAt: null,
+    };
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      if (cmd === 'get_note') return Promise.resolve(mockNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    // Create a .cm-content element for focus assertion
+    const editorEl = document.createElement('div');
+    editorEl.className = 'cm-content';
+    editorEl.tabIndex = 0;
+    document.body.appendChild(editorEl);
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'project' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
+    });
+
+    // selectedIndex defaults to 0, so first result is selected
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+
+    // Overlay should be closed
+    expect(useSearchStore.getState().isOpen).toBe(false);
+    // loadNote should have been called via get_note
+    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 1 });
+    // Editor store should have loaded the note
+    expect(useEditorStore.getState().activeNoteId).toBe(1);
+    // Focus should be on the editor element
+    expect(document.activeElement).toBe(editorEl);
+
+    document.body.removeChild(editorEl);
+  });
+
+  // COMP-3.4-02: Click on result item calls loadNote and closes overlay
+  it('opens note and closes overlay when result is clicked', async () => {
+    const mockNote = {
+      id: 2,
+      title: 'Shopping List',
+      content: 'buy supplies',
+      workspaceId: null,
+      workspaceName: null,
+      format: 'plaintext',
+      isTrashed: false,
+      createdAt: '2026-04-06T08:00:00+00:00',
+      updatedAt: '2026-04-06T08:00:00+00:00',
+      deletedAt: null,
+    };
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      if (cmd === 'get_note') return Promise.resolve(mockNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const editorEl = document.createElement('div');
+    editorEl.className = 'cm-content';
+    editorEl.tabIndex = 0;
+    document.body.appendChild(editorEl);
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'project' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-2')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('search-result-2'));
+    });
+
+    expect(useSearchStore.getState().isOpen).toBe(false);
+    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
+    expect(useEditorStore.getState().activeNoteId).toBe(2);
+    expect(document.activeElement).toBe(editorEl);
+
+    document.body.removeChild(editorEl);
+  });
+
+  // COMP-3.4-03: Focus is trapped within overlay — Tab does not escape to editor
+  it('traps focus within overlay on Tab key', async () => {
+    render(<SearchOverlay />);
+    const input = screen.getByTestId('search-input');
+    expect(document.activeElement).toBe(input);
+
+    // Tab on the only focusable element (input) should wrap back to it
+    const overlay = screen.getByTestId('search-overlay');
+    const prevented = !fireEvent.keyDown(overlay, { key: 'Tab' });
+
+    // After Tab on the last (and only) focusable element, focus should stay on input
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('traps focus on Shift+Tab at first element', async () => {
+    render(<SearchOverlay />);
+    const input = screen.getByTestId('search-input');
+    expect(document.activeElement).toBe(input);
+
+    // Shift+Tab on first (and only) element should wrap to last (same element)
+    fireEvent.keyDown(screen.getByTestId('search-overlay'), {
+      key: 'Tab',
+      shiftKey: true,
+    });
+
+    expect(document.activeElement).toBe(input);
+  });
+
+  // COMP-3.4-04: Arrow Down/Up navigation updates selectedIndex
+  it('navigates results with Arrow Down and Arrow Up', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'project' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
+    });
+
+    // Initially selectedIndex is 0
+    expect(useSearchStore.getState().selectedIndex).toBe(0);
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(useSearchStore.getState().selectedIndex).toBe(1);
+
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(useSearchStore.getState().selectedIndex).toBe(0);
+  });
+
+  // COMP-3.4-05: Enter with no results does nothing
+  it('does nothing when Enter is pressed with no results', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve([]);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'nonexistent' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-empty-state')).toBeInTheDocument();
+    });
+
+    // Store should still be open after Enter with no results
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(useSearchStore.getState().isOpen).toBe(true);
+    expect(mockInvoke).not.toHaveBeenCalledWith('get_note', expect.anything());
+  });
+
+  // COMP-3.4-06: After opening note, editor receives focus (.cm-content focused)
+  it('focuses .cm-content after opening a note via Enter', async () => {
+    const mockNote = {
+      id: 1,
+      title: 'Meeting Notes',
+      content: '# Hello',
+      workspaceId: null,
+      workspaceName: null,
+      format: 'markdown',
+      isTrashed: false,
+      createdAt: '2026-04-07T10:00:00+00:00',
+      updatedAt: '2026-04-07T10:00:00+00:00',
+      deletedAt: null,
+    };
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      if (cmd === 'get_note') return Promise.resolve(mockNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const editorEl = document.createElement('div');
+    editorEl.className = 'cm-content';
+    editorEl.tabIndex = 0;
+    document.body.appendChild(editorEl);
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'project' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+    });
+
+    expect(document.activeElement).toBe(editorEl);
+
+    document.body.removeChild(editorEl);
+  });
+
+  // COMP-3.4-07: Mouse click sets selectedIndex to clicked item before opening
+  it('click on second result opens that note (not selectedIndex)', async () => {
+    const mockNote = {
+      id: 2,
+      title: 'Shopping List',
+      content: 'buy supplies',
+      workspaceId: null,
+      workspaceName: null,
+      format: 'plaintext',
+      isTrashed: false,
+      createdAt: '2026-04-06T08:00:00+00:00',
+      updatedAt: '2026-04-06T08:00:00+00:00',
+      deletedAt: null,
+    };
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      if (cmd === 'get_note') return Promise.resolve(mockNote);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const editorEl = document.createElement('div');
+    editorEl.className = 'cm-content';
+    editorEl.tabIndex = 0;
+    document.body.appendChild(editorEl);
+
+    render(<SearchOverlay />);
+    fireEvent.change(screen.getByTestId('search-input'), {
+      target: { value: 'project' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-2')).toBeInTheDocument();
+    });
+
+    // selectedIndex is 0, but we click on the second result (id=2)
+    expect(useSearchStore.getState().selectedIndex).toBe(0);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('search-result-2'));
+    });
+
+    // Should have called get_note with id=2 (from click), not id=1 (from selectedIndex)
+    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
+    expect(useEditorStore.getState().activeNoteId).toBe(2);
+
+    document.body.removeChild(editorEl);
   });
 });

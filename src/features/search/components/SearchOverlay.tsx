@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { commands } from '../../../generated/bindings';
+import { useEditorStore } from '../../editor/store';
 import { useSearchStore } from '../store';
 import { SearchResultItem } from './SearchResultItem';
 
@@ -14,6 +15,14 @@ export function SearchOverlay() {
   const query = useSearchStore((s) => s.query);
   const results = useSearchStore((s) => s.results);
   const selectedIndex = useSearchStore((s) => s.selectedIndex);
+
+  /** Opens a note in the editor, closes the search overlay, and returns focus to the editor. */
+  const openNote = async (noteId: number) => {
+    useSearchStore.getState().closeSearch();
+    await useEditorStore.getState().loadNote(noteId);
+    const editor = document.querySelector<HTMLElement>('.cm-content');
+    editor?.focus();
+  };
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -35,6 +44,13 @@ export function SearchOverlay() {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         useSearchStore.getState().selectPrev();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const { results: r, selectedIndex: idx } = useSearchStore.getState();
+        if (r.length === 0) return;
+        const selected = r[idx];
+        if (!selected) return;
+        openNote(selected.id);
       }
     };
     window.addEventListener('keydown', handler);
@@ -47,6 +63,25 @@ export function SearchOverlay() {
     const selected = listRef.current.children[selectedIndex] as HTMLElement | undefined;
     selected?.scrollIntoView?.({ block: 'nearest' });
   }, [selectedIndex, results.length]);
+
+  /** Trap focus within the overlay — Tab cycles, Esc is the only way out. */
+  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return;
+    const overlay = e.currentTarget;
+    const focusable = overlay.querySelectorAll<HTMLElement>(
+      'input, button, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   /** Handle input changes — search immediately, no debounce. */
   const handleInput = async (value: string) => {
@@ -77,6 +112,7 @@ export function SearchOverlay() {
     <div
       data-testid="search-overlay"
       role="search"
+      onKeyDown={handleOverlayKeyDown}
       style={{
         position: 'absolute',
         inset: 0,
@@ -183,6 +219,7 @@ export function SearchOverlay() {
                 key={result.id}
                 result={result}
                 isSelected={index === selectedIndex}
+                onSelect={openNote}
               />
             ))}
           </div>
