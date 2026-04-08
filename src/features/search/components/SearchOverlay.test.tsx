@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
 import { useEditorStore } from '../../editor/store';
@@ -28,6 +28,11 @@ describe('SearchOverlay', () => {
   beforeEach(() => {
     useSearchStore.getState().closeSearch();
     useSearchStore.getState().openSearch();
+    useEditorStore.getState().resetNote();
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('.cm-content').forEach((el) => el.remove());
   });
 
   // COMP-3.3-02: Overlay renders when isOpen=true, input auto-focused
@@ -232,7 +237,6 @@ describe('SearchOverlay', () => {
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
-    // Create a .cm-content element for focus assertion
     const editorEl = document.createElement('div');
     editorEl.className = 'cm-content';
     editorEl.tabIndex = 0;
@@ -247,21 +251,16 @@ describe('SearchOverlay', () => {
       expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
     });
 
-    // selectedIndex defaults to 0, so first result is selected
     await act(async () => {
       fireEvent.keyDown(window, { key: 'Enter' });
     });
 
-    // Overlay should be closed
-    expect(useSearchStore.getState().isOpen).toBe(false);
-    // loadNote should have been called via get_note
-    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 1 });
-    // Editor store should have loaded the note
-    expect(useEditorStore.getState().activeNoteId).toBe(1);
-    // Focus should be on the editor element
-    expect(document.activeElement).toBe(editorEl);
-
-    document.body.removeChild(editorEl);
+    await waitFor(() => {
+      expect(useSearchStore.getState().isOpen).toBe(false);
+      expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 1 });
+      expect(useEditorStore.getState().activeNoteId).toBe(1);
+      expect(document.activeElement).toBe(editorEl);
+    });
   });
 
   // COMP-3.4-02: Click on result item calls loadNote and closes overlay
@@ -303,40 +302,34 @@ describe('SearchOverlay', () => {
       fireEvent.click(screen.getByTestId('search-result-2'));
     });
 
-    expect(useSearchStore.getState().isOpen).toBe(false);
-    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
-    expect(useEditorStore.getState().activeNoteId).toBe(2);
-    expect(document.activeElement).toBe(editorEl);
-
-    document.body.removeChild(editorEl);
+    await waitFor(() => {
+      expect(useSearchStore.getState().isOpen).toBe(false);
+      expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
+      expect(useEditorStore.getState().activeNoteId).toBe(2);
+      expect(document.activeElement).toBe(editorEl);
+    });
   });
 
   // COMP-3.4-03: Focus is trapped within overlay — Tab does not escape to editor
-  it('traps focus within overlay on Tab key', async () => {
+  it('traps focus within overlay on Tab key — preventDefault called', () => {
     render(<SearchOverlay />);
     const input = screen.getByTestId('search-input');
     expect(document.activeElement).toBe(input);
 
-    // Tab on the only focusable element (input) should wrap back to it
     const overlay = screen.getByTestId('search-overlay');
-    const prevented = !fireEvent.keyDown(overlay, { key: 'Tab' });
-
-    // After Tab on the last (and only) focusable element, focus should stay on input
-    expect(document.activeElement).toBe(input);
+    // fireEvent returns false when preventDefault was called on the event
+    const notPrevented = fireEvent.keyDown(overlay, { key: 'Tab' });
+    expect(notPrevented).toBe(false);
   });
 
-  it('traps focus on Shift+Tab at first element', async () => {
+  it('traps focus on Shift+Tab at first element — preventDefault called', () => {
     render(<SearchOverlay />);
     const input = screen.getByTestId('search-input');
     expect(document.activeElement).toBe(input);
 
-    // Shift+Tab on first (and only) element should wrap to last (same element)
-    fireEvent.keyDown(screen.getByTestId('search-overlay'), {
-      key: 'Tab',
-      shiftKey: true,
-    });
-
-    expect(document.activeElement).toBe(input);
+    const overlay = screen.getByTestId('search-overlay');
+    const notPrevented = fireEvent.keyDown(overlay, { key: 'Tab', shiftKey: true });
+    expect(notPrevented).toBe(false);
   });
 
   // COMP-3.4-04: Arrow Down/Up navigation updates selectedIndex
@@ -355,14 +348,20 @@ describe('SearchOverlay', () => {
       expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
     });
 
-    // Initially selectedIndex is 0
+    // Initially selectedIndex is 0 — first result highlighted
     expect(useSearchStore.getState().selectedIndex).toBe(0);
+    expect(screen.getByTestId('search-result-1')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('search-result-2')).toHaveAttribute('aria-selected', 'false');
 
     fireEvent.keyDown(window, { key: 'ArrowDown' });
     expect(useSearchStore.getState().selectedIndex).toBe(1);
+    expect(screen.getByTestId('search-result-1')).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('search-result-2')).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.keyDown(window, { key: 'ArrowUp' });
     expect(useSearchStore.getState().selectedIndex).toBe(0);
+    expect(screen.getByTestId('search-result-1')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('search-result-2')).toHaveAttribute('aria-selected', 'false');
   });
 
   // COMP-3.4-05: Enter with no results does nothing
@@ -426,9 +425,9 @@ describe('SearchOverlay', () => {
       fireEvent.keyDown(window, { key: 'Enter' });
     });
 
-    expect(document.activeElement).toBe(editorEl);
-
-    document.body.removeChild(editorEl);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(editorEl);
+    });
   });
 
   // COMP-3.4-07: Mouse click sets selectedIndex to clicked item before opening
@@ -473,10 +472,10 @@ describe('SearchOverlay', () => {
       fireEvent.click(screen.getByTestId('search-result-2'));
     });
 
-    // Should have called get_note with id=2 (from click), not id=1 (from selectedIndex)
-    expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
-    expect(useEditorStore.getState().activeNoteId).toBe(2);
-
-    document.body.removeChild(editorEl);
+    await waitFor(() => {
+      // Should have called get_note with id=2 (from click), not id=1 (from selectedIndex)
+      expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
+      expect(useEditorStore.getState().activeNoteId).toBe(2);
+    });
   });
 });

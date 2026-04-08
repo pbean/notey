@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../../editor/store';
 import { useSearchStore } from '../store';
@@ -12,17 +12,29 @@ export function SearchOverlay() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
+  const openingRef = useRef(false);
   const query = useSearchStore((s) => s.query);
   const results = useSearchStore((s) => s.results);
   const selectedIndex = useSearchStore((s) => s.selectedIndex);
+  const [openError, setOpenError] = useState<string | null>(null);
 
   /** Opens a note in the editor, closes the search overlay, and returns focus to the editor. */
-  const openNote = async (noteId: number) => {
-    useSearchStore.getState().closeSearch();
-    await useEditorStore.getState().loadNote(noteId);
-    const editor = document.querySelector<HTMLElement>('.cm-content');
-    editor?.focus();
-  };
+  const openNote = useCallback(async (noteId: number) => {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpenError(null);
+    try {
+      await useEditorStore.getState().loadNote(noteId);
+      useSearchStore.getState().closeSearch();
+      const editor = document.querySelector<HTMLElement>('.cm-content');
+      editor?.focus();
+    } catch (err) {
+      console.error('openNote failed:', err);
+      setOpenError('Unable to open note. Choose another or press Esc to close.');
+    } finally {
+      openingRef.current = false;
+    }
+  }, []);
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -55,7 +67,7 @@ export function SearchOverlay() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [openNote]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -183,6 +195,21 @@ export function SearchOverlay() {
             }}
           >
             {results.length} {results.length === 1 ? 'result' : 'results'} &middot; &uarr;&darr; navigate &middot; Enter open
+          </div>
+        )}
+
+        {/* Error notice */}
+        {openError && (
+          <div
+            data-testid="search-open-error"
+            role="alert"
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--text-error, #ef4444)',
+              marginTop: 'var(--space-2)',
+            }}
+          >
+            {openError}
           </div>
         )}
 

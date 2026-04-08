@@ -1,6 +1,6 @@
 # Story 3.4: Search Result Keyboard Navigation & Note Opening
 
-Status: review
+Status: done
 
 ## Story
 
@@ -55,6 +55,16 @@ so that I can find and access notes without touching my mouse.
   - [x] 4.3 Add focus trap tests — Tab at last element wraps to first, Shift+Tab at first wraps to last
   - [x] 4.4 Test Enter with empty results does nothing
   - [x] 4.5 Test that after opening a note, focus target is `.cm-content`
+
+### Review Findings
+
+- [x] [Review][Decision] Note-open failure UX — resolved: keep overlay open until load succeeds, show inline error on failure. `openNote` now tries `loadNote` first, only closes on success, catches errors and shows "Unable to open note" alert. [SearchOverlay.tsx]
+- [x] [Review][Patch] Tests break the TypeScript build — fixed: removed unused `prevented` local, wired `afterEach` for DOM cleanup [SearchOverlay.test.tsx]
+- [x] [Review][Patch] Unhandled promise rejection in `openNote` — fixed: try/catch with error state, reentrancy guard via `openingRef` [SearchOverlay.tsx]
+- [x] [Review][Patch] Tests can false-pass — fixed: focus trap asserts `preventDefault` return value, arrow-key test asserts `aria-selected` on DOM, open-note assertions wrapped in `waitFor` [SearchOverlay.test.tsx]
+- [x] [Review][Patch] Test isolation gaps — fixed: `afterEach` removes `.cm-content` nodes, `beforeEach` calls `useEditorStore.getState().resetNote()` [SearchOverlay.test.tsx]
+- [x] [Review][Patch] Stale closure — fixed: `openNote` wrapped in `useCallback`, added to `useEffect` dependency array [SearchOverlay.tsx]
+- [x] [Review][Dismiss] `scrollIntoView` double optional chain — NOT redundant: jsdom does not implement `scrollIntoView` (returns `undefined`), so the `?.` guard prevents test failures. Verified and dismissed.
 
 ## Dev Notes
 
@@ -341,3 +351,14 @@ None — clean implementation, no debug issues encountered.
 ### Change Log
 
 - 2026-04-07: Implemented story 3.4 — keyboard navigation (Enter opens note), click handler, focus trapping, 7 component tests, accent-muted token fix
+- 2026-04-08: Code review completed — 6 patch, 1 deferred, 3 dismissed
+
+### Review Findings
+
+- [ ] [Review][Patch] `openNote` lacks error handling — unhandled promise rejection if `loadNote` throws; overlay already closed so user has no recovery path [SearchOverlay.tsx:19-24]
+- [ ] [Review][Patch] Stale closure in keydown handler — `openNote` not memoized with `useCallback`, not in `useEffect` dependency array; functionally safe today but fragile to future edits [SearchOverlay.tsx:33-58]
+- [ ] [Review][Patch] No reentrancy guard on `openNote` — rapid Enter or click+Enter can fire concurrent `loadNote` calls that race [SearchOverlay.tsx:19-24]
+- [ ] [Review][Patch] Focus trap tests are vacuous — jsdom does not move focus on `fireEvent.keyDown`, so `document.activeElement` assertions pass trivially; assert `preventDefault` was called instead [SearchOverlay.test.tsx:315-340]
+- [ ] [Review][Patch] Test DOM cleanup fragile — `.cm-content` elements leak into subsequent tests on assertion failure; `afterEach` imported but never used [SearchOverlay.test.tsx]
+- [ ] [Review][Patch] Editor store not reset in `beforeEach` — `activeNoteId` and other state bleeds between tests [SearchOverlay.test.tsx:28-31]
+- [x] [Review][Defer] `scrollIntoView` double optional chain — `selected?.scrollIntoView?.()` has redundant guard on method existence; pre-existing code [SearchOverlay.tsx:64] — deferred, pre-existing
