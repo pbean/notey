@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-09 # epic-3-retrospective → done
+last_updated: 2026-04-10 # epic-3 retro items audit — 4/5 done, shadcn spike deferred
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -171,8 +171,8 @@ development_status:
   epic-2-retro-item-9-permission-toml-docs: done
 
   # Epic 3 Retro Items:
-  epic-3-retro-item-1-codemirror-multiinstance-research: backlog
-  epic-3-retro-item-2-shared-test-reset-utility: backlog
-  epic-3-retro-item-3-eslint-unhandled-ipc-rule: backlog
-  epic-3-retro-item-4-shadcn-command-spike: backlog
-  epic-3-retro-item-5-trim-consistency-fix: backlog
+  epic-3-retro-item-1-codemirror-multiinstance-research: done # commit cd27c68
+  epic-3-retro-item-2-shared-test-reset-utility: done # commit f400f17
+  epic-3-retro-item-3-eslint-unhandled-ipc-rule: done # commits f400f17, 3222cd4 (no-floating-promises + no-misused-promises)
+  epic-3-retro-item-4-shadcn-command-spike: backlog # deferred to Story 4.5
+  epic-3-retro-item-5-trim-consistency-fix: done # commit 2ae2553
