@@ -30,6 +30,11 @@ describe('SearchOverlay', () => {
     useSearchStore.getState().closeSearch();
     useSearchStore.getState().openSearch();
     useEditorStore.getState().resetNote();
+    useWorkspaceStore.setState({
+      activeWorkspaceId: null,
+      activeWorkspaceName: null,
+      isAllWorkspaces: false,
+    });
   });
 
   afterEach(() => {
@@ -313,6 +318,7 @@ describe('SearchOverlay', () => {
 
   // COMP-3.4-03: Focus is trapped within overlay — Tab does not escape to editor
   it('traps focus within overlay on Tab key — preventDefault called at boundary', () => {
+    useWorkspaceStore.setState({ activeWorkspaceId: 1, activeWorkspaceName: 'ws', isAllWorkspaces: false });
     render(<SearchOverlay />);
     const toggle = screen.getByTestId('search-scope-toggle');
     const overlay = screen.getByTestId('search-overlay');

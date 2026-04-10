@@ -25,9 +25,12 @@ export function SearchOverlay() {
 
   const isEffectivelyAll = scopeFilter === 'all' || isAllWorkspaces || !activeWorkspaceId;
   const scopeText = isEffectivelyAll ? 'All Workspaces' : (activeWorkspaceName ?? 'Workspace');
+  const canToggleScope = !isAllWorkspaces && !!activeWorkspaceId;
   const scopeLabel = isEffectivelyAll
-    ? 'Search scope: All Workspaces. Click to search current workspace'
-    : `Search scope: ${activeWorkspaceName}. Click to search all workspaces`;
+    ? canToggleScope
+      ? 'Search scope: All Workspaces. Click to search current workspace'
+      : 'Search scope: All Workspaces'
+    : `Search scope: ${activeWorkspaceName ?? 'Workspace'}. Click to search all workspaces`;
 
   /** Opens a note in the editor, closes the search overlay, and returns focus to the editor. */
   const openNote = useCallback(async (noteId: number) => {
@@ -92,7 +95,7 @@ export function SearchOverlay() {
     if (e.key !== 'Tab') return;
     const overlay = e.currentTarget;
     const focusable = overlay.querySelectorAll<HTMLElement>(
-      'input, button, [tabindex]:not([tabindex="-1"])',
+      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     if (focusable.length === 0) return;
     const first = focusable[0];
@@ -214,6 +217,7 @@ export function SearchOverlay() {
           <button
             data-testid="search-scope-toggle"
             aria-label={scopeLabel}
+            disabled={!canToggleScope}
             onClick={handleScopeToggle}
             style={{
               fontSize: 'var(--text-xs)',
@@ -223,10 +227,11 @@ export function SearchOverlay() {
               border: '1px solid var(--border-default)',
               borderRadius: '4px',
               color: isEffectivelyAll ? 'var(--text-muted)' : 'var(--text-primary)',
-              cursor: 'pointer',
+              cursor: canToggleScope ? 'pointer' : 'not-allowed',
               whiteSpace: 'nowrap',
               outline: '2px solid transparent',
               outlineOffset: '2px',
+              opacity: canToggleScope ? 1 : 0.5,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'var(--bg-hover)';

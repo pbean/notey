@@ -112,6 +112,11 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs**~~ → Replaced with deterministic FNV-1a `workspace_<hex8>` hash (commit 77e6337)
 - ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ CLOSED: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
 
+### Deferred from: code review of story 3-5-workspace-scoped-search-toggle (2026-04-09)
+
+- **`scopeFilter` persists across workspace switches without resync** — When user toggles scope to "All Workspaces", then switches workspace via StatusBar, the scope filter remains "all" on next search open. AC 6 mandates session persistence, but resync on workspace switch could improve UX.
+- **Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.
+
 ### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06)
 
 - **Snippet `<mark>` HTML tags — XSS risk** — `snippet()` injects raw `<mark>` HTML into the snippet field. If story 3.3's frontend renders with innerHTML, note content containing malicious HTML could execute in the webview. Story 3.3 must use safe rendering.

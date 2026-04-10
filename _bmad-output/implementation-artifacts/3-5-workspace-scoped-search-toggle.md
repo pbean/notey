@@ -1,6 +1,6 @@
 # Story 3.5: Workspace-Scoped Search Toggle
 
-Status: review
+Status: done
 
 ## Story
 
@@ -383,6 +383,14 @@ Recent commit patterns:
 - [Search service: src-tauri/src/services/search_service.rs (lines 35-121)]
 - [Generated bindings: src/generated/bindings.ts (line 33 — searchNotes signature)]
 - [Project conventions: _bmad-output/project-context.md]
+
+### Review Findings
+
+- [x] [Review][Decision] Toggle button is a silent no-op when `isAllWorkspaces` is true or `activeWorkspaceId` is null — resolved: button disabled with `not-allowed` cursor and reduced opacity when no workspace to scope to. Focus trap selector updated to exclude disabled elements.
+- [x] [Review][Patch] `scopeLabel` aria-label interpolates literal `"null"` when `activeWorkspaceName` is null [SearchOverlay.tsx:30] — fixed: added `?? 'Workspace'` fallback matching `scopeText`.
+- [x] [Review][Patch] Workspace store not reset in outer `beforeEach` — test isolation leak risk [SearchOverlay.test.tsx:29-33] — fixed: added `useWorkspaceStore.setState()` reset in outer `beforeEach`. Updated COMP-3.4-03 focus trap test to set workspace state so button is enabled.
+- [x] [Review][Defer] `scopeFilter` persists across workspace switches without resync [store.ts] — deferred, pre-existing design decision per AC 6 ("scope persists within session"). Workspace switch resync is a separate concern.
+- [x] [Review][Defer] Whitespace-only query: inconsistent `trim` handling between `handleInput` and `handleScopeToggle` [SearchOverlay.tsx:116,144] — deferred, pre-existing. `handleInput` checks `=== ''` while `handleScopeToggle` checks `.trim()`.
 
 ## Change Log
 
