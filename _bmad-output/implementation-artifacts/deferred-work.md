@@ -148,3 +148,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 ### Deferred from: 4-3-tab-keyboard-navigation review (2026-04-10)
 
 - **macOS Cmd key parity for keyboard shortcuts** — Tab keyboard shortcuts only check `e.ctrlKey`, but CaptureWindow's Ctrl+F handler checks `(e.ctrlKey || e.metaKey)`. On macOS, users expect Cmd-based shortcuts. Cmd+Tab is consumed by the OS app switcher so it's moot, but Cmd+W and Cmd+1-9 may need platform-aware handling. Needs holistic treatment across all keyboard shortcuts, not just tab navigation. (`src/features/tabs/hooks/useTabKeyboardNav.ts`)
+
+### Deferred from: 4-5-command-palette-core review (2026-04-10)
+
+- **Symmetric overlay mutual exclusion** — `useCommandPaletteStore.open()` closes search, and CaptureWindow's Ctrl+F handler closes the palette before opening search. However, `useSearchStore.openSearch()` does not close the command palette itself. If `openSearch()` is called from a future integration point (e.g., a button, a command palette action in 4.6), overlays could stack. Consider centralizing mutual exclusion in a shared overlay manager or having each store close the other.

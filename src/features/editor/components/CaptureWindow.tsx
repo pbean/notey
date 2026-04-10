@@ -5,21 +5,36 @@ import { TabBar } from '../../tabs/components/TabBar';
 import { useTabKeyboardNav } from '../../tabs/hooks/useTabKeyboardNav';
 import { SearchOverlay } from '../../search/components/SearchOverlay';
 import { useSearchStore } from '../../search/store';
+import { CommandPalette } from '../../command-palette/components/CommandPalette';
+import { useCommandPaletteStore } from '../../command-palette/store';
 
 /**
  * Root application shell. Full-screen flex column containing
- * the editor pane, search overlay, and status bar.
+ * the editor pane, search overlay, command palette, and status bar.
  */
 export function CaptureWindow() {
   const isSearchOpen = useSearchStore((s) => s.isOpen);
   useTabKeyboardNav();
 
-  // Register Ctrl/Cmd+F to open search overlay
+  // Register Ctrl/Cmd+F to open search overlay (closes command palette)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
+        useCommandPaletteStore.getState().close();
         useSearchStore.getState().openSearch();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Register Ctrl/Cmd+P to toggle command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        useCommandPaletteStore.getState().toggle();
       }
     };
     window.addEventListener('keydown', handler);
@@ -33,6 +48,7 @@ export function CaptureWindow() {
         <EditorPane className="h-full" />
         {isSearchOpen && <SearchOverlay />}
       </div>
+      <CommandPalette />
       <StatusBar />
     </div>
   );
