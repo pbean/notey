@@ -116,7 +116,7 @@ export function SearchOverlay() {
     if (value !== undefined) {
       useSearchStore.getState().setQuery(value);
     }
-    if (currentQuery === '') {
+    if (currentQuery.trim() === '') {
       useSearchStore.getState().setResults([]);
       return;
     }

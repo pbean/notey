@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { commands } from '../../generated/bindings';
 import type { WorkspaceInfo, Note } from '../../generated/bindings';
+import { useSearchStore } from '../search/store';
 
 /** Workspace state for tracking the active workspace context. */
 interface WorkspaceState {
@@ -49,6 +50,7 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       activeWorkspaceName: found?.name ?? null,
       isAllWorkspaces: false,
     });
+    useSearchStore.getState().resetScope();
     await get().loadFilteredNotes();
   },
 

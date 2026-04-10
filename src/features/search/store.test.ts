@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mockInvoke } from '../../test-utils/setup';
 import { useSearchStore } from './store';
+import { useWorkspaceStore } from '../workspace/store';
 
 // COMP-3.3-01: Store initializes with correct defaults and actions work
 describe('useSearchStore', () => {
@@ -100,6 +102,47 @@ describe('useSearchStore', () => {
   it('selectNext is a no-op when results are empty', () => {
     useSearchStore.getState().selectNext();
     expect(useSearchStore.getState().selectedIndex).toBe(0);
+  });
+
+  it('resetScope sets scopeFilter back to workspace', () => {
+    useSearchStore.getState().toggleScope();
+    expect(useSearchStore.getState().scopeFilter).toBe('all');
+
+    useSearchStore.getState().resetScope();
+    expect(useSearchStore.getState().scopeFilter).toBe('workspace');
+  });
+
+  it('resetScope is a no-op when already workspace-scoped', () => {
+    expect(useSearchStore.getState().scopeFilter).toBe('workspace');
+    useSearchStore.getState().resetScope();
+    expect(useSearchStore.getState().scopeFilter).toBe('workspace');
+  });
+
+  it('scopeFilter resets to workspace when workspace switches via setActiveWorkspace', async () => {
+    // Setup: workspace store needs workspaces list for setActiveWorkspace to find name
+    useWorkspaceStore.setState({
+      workspaces: [
+        { id: 1, name: 'ws-a', path: '/a', createdAt: '2026-01-01T00:00:00+00:00', noteCount: 0 },
+        { id: 2, name: 'ws-b', path: '/b', createdAt: '2026-01-01T00:00:00+00:00', noteCount: 0 },
+      ],
+      activeWorkspaceId: 1,
+      activeWorkspaceName: 'ws-a',
+      isAllWorkspaces: false,
+    });
+
+    // Set scope to all
+    useSearchStore.getState().toggleScope();
+    expect(useSearchStore.getState().scopeFilter).toBe('all');
+
+    // Mock listNotes for loadFilteredNotes called by setActiveWorkspace
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'list_notes') return Promise.resolve([]);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    // Switch workspace — should reset scope
+    await useWorkspaceStore.getState().setActiveWorkspace(2);
+    expect(useSearchStore.getState().scopeFilter).toBe('workspace');
   });
 
   it('setResults resets selectedIndex to 0', () => {

@@ -164,6 +164,33 @@ describe('SearchOverlay', () => {
     });
   });
 
+  // DEFERRED-SEARCH: Whitespace-only input clears results without backend call
+  it('treats whitespace-only input as empty — clears results, no backend call', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    render(<SearchOverlay />);
+    const input = screen.getByTestId('search-input');
+
+    // First type a real query to get results
+    fireEvent.change(input, { target: { value: 'project' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
+    });
+
+    mockInvoke.mockClear();
+
+    // Now type whitespace only — should clear results without calling backend
+    fireEvent.change(input, { target: { value: '   ' } });
+    await waitFor(() => {
+      expect(screen.queryByTestId('search-result-1')).toBeNull();
+    });
+    expect(useSearchStore.getState().results).toEqual([]);
+    expect(mockInvoke).not.toHaveBeenCalledWith('search_notes', expect.anything());
+  });
+
   it('displays workspace name or "No workspace" fallback', async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);

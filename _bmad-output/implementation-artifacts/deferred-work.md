@@ -114,8 +114,9 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 ### Deferred from: code review of story 3-5-workspace-scoped-search-toggle (2026-04-09)
 
-- **`scopeFilter` persists across workspace switches without resync** — When user toggles scope to "All Workspaces", then switches workspace via StatusBar, the scope filter remains "all" on next search open. AC 6 mandates session persistence, but resync on workspace switch could improve UX.
-- **Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.
+- ~~**`scopeFilter` persists across workspace switches without resync** — When user toggles scope to "All Workspaces", then switches workspace via StatusBar, the scope filter remains "all" on next search open. AC 6 mandates session persistence, but resync on workspace switch could improve UX.~~ → Fixed: `resetScope()` called from `setActiveWorkspace`
+- ~~**Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.~~ → Fixed: `handleInput` now uses `currentQuery.trim() === ''` consistently
+- **Whitespace-only query shows "No notes matching '   '" in empty state** — When user types only spaces, `setQuery` stores the raw whitespace. JSX checks `query !== ''` (not trimmed) for empty-state display, showing literal spaces in the message. Pre-existing UX artifact — our trim fix prevents the backend call but doesn't address the display.
 
 ### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06)
 
