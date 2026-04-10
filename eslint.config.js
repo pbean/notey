@@ -13,6 +13,7 @@ export default tseslint.config(
     rules: {
       // Catch unhandled promises (IPC calls, async operations)
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
 
       // Disable rules that conflict with project patterns
       '@typescript-eslint/no-unused-vars': 'off', // tsconfig handles this via noUnusedLocals

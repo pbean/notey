@@ -45,7 +45,7 @@ export function StatusBar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         <SaveIndicator />
         <button
-          onClick={handleFormatToggle}
+          onClick={() => void handleFormatToggle()}
           style={{
             color: 'var(--text-secondary)',
             fontSize: '11px',

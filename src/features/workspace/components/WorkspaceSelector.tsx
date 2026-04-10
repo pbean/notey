@@ -84,7 +84,7 @@ export function WorkspaceSelector() {
             {notesError}
           </div>
         )}
-        <DropdownMenuItem onClick={() => setAllWorkspaces()} aria-current={isAllWorkspaces || undefined}>
+        <DropdownMenuItem onClick={() => void setAllWorkspaces()} aria-current={isAllWorkspaces || undefined}>
           <span style={{ width: 12, display: 'inline-flex', flexShrink: 0 }}>
             {isAllWorkspaces && <Check size={12} />}
           </span>
@@ -94,7 +94,7 @@ export function WorkspaceSelector() {
         {workspaces.map((ws) => {
           const isActive = ws.id === activeWorkspaceId && !isAllWorkspaces;
           return (
-            <DropdownMenuItem key={ws.id} onClick={() => setActiveWorkspace(ws.id)} aria-current={isActive || undefined}>
+            <DropdownMenuItem key={ws.id} onClick={() => void setActiveWorkspace(ws.id)} aria-current={isActive || undefined}>
               <span style={{ width: 12, display: 'inline-flex', flexShrink: 0 }}>
                 {isActive && <Check size={12} />}
               </span>

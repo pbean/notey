@@ -193,7 +193,7 @@ export function SearchOverlay() {
             type="text"
             placeholder="Search notes..."
             value={query}
-            onChange={(e) => handleInput(e.target.value)}
+            onChange={(e) => void handleInput(e.target.value)}
             style={{
               fontSize: 'var(--text-base)',
               fontFamily: 'var(--font-mono)',
@@ -311,7 +311,7 @@ export function SearchOverlay() {
                 key={result.id}
                 result={result}
                 isSelected={index === selectedIndex}
-                onSelect={openNote}
+                onSelect={(id) => void openNote(id)}
               />
             ))}
           </div>

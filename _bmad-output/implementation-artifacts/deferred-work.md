@@ -118,9 +118,9 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.~~ → Fixed: `handleInput` now uses `currentQuery.trim() === ''` consistently
 - ~~**Whitespace-only query shows "No notes matching '   '" in empty state** — When user types only spaces, `setQuery` stores the raw whitespace. JSX checks `query !== ''` (not trimmed) for empty-state display, showing literal spaces in the message. Pre-existing UX artifact — our trim fix prevents the backend call but doesn't address the display.~~ → Fixed: JSX conditions use `query.trim()` for both visibility checks and display text
 
-### Deferred from: test-reset + ESLint code review (2026-04-09)
+### ~~Deferred from: test-reset + ESLint code review (2026-04-09)~~ DONE
 
-- **Async event handlers bypass `no-floating-promises`** — `onClick={() => setActiveWorkspace(ws.id)}` and `onClick={() => setAllWorkspaces()}` in `WorkspaceSelector.tsx` (lines 87, 97), and `onChange={(e) => handleInput(e.target.value)}` in `SearchOverlay.tsx` (line 196) return async results that are silently discarded. The `no-floating-promises` rule doesn't flag these because React's event handler types expect `() => void`. The `no-misused-promises` rule would catch them. Consider enabling `no-misused-promises` in the ESLint config.
+- ~~**Async event handlers bypass `no-floating-promises`** — `onClick={() => setActiveWorkspace(ws.id)}` and `onClick={() => setAllWorkspaces()}` in `WorkspaceSelector.tsx` (lines 87, 97), and `onChange={(e) => handleInput(e.target.value)}` in `SearchOverlay.tsx` (line 196) return async results that are silently discarded. The `no-floating-promises` rule doesn't flag these because React's event handler types expect `() => void`. The `no-misused-promises` rule would catch them. Consider enabling `no-misused-promises` in the ESLint config.~~ → Enabled `no-misused-promises`, fixed 5 violations with `void` operator (WorkspaceSelector 2, SearchOverlay 2, StatusBar 1)
 
 ### Deferred from: Epic 3 retrospective review findings (2026-04-09)
 
