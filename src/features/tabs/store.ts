@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import type { EditorState as CMEditorState } from '@codemirror/state';
+import type { Compartment } from '@codemirror/state';
 
 /** A single open tab in the tab bar. */
 export interface Tab {
@@ -6,6 +8,14 @@ export interface Tab {
   noteId: number;
   /** Display title derived from note content. */
   title: string;
+  /** CodeMirror editor state snapshot, saved on tab switch. */
+  editorState?: CMEditorState;
+  /** Scroll position saved on tab switch. */
+  scrollTop?: number;
+  /** Per-tab language compartment for format switching. */
+  langCompartment?: Compartment;
+  /** Content format for this tab's note. */
+  format?: 'markdown' | 'plaintext';
 }
 
 interface TabState {
@@ -36,6 +46,10 @@ interface TabActions {
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   /** Update the display title of the tab at the given index. */
   updateTabTitle: (index: number, title: string) => void;
+  /** Save CodeMirror state and scroll position for a tab. */
+  saveTabState: (index: number, editorState: CMEditorState, scrollTop: number, langCompartment?: Compartment) => void;
+  /** Get the currently active tab, or null. */
+  getActiveTab: () => Tab | null;
   /** Reset all tab state to initial values. */
   reset: () => void;
 }
@@ -141,6 +155,20 @@ export const useTabStore = create<TabState & TabActions>((set, get) => ({
     const newTabs = [...tabs];
     newTabs[index] = { ...newTabs[index], title };
     set({ tabs: newTabs });
+  },
+
+  saveTabState: (index, editorState, scrollTop, langCompartment) => {
+    const { tabs } = get();
+    if (index < 0 || index >= tabs.length) return;
+    const newTabs = [...tabs];
+    newTabs[index] = { ...newTabs[index], editorState, scrollTop, langCompartment };
+    set({ tabs: newTabs });
+  },
+
+  getActiveTab: () => {
+    const { tabs, activeTabIndex } = get();
+    if (activeTabIndex === null || activeTabIndex >= tabs.length) return null;
+    return tabs[activeTabIndex];
   },
 
   reset: () => set(initialState),

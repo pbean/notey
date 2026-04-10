@@ -195,6 +195,38 @@ describe('useTabStore', () => {
     expect(useTabStore.getState().tabs[0].title).toBe('A');
   });
 
+  // --- saveTabState ---
+
+  it('saveTabState stores editorState and scrollTop on a tab', () => {
+    useTabStore.getState().openTab(1, 'A');
+    const mockState = { doc: 'mock' } as unknown as import('@codemirror/state').EditorState;
+    useTabStore.getState().saveTabState(0, mockState, 42);
+    const tab = useTabStore.getState().tabs[0];
+    expect(tab.editorState).toBe(mockState);
+    expect(tab.scrollTop).toBe(42);
+  });
+
+  it('saveTabState ignores out-of-range index', () => {
+    useTabStore.getState().openTab(1, 'A');
+    const mockState = { doc: 'mock' } as unknown as import('@codemirror/state').EditorState;
+    useTabStore.getState().saveTabState(5, mockState, 0);
+    expect(useTabStore.getState().tabs[0].editorState).toBeUndefined();
+  });
+
+  // --- getActiveTab ---
+
+  it('getActiveTab returns the active tab', () => {
+    useTabStore.getState().openTab(1, 'A');
+    useTabStore.getState().openTab(2, 'B');
+    useTabStore.getState().switchTab(1);
+    const tab = useTabStore.getState().getActiveTab();
+    expect(tab?.noteId).toBe(2);
+  });
+
+  it('getActiveTab returns null when no tabs are open', () => {
+    expect(useTabStore.getState().getActiveTab()).toBeNull();
+  });
+
   // --- reset ---
 
   it('reset clears all state', () => {

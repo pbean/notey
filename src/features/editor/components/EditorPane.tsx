@@ -1,16 +1,15 @@
-import { useEffect, useRef } from 'react';
-import { EditorView, keymap } from '@codemirror/view';
-import { EditorState, Compartment } from '@codemirror/state';
+import { useEffect, useRef, useCallback } from 'react';
+import { EditorView } from '@codemirror/view';
+import { EditorState as CMEditorState, type Compartment } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { useEditorStore } from '../store';
 import { useAutoSave, flushSave } from '../hooks/useAutoSave';
 import { useNoteHydration } from '../hooks/useNoteHydration';
 import { useWindowFocus } from '../hooks/useWindowFocus';
+import { useTabStore } from '../../tabs/store';
+import { buildExtensions } from '../extensions';
 import { commands } from '../../../generated/bindings';
-
-/** Module-scoped compartment enables dynamic language reconfiguration (Story 1.10). */
-export const langCompartment = new Compartment();
+import type { NoteFormat } from '../store';
 
 /** Props for the CodeMirror editor pane component. */
 interface EditorPaneProps {
@@ -19,72 +18,61 @@ interface EditorPaneProps {
 }
 
 /**
- * CodeMirror 6 editor pane. Syncs document changes to useEditorStore.content
- * via an update listener. Reconfigures the language compartment when store
- * format changes. Esc dismisses the window after flushing any pending save.
- * Focuses editor when the window gains focus (hotkey summon, tray click).
+ * CodeMirror 6 editor pane with multi-tab support. Maintains a single
+ * EditorView and swaps EditorState when the active tab changes.
+ * Flushes auto-save before each switch to prevent data loss.
  */
 export function EditorPane({ className, style }: EditorPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const setContent = useEditorStore((s) => s.setContent);
   const format = useEditorStore((s) => s.format);
+  const activeTabIndex = useTabStore((s) => s.activeTabIndex);
+
+  const prevTabIndexRef = useRef<number | null>(null);
+  const langCompartmentRef = useRef<Compartment | null>(null);
+  /** Monotonic ID incremented on each switch — stale switches abort when their ID doesn't match. */
+  const switchIdRef = useRef(0);
+  /** True while a tab switch is actively swapping state — guards update listener. */
+  const isSwitchingRef = useRef(false);
 
   useAutoSave();
   useNoteHydration(viewRef);
   useWindowFocus(viewRef);
 
+  const onEscape = useCallback(() => {
+    void flushSave()
+      .then(() => commands.dismissWindow())
+      .then((result) => {
+        if (result.status === 'error') {
+          console.error('dismissWindow failed:', result.error);
+        }
+      })
+      .catch((e: unknown) => console.error('Esc save flush failed:', e));
+  }, []);
+
+  const onDocChanged = useCallback(
+    (content: string) => {
+      // Guard: don't feed content back during tab switch or hydration
+      if (isSwitchingRef.current || useEditorStore.getState().isHydrating) return;
+      setContent(content);
+    },
+    [setContent],
+  );
+
+  // Create the EditorView once on mount
   useEffect(() => {
     if (!containerRef.current) return;
 
     const initialFormat = useEditorStore.getState().format;
+    const { extensions, langCompartment } = buildExtensions(initialFormat, {
+      onEscape,
+      onDocChanged,
+    });
+    langCompartmentRef.current = langCompartment;
 
     const view = new EditorView({
-      state: EditorState.create({
-        doc: '',
-        extensions: [
-          EditorView.lineWrapping,
-          langCompartment.of(initialFormat === 'markdown' ? markdown() : []),
-          keymap.of([
-            {
-              key: 'Escape',
-              run: () => {
-                void flushSave()
-                  .then(() => commands.dismissWindow())
-                  .then((result) => {
-                    if (result.status === 'error') {
-                      console.error('dismissWindow failed:', result.error);
-                    }
-                  })
-                  .catch((e: unknown) => console.error('Esc save flush failed:', e));
-                return true;
-              },
-            },
-          ]),
-          history(),
-          keymap.of(historyKeymap),
-          keymap.of(defaultKeymap),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              setContent(update.state.doc.toString());
-            }
-          }),
-          EditorView.theme({
-            '&': {
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-primary)',
-              background: 'var(--bg-primary)',
-              height: '100%',
-            },
-            '.cm-content': {
-              caretColor: 'var(--text-primary)',
-              padding: 'var(--space-4)',
-            },
-            '.cm-focused': { outline: 'none' },
-            '.cm-scroller': { overflow: 'auto' },
-          }),
-        ],
-      }),
+      state: CMEditorState.create({ doc: '', extensions }),
       parent: containerRef.current,
     });
 
@@ -94,14 +82,152 @@ export function EditorPane({ className, style }: EditorPaneProps) {
       view.destroy();
       viewRef.current = null;
     };
-  }, [setContent]);
+  }, [onEscape, onDocChanged]);
 
-  // Reconfigure language compartment when format changes
+  // React to activeTabIndex changes — perform state swap
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+
+    const prevIndex = prevTabIndexRef.current;
+
+    // Skip on initial render or no-op change
+    if (activeTabIndex === prevIndex) return;
+
+    // Cancellation: increment switchId; stale switches abort after each await
+    const switchId = ++switchIdRef.current;
+    const isStale = () => switchIdRef.current !== switchId;
+
+    // Update prev ref for the next switch
+    prevTabIndexRef.current = activeTabIndex;
+
+    void (async () => {
+      // 1. Save current tab state before switching
+      if (prevIndex !== null) {
+        const prevTabs = useTabStore.getState().tabs;
+        if (prevIndex < prevTabs.length) {
+          await flushSave();
+          if (isStale()) return;
+          useTabStore.getState().saveTabState(
+            prevIndex,
+            view.state,
+            view.scrollDOM.scrollTop,
+            langCompartmentRef.current ?? undefined,
+          );
+        }
+      }
+
+      // 2. No active tab → reset to empty
+      if (activeTabIndex === null) {
+        useEditorStore.getState().resetNote();
+        const { extensions, langCompartment } = buildExtensions('markdown', {
+          onEscape,
+          onDocChanged,
+        });
+        langCompartmentRef.current = langCompartment;
+        isSwitchingRef.current = true;
+        view.setState(CMEditorState.create({ doc: '', extensions }));
+        isSwitchingRef.current = false;
+        return;
+      }
+
+      const activeTab = useTabStore.getState().getActiveTab();
+      if (!activeTab) return;
+
+      // 3. Restore saved state or create new
+      if (activeTab.editorState) {
+        // Existing tab — restore saved EditorState
+        isSwitchingRef.current = true;
+        view.setState(activeTab.editorState);
+        isSwitchingRef.current = false;
+        if (activeTab.langCompartment) {
+          langCompartmentRef.current = activeTab.langCompartment;
+        }
+
+        // Sync editor store from saved tab
+        useEditorStore.setState({
+          activeNoteId: activeTab.noteId,
+          content: view.state.doc.toString(),
+          format: activeTab.format ?? 'markdown',
+          saveStatus: 'idle',
+          isHydrating: false,
+        });
+      } else {
+        // New tab — fetch note and create fresh EditorState
+        const result = await commands.getNote(activeTab.noteId);
+        if (isStale()) return; // User switched away during fetch
+
+        if (result.status === 'error') {
+          console.error('getNote failed:', result.error);
+          useEditorStore.getState().setSaveStatus('failed');
+          return;
+        }
+
+        const note = result.data;
+        const noteFormat: NoteFormat =
+          note.format === 'plaintext' ? 'plaintext' : 'markdown';
+
+        const { extensions, langCompartment } = buildExtensions(noteFormat, {
+          onEscape,
+          onDocChanged,
+        });
+        langCompartmentRef.current = langCompartment;
+
+        const newState = CMEditorState.create({
+          doc: note.content,
+          extensions,
+        });
+        isSwitchingRef.current = true;
+        view.setState(newState);
+        isSwitchingRef.current = false;
+
+        // Save initial state to tab store
+        if (!isStale()) {
+          const currentIndex = useTabStore.getState().activeTabIndex;
+          if (currentIndex !== null) {
+            useTabStore.getState().saveTabState(
+              currentIndex, newState, 0, langCompartment,
+            );
+            const tabs = useTabStore.getState().tabs;
+            if (currentIndex < tabs.length) {
+              const newTabs = [...tabs];
+              newTabs[currentIndex] = { ...newTabs[currentIndex], format: noteFormat };
+              useTabStore.setState({ tabs: newTabs });
+            }
+          }
+        }
+
+        // Sync editor store
+        useEditorStore.setState({
+          activeNoteId: activeTab.noteId,
+          content: note.content,
+          format: noteFormat,
+          saveStatus: 'idle',
+          lastSavedAt: note.updatedAt,
+          isHydrating: false,
+        });
+      }
+
+      // 4. Restore scroll position and focus
+      if (!isStale()) {
+        const scrollTop = activeTab.scrollTop ?? 0;
+        requestAnimationFrame(() => {
+          if (viewRef.current) {
+            viewRef.current.scrollDOM.scrollTop = scrollTop;
+            viewRef.current.focus();
+          }
+        });
+      }
+    })();
+  }, [activeTabIndex, onEscape, onDocChanged]);
+
+  // Reconfigure language compartment when format changes within a tab
+  useEffect(() => {
+    const view = viewRef.current;
+    const compartment = langCompartmentRef.current;
+    if (!view || !compartment) return;
     view.dispatch({
-      effects: langCompartment.reconfigure(format === 'markdown' ? markdown() : []),
+      effects: compartment.reconfigure(format === 'markdown' ? markdown() : []),
     });
   }, [format]);
 
