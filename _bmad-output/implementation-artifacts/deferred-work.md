@@ -124,7 +124,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 ### Deferred from: Epic 3 retrospective review findings (2026-04-09)
 
-- **`history()` extension not installed** — notey's CodeMirror setup does not include the `history()` extension from `@codemirror/commands`. Undo/redo relies on browser-native behavior. Must be added before/during Story 4.4 (multi-tab) since undo history needs to persist per-tab via `EditorState`. [src/features/editor/components/EditorPane.tsx]
+- ~~**`history()` extension not installed** — notey's CodeMirror setup does not include the `history()` extension from `@codemirror/commands`. Undo/redo relies on browser-native behavior. Must be added before/during Story 4.4 (multi-tab) since undo history needs to persist per-tab via `EditorState`. [src/features/editor/components/EditorPane.tsx]~~ → Added `history()` + `historyKeymap` to EditorPane extensions
 - **`sharedDebounceRef` module-scoped mutable state vs React 19 strict mode** — `useAutoSave.ts` uses a module-scoped `sharedDebounceRef` (not a React ref). In React 19 strict mode (dev only), the mount-unmount-remount cycle can cause the first mount's cleanup to clear a timer set by the second mount. Pre-existing fragility, becomes higher risk when multi-tab flush logic compounds on top. [src/features/editor/hooks/useAutoSave.ts]
 
 ### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06) — 1 open item remaining

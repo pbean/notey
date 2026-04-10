@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
-import { defaultKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { useEditorStore } from '../store';
 import { useAutoSave, flushSave } from '../hooks/useAutoSave';
 import { useNoteHydration } from '../hooks/useNoteHydration';
@@ -61,6 +61,8 @@ export function EditorPane({ className, style }: EditorPaneProps) {
               },
             },
           ]),
+          history(),
+          keymap.of(historyKeymap),
           keymap.of(defaultKeymap),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
