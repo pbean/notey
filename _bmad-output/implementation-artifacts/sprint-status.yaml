@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-09 # epic 3 → done, deferred work cleanup
+last_updated: 2026-04-09 # epic-3-retrospective → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -83,7 +83,7 @@ development_status:
   3-3-searchoverlay-ui-component: done
   3-4-search-result-keyboard-navigation-note-opening: done
   3-5-workspace-scoped-search-toggle: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # Epic 4: Multi-Tab Editing & Command Palette
   epic-4: backlog
@@ -169,3 +169,10 @@ development_status:
   epic-2-retro-item-7-epic1-p1-tests: done
   epic-2-retro-item-8-workspace-test-factory: done
   epic-2-retro-item-9-permission-toml-docs: done
+
+  # Epic 3 Retro Items:
+  epic-3-retro-item-1-codemirror-multiinstance-research: backlog
+  epic-3-retro-item-2-shared-test-reset-utility: backlog
+  epic-3-retro-item-3-eslint-unhandled-ipc-rule: backlog
+  epic-3-retro-item-4-shadcn-command-spike: backlog
+  epic-3-retro-item-5-trim-consistency-fix: backlog

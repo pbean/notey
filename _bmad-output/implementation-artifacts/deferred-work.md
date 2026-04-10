@@ -118,6 +118,11 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.~~ → Fixed: `handleInput` now uses `currentQuery.trim() === ''` consistently
 - ~~**Whitespace-only query shows "No notes matching '   '" in empty state** — When user types only spaces, `setQuery` stores the raw whitespace. JSX checks `query !== ''` (not trimmed) for empty-state display, showing literal spaces in the message. Pre-existing UX artifact — our trim fix prevents the backend call but doesn't address the display.~~ → Fixed: JSX conditions use `query.trim()` for both visibility checks and display text
 
+### Deferred from: Epic 3 retrospective review findings (2026-04-09)
+
+- **`history()` extension not installed** — notey's CodeMirror setup does not include the `history()` extension from `@codemirror/commands`. Undo/redo relies on browser-native behavior. Must be added before/during Story 4.4 (multi-tab) since undo history needs to persist per-tab via `EditorState`. [src/features/editor/components/EditorPane.tsx]
+- **`sharedDebounceRef` module-scoped mutable state vs React 19 strict mode** — `useAutoSave.ts` uses a module-scoped `sharedDebounceRef` (not a React ref). In React 19 strict mode (dev only), the mount-unmount-remount cycle can cause the first mount's cleanup to clear a timer set by the second mount. Pre-existing fragility, becomes higher risk when multi-tab flush logic compounds on top. [src/features/editor/hooks/useAutoSave.ts]
+
 ### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06) — 1 open item remaining
 
 - ~~**Snippet `<mark>` HTML tags — XSS risk** — `snippet()` injects raw `<mark>` HTML into the snippet field. If story 3.3's frontend renders with innerHTML, note content containing malicious HTML could execute in the webview. Story 3.3 must use safe rendering.~~ → Verified safe: `HighlightedSnippet` component parses `<mark>` tags via regex, renders only extracted text as React text nodes — explicit XSS test exists at `HighlightedSnippet.test.tsx:43-52`
