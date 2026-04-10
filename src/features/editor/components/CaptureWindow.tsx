@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { EditorPane } from './EditorPane';
 import { StatusBar } from './StatusBar';
+import { TabBar } from '../../tabs/components/TabBar';
 import { SearchOverlay } from '../../search/components/SearchOverlay';
 import { useSearchStore } from '../../search/store';
 
@@ -25,6 +26,7 @@ export function CaptureWindow() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--bg-primary)]">
+      <TabBar />
       <div className="relative flex-1 min-h-0">
         <EditorPane className="h-full" />
         {isSearchOpen && <SearchOverlay />}

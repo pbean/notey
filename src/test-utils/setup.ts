@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { useEditorStore } from '../features/editor/store';
 import { useWorkspaceStore } from '../features/workspace/store';
 import { useSearchStore } from '../features/search/store';
+import { useTabStore } from '../features/tabs/store';
 
 /**
  * Per-test mock handler for Tauri IPC invoke calls.
@@ -29,6 +30,7 @@ afterEach(() => {
   useEditorStore.getState().resetNote();
   useWorkspaceStore.getState().resetWorkspace();
   useSearchStore.getState().resetSearch();
+  useTabStore.getState().reset();
 
   // Remove CodeMirror DOM nodes that leak between tests
   document.querySelectorAll('.cm-editor, .cm-content').forEach((el) => el.remove());
