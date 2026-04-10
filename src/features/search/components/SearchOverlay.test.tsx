@@ -189,6 +189,8 @@ describe('SearchOverlay', () => {
     });
     expect(useSearchStore.getState().results).toEqual([]);
     expect(mockInvoke).not.toHaveBeenCalledWith('search_notes', expect.anything());
+    // Empty state message should NOT be shown for whitespace-only input
+    expect(screen.queryByTestId('search-empty-state')).toBeNull();
   });
 
   it('displays workspace name or "No workspace" fallback', async () => {

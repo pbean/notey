@@ -251,7 +251,7 @@ export function SearchOverlay() {
         </div>
 
         {/* Result count header */}
-        {query !== '' && results.length > 0 && (
+        {query.trim() !== '' && results.length > 0 && (
           <div
             style={{
               fontSize: 'var(--text-xs)',
@@ -279,7 +279,7 @@ export function SearchOverlay() {
         )}
 
         {/* Empty state */}
-        {query !== '' && results.length === 0 && (
+        {query.trim() !== '' && results.length === 0 && (
           <div
             data-testid="search-empty-state"
             style={{
@@ -288,7 +288,7 @@ export function SearchOverlay() {
               marginTop: 'var(--space-4)',
             }}
           >
-            No notes matching &apos;{query}&apos;
+            No notes matching &apos;{query.trim()}&apos;
           </div>
         )}
 
