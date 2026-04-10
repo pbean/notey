@@ -26,6 +26,8 @@ interface WorkspaceActions {
   loadFilteredNotes: () => Promise<void>;
   reassignNoteWorkspace: (noteId: number, workspaceId: number | null) => Promise<Note | null>;
   initWorkspace: () => Promise<void>;
+  /** Reset all workspace state to initial values (test cleanup only). */
+  resetWorkspace: () => void;
 }
 
 /**
@@ -126,4 +128,16 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     });
     await get().loadFilteredNotes();
   },
+
+  resetWorkspace: () =>
+    set({
+      activeWorkspaceId: null,
+      activeWorkspaceName: null,
+      workspaces: [],
+      isAllWorkspaces: false,
+      filteredNotes: [],
+      isLoadingNotes: false,
+      workspaceError: null,
+      notesError: null,
+    }),
 }));

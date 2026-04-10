@@ -12,13 +12,12 @@ const MOCK_FILTERED_NOTE = { id: 1, title: 'Note', content: '', format: 'markdow
 
 describe('WorkspaceSelector', () => {
   beforeEach(() => {
+    // Set up test-specific state (global afterEach handles reset)
     useWorkspaceStore.setState({
       activeWorkspaceId: 1,
       activeWorkspaceName: 'alpha',
       workspaces: MOCK_WORKSPACES,
-      isAllWorkspaces: false,
       filteredNotes: [MOCK_FILTERED_NOTE],
-      isLoadingNotes: false,
     });
   });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
 import { useEditorStore } from '../../editor/store';
@@ -27,18 +27,8 @@ const MOCK_RESULTS = [
 
 describe('SearchOverlay', () => {
   beforeEach(() => {
-    useSearchStore.getState().closeSearch();
+    // Open search for each test (global afterEach handles full reset)
     useSearchStore.getState().openSearch();
-    useEditorStore.getState().resetNote();
-    useWorkspaceStore.setState({
-      activeWorkspaceId: null,
-      activeWorkspaceName: null,
-      isAllWorkspaces: false,
-    });
-  });
-
-  afterEach(() => {
-    document.querySelectorAll('.cm-content').forEach((el) => el.remove());
   });
 
   // COMP-3.3-02: Overlay renders when isOpen=true, input auto-focused

@@ -33,6 +33,8 @@ interface SearchActions {
   toggleScope: () => void;
   /** Reset scope filter to 'workspace' (called on workspace switch). */
   resetScope: () => void;
+  /** Reset all search state to initial values (test cleanup only). */
+  resetSearch: () => void;
 }
 
 /** Per-feature Zustand store for search overlay state and actions. */
@@ -59,4 +61,5 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
     scopeFilter: state.scopeFilter === 'workspace' ? 'all' : 'workspace',
   })),
   resetScope: () => set({ scopeFilter: 'workspace' }),
+  resetSearch: () => set({ query: '', results: [], isOpen: false, selectedIndex: 0, scopeFilter: 'workspace' }),
 }));

@@ -20,8 +20,6 @@ function mockCreateAndUpdate() {
 describe('useAutoSave', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    useEditorStore.getState().resetNote();
-    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null });
     mockCreateAndUpdate();
   });
 
@@ -89,8 +87,6 @@ describe('useAutoSave', () => {
 describe('flushSave', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    useEditorStore.getState().resetNote();
-    useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null });
     mockCreateAndUpdate();
   });
 

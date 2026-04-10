@@ -41,7 +41,7 @@ export function WorkspaceSelector() {
   return (
     <DropdownMenu
       onOpenChange={(open) => {
-        if (open) loadWorkspaces();
+        if (open) void loadWorkspaces();
       }}
     >
       <DropdownMenuTrigger

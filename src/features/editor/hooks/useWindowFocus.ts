@@ -14,7 +14,7 @@ export function useWindowFocus(viewRef: React.RefObject<EditorView | null>): voi
     let unlisten: (() => void) | undefined;
     const appWindow = getCurrentWebviewWindow();
 
-    appWindow.listen('tauri://focus', () => {
+    void appWindow.listen('tauri://focus', () => {
       viewRef.current?.focus();
     }).then((fn) => {
       if (cancelled) {

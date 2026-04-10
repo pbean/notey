@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { useEditorStore } from '../store';
 import { useWorkspaceStore } from '../../workspace/store';
 import { StatusBar } from './StatusBar';
 
@@ -10,17 +9,6 @@ const MOCK_WORKSPACES = [
 ];
 
 describe('StatusBar', () => {
-  beforeEach(() => {
-    useEditorStore.getState().resetNote();
-    useWorkspaceStore.setState({
-      activeWorkspaceId: null,
-      activeWorkspaceName: null,
-      workspaces: [],
-      isAllWorkspaces: false,
-      filteredNotes: [],
-      isLoadingNotes: false,
-    });
-  });
 
   it('renders "No workspace" when no workspace is active', () => {
     render(<StatusBar />);

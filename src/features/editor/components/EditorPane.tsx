@@ -49,9 +49,14 @@ export function EditorPane({ className, style }: EditorPaneProps) {
             {
               key: 'Escape',
               run: () => {
-                flushSave()
+                void flushSave()
                   .then(() => commands.dismissWindow())
-                  .catch((e) => console.error('Esc save flush failed:', e));
+                  .then((result) => {
+                    if (result.status === 'error') {
+                      console.error('dismissWindow failed:', result.error);
+                    }
+                  })
+                  .catch((e: unknown) => console.error('Esc save flush failed:', e));
                 return true;
               },
             },

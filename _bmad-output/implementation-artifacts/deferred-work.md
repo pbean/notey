@@ -118,6 +118,10 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.~~ → Fixed: `handleInput` now uses `currentQuery.trim() === ''` consistently
 - ~~**Whitespace-only query shows "No notes matching '   '" in empty state** — When user types only spaces, `setQuery` stores the raw whitespace. JSX checks `query !== ''` (not trimmed) for empty-state display, showing literal spaces in the message. Pre-existing UX artifact — our trim fix prevents the backend call but doesn't address the display.~~ → Fixed: JSX conditions use `query.trim()` for both visibility checks and display text
 
+### Deferred from: test-reset + ESLint code review (2026-04-09)
+
+- **Async event handlers bypass `no-floating-promises`** — `onClick={() => setActiveWorkspace(ws.id)}` and `onClick={() => setAllWorkspaces()}` in `WorkspaceSelector.tsx` (lines 87, 97), and `onChange={(e) => handleInput(e.target.value)}` in `SearchOverlay.tsx` (line 196) return async results that are silently discarded. The `no-floating-promises` rule doesn't flag these because React's event handler types expect `() => void`. The `no-misused-promises` rule would catch them. Consider enabling `no-misused-promises` in the ESLint config.
+
 ### Deferred from: Epic 3 retrospective review findings (2026-04-09)
 
 - **`history()` extension not installed** — notey's CodeMirror setup does not include the `history()` extension from `@codemirror/commands`. Undo/redo relies on browser-native behavior. Must be added before/during Story 4.4 (multi-tab) since undo history needs to persist per-tab via `EditorState`. [src/features/editor/components/EditorPane.tsx]

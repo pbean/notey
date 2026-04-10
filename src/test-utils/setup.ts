@@ -1,5 +1,8 @@
-import { vi, beforeEach } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { useEditorStore } from '../features/editor/store';
+import { useWorkspaceStore } from '../features/workspace/store';
+import { useSearchStore } from '../features/search/store';
 
 /**
  * Per-test mock handler for Tauri IPC invoke calls.
@@ -15,4 +18,18 @@ vi.mock('@tauri-apps/api/core', () => ({
 beforeEach(() => {
   mockInvoke.mockReset();
   mockInvoke.mockRejectedValue(new Error('unmocked invoke call'));
+});
+
+/**
+ * Global cleanup after every test: reset all Zustand stores and remove leaked DOM nodes.
+ * When adding a new store, add its reset call here.
+ */
+afterEach(() => {
+  // Reset all Zustand stores to initial values
+  useEditorStore.getState().resetNote();
+  useWorkspaceStore.getState().resetWorkspace();
+  useSearchStore.getState().resetSearch();
+
+  // Remove CodeMirror DOM nodes that leak between tests
+  document.querySelectorAll('.cm-editor, .cm-content').forEach((el) => el.remove());
 });

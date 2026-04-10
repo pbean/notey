@@ -76,7 +76,7 @@ export function SearchOverlay() {
         if (r.length === 0) return;
         const selected = r[idx];
         if (!selected) return;
-        openNote(selected.id);
+        void openNote(selected.id);
       }
     };
     window.addEventListener('keydown', handler);
@@ -145,7 +145,7 @@ export function SearchOverlay() {
     useSearchStore.getState().toggleScope();
     const currentQuery = useSearchStore.getState().query;
     if (currentQuery.trim()) {
-      handleInput();
+      void handleInput();
     }
   }, [handleInput]);
 
