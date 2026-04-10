@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../../editor/store';
+import { useWorkspaceStore } from '../../workspace/store';
 import { useSearchStore } from '../store';
 import { SearchResultItem } from './SearchResultItem';
 
@@ -16,7 +17,17 @@ export function SearchOverlay() {
   const query = useSearchStore((s) => s.query);
   const results = useSearchStore((s) => s.results);
   const selectedIndex = useSearchStore((s) => s.selectedIndex);
+  const scopeFilter = useSearchStore((s) => s.scopeFilter);
+  const activeWorkspaceName = useWorkspaceStore((s) => s.activeWorkspaceName);
+  const isAllWorkspaces = useWorkspaceStore((s) => s.isAllWorkspaces);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const [openError, setOpenError] = useState<string | null>(null);
+
+  const isEffectivelyAll = scopeFilter === 'all' || isAllWorkspaces || !activeWorkspaceId;
+  const scopeText = isEffectivelyAll ? 'All Workspaces' : (activeWorkspaceName ?? 'Workspace');
+  const scopeLabel = isEffectivelyAll
+    ? 'Search scope: All Workspaces. Click to search current workspace'
+    : `Search scope: ${activeWorkspaceName}. Click to search all workspaces`;
 
   /** Opens a note in the editor, closes the search overlay, and returns focus to the editor. */
   const openNote = useCallback(async (noteId: number) => {
@@ -96,15 +107,21 @@ export function SearchOverlay() {
   };
 
   /** Handle input changes — search immediately, no debounce. */
-  const handleInput = async (value: string) => {
+  const handleInput = useCallback(async (value?: string) => {
+    const currentQuery = value ?? useSearchStore.getState().query;
     const requestId = ++requestIdRef.current;
-    useSearchStore.getState().setQuery(value);
-    if (value === '') {
+    if (value !== undefined) {
+      useSearchStore.getState().setQuery(value);
+    }
+    if (currentQuery === '') {
       useSearchStore.getState().setResults([]);
       return;
     }
+    const { scopeFilter } = useSearchStore.getState();
+    const { activeWorkspaceId, isAllWorkspaces } = useWorkspaceStore.getState();
+    const workspaceId = (scopeFilter === 'all' || isAllWorkspaces || !activeWorkspaceId) ? null : activeWorkspaceId;
     try {
-      const result = await commands.searchNotes(value, null);
+      const result = await commands.searchNotes(currentQuery, workspaceId);
       // Guard against stale results from earlier requests
       if (requestIdRef.current !== requestId) return;
       if (result.status === 'ok') {
@@ -118,7 +135,16 @@ export function SearchOverlay() {
       console.error('searchNotes exception:', err);
       useSearchStore.getState().setResults([]);
     }
-  };
+  }, []);
+
+  /** Toggle search scope and re-execute search if query is non-empty. */
+  const handleScopeToggle = useCallback(() => {
+    useSearchStore.getState().toggleScope();
+    const currentQuery = useSearchStore.getState().query;
+    if (currentQuery.trim()) {
+      handleInput();
+    }
+  }, [handleInput]);
 
   return (
     <div
@@ -155,35 +181,69 @@ export function SearchOverlay() {
           background: 'var(--bg-elevated)',
         }}
       >
-        {/* Search input */}
-        <input
-          ref={inputRef}
-          data-testid="search-input"
-          aria-label="Search notes"
-          type="text"
-          placeholder="Search notes..."
-          value={query}
-          onChange={(e) => handleInput(e.target.value)}
-          style={{
-            fontSize: 'var(--text-base)',
-            fontFamily: 'var(--font-mono)',
-            lineHeight: '22px',
-            padding: '12px 8px',
-            background: 'transparent',
-            border: '1px solid var(--border-default)',
-            borderRadius: '4px',
-            color: 'var(--text-primary)',
-            outline: '2px solid transparent',
-            outlineOffset: '2px',
-            width: '100%',
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.outline = '2px solid transparent';
-          }}
-        />
+        {/* Search input + scope toggle */}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          <input
+            ref={inputRef}
+            data-testid="search-input"
+            aria-label="Search notes"
+            type="text"
+            placeholder="Search notes..."
+            value={query}
+            onChange={(e) => handleInput(e.target.value)}
+            style={{
+              fontSize: 'var(--text-base)',
+              fontFamily: 'var(--font-mono)',
+              lineHeight: '22px',
+              padding: '12px 8px',
+              background: 'transparent',
+              border: '1px solid var(--border-default)',
+              borderRadius: '4px',
+              color: 'var(--text-primary)',
+              outline: '2px solid transparent',
+              outlineOffset: '2px',
+              flex: 1,
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.outline = '2px solid var(--focus-ring)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.outline = '2px solid transparent';
+            }}
+          />
+          <button
+            data-testid="search-scope-toggle"
+            aria-label={scopeLabel}
+            onClick={handleScopeToggle}
+            style={{
+              fontSize: 'var(--text-xs)',
+              fontFamily: 'var(--font-mono)',
+              padding: '8px 12px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '4px',
+              color: isEffectivelyAll ? 'var(--text-muted)' : 'var(--text-primary)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              outline: '2px solid transparent',
+              outlineOffset: '2px',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--bg-surface)';
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.outline = '2px solid var(--focus-ring)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.outline = '2px solid transparent';
+            }}
+          >
+            {scopeText}
+          </button>
+        </div>
 
         {/* Result count header */}
         {query !== '' && results.length > 0 && (

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
 import { useEditorStore } from '../../editor/store';
+import { useWorkspaceStore } from '../../workspace/store';
 import { useSearchStore } from '../store';
 import { SearchOverlay } from './SearchOverlay';
 
@@ -311,15 +312,19 @@ describe('SearchOverlay', () => {
   });
 
   // COMP-3.4-03: Focus is trapped within overlay — Tab does not escape to editor
-  it('traps focus within overlay on Tab key — preventDefault called', () => {
+  it('traps focus within overlay on Tab key — preventDefault called at boundary', () => {
     render(<SearchOverlay />);
-    const input = screen.getByTestId('search-input');
-    expect(document.activeElement).toBe(input);
-
+    const toggle = screen.getByTestId('search-scope-toggle');
     const overlay = screen.getByTestId('search-overlay');
-    // fireEvent returns false when preventDefault was called on the event
-    const notPrevented = fireEvent.keyDown(overlay, { key: 'Tab' });
-    expect(notPrevented).toBe(false);
+
+    // Tab from input (first) to button (last) — natural movement, not prevented
+    const notPreventedFromInput = fireEvent.keyDown(overlay, { key: 'Tab' });
+    expect(notPreventedFromInput).toBe(true);
+
+    // Tab from button (last) wraps to input — preventDefault called
+    toggle.focus();
+    const notPreventedFromButton = fireEvent.keyDown(overlay, { key: 'Tab' });
+    expect(notPreventedFromButton).toBe(false);
   });
 
   it('traps focus on Shift+Tab at first element — preventDefault called', () => {
@@ -476,6 +481,213 @@ describe('SearchOverlay', () => {
       // Should have called get_note with id=2 (from click), not id=1 (from selectedIndex)
       expect(mockInvoke).toHaveBeenCalledWith('get_note', { id: 2 });
       expect(useEditorStore.getState().activeNoteId).toBe(2);
+    });
+  });
+
+  // ── Story 3.5: Workspace-Scoped Search Toggle ──────────────────────
+
+  describe('workspace-scoped search', () => {
+    beforeEach(() => {
+      useSearchStore.setState({ scopeFilter: 'workspace' });
+      useWorkspaceStore.setState({
+        activeWorkspaceId: 1,
+        activeWorkspaceName: 'test-workspace',
+        isAllWorkspaces: false,
+        workspaces: [],
+        filteredNotes: [],
+        isLoadingNotes: false,
+        workspaceError: null,
+        notesError: null,
+      });
+    });
+
+    // COMP-3.5-01: Default scope is active workspace
+    it('calls searchNotes with activeWorkspaceId when workspace is active', async () => {
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      render(<SearchOverlay />);
+      fireEvent.change(screen.getByTestId('search-input'), {
+        target: { value: 'project' },
+      });
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('search_notes', {
+          query: 'project',
+          workspaceId: 1,
+        });
+      });
+    });
+
+    // COMP-3.5-02: Toggle to "All Workspaces"
+    it('re-calls searchNotes with null after toggling to all workspaces', async () => {
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      render(<SearchOverlay />);
+      fireEvent.change(screen.getByTestId('search-input'), {
+        target: { value: 'project' },
+      });
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('search_notes', {
+          query: 'project',
+          workspaceId: 1,
+        });
+      });
+
+      mockInvoke.mockClear();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('search-scope-toggle'));
+      });
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('search_notes', {
+          query: 'project',
+          workspaceId: null,
+        });
+      });
+
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('All Workspaces');
+    });
+
+    // COMP-3.5-03: Toggle back to workspace
+    it('re-calls searchNotes with activeWorkspaceId after toggling back', async () => {
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      render(<SearchOverlay />);
+      fireEvent.change(screen.getByTestId('search-input'), {
+        target: { value: 'project' },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search-result-1')).toBeInTheDocument();
+      });
+
+      // Toggle to all
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('search-scope-toggle'));
+      });
+
+      mockInvoke.mockClear();
+
+      // Toggle back to workspace
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('search-scope-toggle'));
+      });
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('search_notes', {
+          query: 'project',
+          workspaceId: 1,
+        });
+      });
+
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('test-workspace');
+    });
+
+    // COMP-3.5-04: Default scope is "All Workspaces" when isAllWorkspaces is true
+    it('defaults to all workspaces when isAllWorkspaces is true', async () => {
+      useWorkspaceStore.setState({ isAllWorkspaces: true, activeWorkspaceId: null, activeWorkspaceName: null });
+
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'search_notes') return Promise.resolve(MOCK_RESULTS);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      render(<SearchOverlay />);
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('All Workspaces');
+
+      fireEvent.change(screen.getByTestId('search-input'), {
+        target: { value: 'project' },
+      });
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('search_notes', {
+          query: 'project',
+          workspaceId: null,
+        });
+      });
+    });
+
+    // COMP-3.5-05: Scope indicator shows workspace name when scoped
+    it('shows workspace name in scope indicator when scoped to workspace', () => {
+      render(<SearchOverlay />);
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('test-workspace');
+    });
+
+    // COMP-3.5-06: Scope indicator shows "All Workspaces" when unscoped
+    it('shows "All Workspaces" in scope indicator when unscoped', () => {
+      useWorkspaceStore.setState({ activeWorkspaceId: null, activeWorkspaceName: null });
+
+      render(<SearchOverlay />);
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('All Workspaces');
+    });
+
+    // COMP-3.5-07: Tab cycles between search input and scope toggle
+    it('Tab cycles between input and scope toggle — preventDefault called', () => {
+      render(<SearchOverlay />);
+      const input = screen.getByTestId('search-input');
+      const toggle = screen.getByTestId('search-scope-toggle');
+      const overlay = screen.getByTestId('search-overlay');
+
+      // Focus starts on input
+      expect(document.activeElement).toBe(input);
+
+      // Tab from input should go to scope toggle (not prevented — intermediate element)
+      // Tab from scope toggle (last) wraps to input — preventDefault called
+      toggle.focus();
+      expect(document.activeElement).toBe(toggle);
+      const notPrevented = fireEvent.keyDown(overlay, { key: 'Tab' });
+      expect(notPrevented).toBe(false);
+
+      // Shift+Tab from input (first) wraps to scope toggle — preventDefault called
+      input.focus();
+      const notPreventedShift = fireEvent.keyDown(overlay, { key: 'Tab', shiftKey: true });
+      expect(notPreventedShift).toBe(false);
+    });
+
+    // COMP-3.5-08: Scope persists across overlay close/reopen
+    it('preserves scope choice across overlay close and reopen', () => {
+      render(<SearchOverlay />);
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('test-workspace');
+
+      // Toggle to all
+      fireEvent.click(screen.getByTestId('search-scope-toggle'));
+      expect(screen.getByTestId('search-scope-toggle')).toHaveTextContent('All Workspaces');
+      expect(useSearchStore.getState().scopeFilter).toBe('all');
+
+      // Close and reopen — scopeFilter should persist
+      useSearchStore.getState().closeSearch();
+      useSearchStore.getState().openSearch();
+
+      expect(useSearchStore.getState().scopeFilter).toBe('all');
+    });
+
+    // COMP-3.5-09: Toggle with empty query does not call searchNotes
+    it('does not call searchNotes when toggling scope with empty query', () => {
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'search_notes') return Promise.resolve([]);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      render(<SearchOverlay />);
+      // Query is empty by default
+      expect(useSearchStore.getState().query).toBe('');
+
+      mockInvoke.mockClear();
+
+      fireEvent.click(screen.getByTestId('search-scope-toggle'));
+
+      expect(mockInvoke).not.toHaveBeenCalledWith('search_notes', expect.anything());
     });
   });
 });

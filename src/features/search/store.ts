@@ -11,6 +11,8 @@ interface SearchState {
   isOpen: boolean;
   /** Index of the currently highlighted result in the list. */
   selectedIndex: number;
+  /** Search scope filter — 'workspace' scopes to active workspace, 'all' searches everything. */
+  scopeFilter: 'workspace' | 'all';
 }
 
 /** Actions for managing search state. */
@@ -27,6 +29,8 @@ interface SearchActions {
   selectPrev: () => void;
   /** Replace the results array (called after searchNotes resolves). */
   setResults: (results: SearchResult[]) => void;
+  /** Toggle search scope between 'workspace' and 'all'. */
+  toggleScope: () => void;
 }
 
 /** Per-feature Zustand store for search overlay state and actions. */
@@ -35,6 +39,7 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
   results: [],
   isOpen: false,
   selectedIndex: 0,
+  scopeFilter: 'workspace',
   setQuery: (query) => set({ query, selectedIndex: 0 }),
   openSearch: () => set({ isOpen: true, query: '', results: [], selectedIndex: 0 }),
   closeSearch: () => set({ isOpen: false, query: '', results: [], selectedIndex: 0 }),
@@ -48,4 +53,7 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
     set({ selectedIndex: Math.max(selectedIndex - 1, 0) });
   },
   setResults: (results) => set({ results, selectedIndex: 0 }),
+  toggleScope: () => set((state) => ({
+    scopeFilter: state.scopeFilter === 'workspace' ? 'all' : 'workspace',
+  })),
 }));
