@@ -122,10 +122,10 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - ~~**Async event handlers bypass `no-floating-promises`** — `onClick={() => setActiveWorkspace(ws.id)}` and `onClick={() => setAllWorkspaces()}` in `WorkspaceSelector.tsx` (lines 87, 97), and `onChange={(e) => handleInput(e.target.value)}` in `SearchOverlay.tsx` (line 196) return async results that are silently discarded. The `no-floating-promises` rule doesn't flag these because React's event handler types expect `() => void`. The `no-misused-promises` rule would catch them. Consider enabling `no-misused-promises` in the ESLint config.~~ → Enabled `no-misused-promises`, fixed 5 violations with `void` operator (WorkspaceSelector 2, SearchOverlay 2, StatusBar 1)
 
-### Deferred from: Epic 3 retrospective review findings (2026-04-09)
+### ~~Deferred from: Epic 3 retrospective review findings (2026-04-09)~~ DONE
 
 - ~~**`history()` extension not installed** — notey's CodeMirror setup does not include the `history()` extension from `@codemirror/commands`. Undo/redo relies on browser-native behavior. Must be added before/during Story 4.4 (multi-tab) since undo history needs to persist per-tab via `EditorState`. [src/features/editor/components/EditorPane.tsx]~~ → Added `history()` + `historyKeymap` to EditorPane extensions
-- **`sharedDebounceRef` module-scoped mutable state vs React 19 strict mode** — `useAutoSave.ts` uses a module-scoped `sharedDebounceRef` (not a React ref). In React 19 strict mode (dev only), the mount-unmount-remount cycle can cause the first mount's cleanup to clear a timer set by the second mount. Pre-existing fragility, becomes higher risk when multi-tab flush logic compounds on top. [src/features/editor/hooks/useAutoSave.ts]
+- ~~**`sharedDebounceRef` module-scoped mutable state vs React 19 strict mode** — `useAutoSave.ts` uses a module-scoped `sharedDebounceRef` (not a React ref). In React 19 strict mode (dev only), the mount-unmount-remount cycle can cause the first mount's cleanup to clear a timer set by the second mount. Pre-existing fragility, becomes higher risk when multi-tab flush logic compounds on top. [src/features/editor/hooks/useAutoSave.ts]~~ → Converted `sharedDebounceRef` and `isCreating` to React refs; extracted `performSave` helper; `registeredFlush` module pointer for hook↔export link
 
 ### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06) — 1 open item remaining
 

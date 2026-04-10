@@ -3,30 +3,35 @@ import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
 import { useWorkspaceStore } from '../../workspace/store';
 
-/** Ref to the active debounce timer, shared between hook and flushSave. */
-let sharedDebounceRef: ReturnType<typeof setTimeout> | null = null;
-
-/** Guards against overlapping createNote calls across flushSave and the debounce callback. */
-let isCreating = false;
+/** Module-level reference to the active hook instance's flush function. */
+let registeredFlush: (() => Promise<void>) | null = null;
 
 /**
  * Immediately saves the current editor content if dirty, bypassing debounce.
- * Returns a Promise that resolves when the save completes (or immediately if nothing to save).
+ * When useAutoSave is mounted, delegates to its instance to properly cancel timers.
+ * When called standalone (no hook), performs a direct save.
  */
 export async function flushSave(): Promise<void> {
-  // Cancel any pending debounce
-  if (sharedDebounceRef) {
-    clearTimeout(sharedDebounceRef);
-    sharedDebounceRef = null;
-  }
+  if (registeredFlush) return registeredFlush();
+  await performSave();
+}
 
-  // Skip if a createNote call is already in flight
-  if (isCreating) return;
+/**
+ * Core save logic shared by flushSave and the debounce callback.
+ * Reads current state from stores, creates a note if needed, then updates.
+ *
+ * @param isCreatingRef - optional guard ref to prevent overlapping createNote calls.
+ *   When provided (hook-managed path), the ref is checked and set during creation.
+ *   When omitted (standalone flushSave), no guard is needed since there's no concurrent debounce.
+ */
+async function performSave(
+  isCreatingRef?: React.MutableRefObject<boolean>,
+): Promise<void> {
+  if (isCreatingRef?.current) return;
 
   const { activeNoteId, content, format, setSaveStatus, markSaved, setActiveNote } =
     useEditorStore.getState();
 
-  // Nothing to save if content is empty and no note exists
   if (content.trim() === '' && activeNoteId === null) return;
 
   setSaveStatus('saving');
@@ -34,19 +39,19 @@ export async function flushSave(): Promise<void> {
   let noteId = activeNoteId;
 
   if (noteId === null) {
-    isCreating = true;
+    if (isCreatingRef) isCreatingRef.current = true;
     try {
       const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
       const createResult = await commands.createNote(format, workspaceId);
       if (createResult.status === 'error') {
         setSaveStatus('failed');
-        console.error('flushSave createNote failed:', createResult.error);
+        console.error('createNote failed:', createResult.error);
         return;
       }
       noteId = createResult.data.id;
       setActiveNote(noteId);
     } finally {
-      isCreating = false;
+      if (isCreatingRef) isCreatingRef.current = false;
     }
   }
 
@@ -56,7 +61,7 @@ export async function flushSave(): Promise<void> {
   const updateResult = await commands.updateNote(noteId, title, content, null);
   if (updateResult.status === 'error') {
     setSaveStatus('failed');
-    console.error('flushSave updateNote failed:', updateResult.error);
+    console.error('updateNote failed:', updateResult.error);
     return;
   }
 
@@ -73,19 +78,36 @@ export async function flushSave(): Promise<void> {
 export function useAutoSave(): void {
   const content = useEditorStore((s) => s.content);
 
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCreatingRef = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cleanup all timers on unmount
+  // Register instance flush on mount, cleanup on unmount
   useEffect(() => {
+    const instanceFlush = async () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      await performSave(isCreatingRef);
+    };
+
+    registeredFlush = instanceFlush;
+
     return () => {
-      if (sharedDebounceRef) clearTimeout(sharedDebounceRef);
+      if (registeredFlush === instanceFlush) registeredFlush = null;
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, []);
 
+  // Debounced auto-save on content change
   useEffect(() => {
     // Always cancel any pending save before evaluating the guard
-    if (sharedDebounceRef) clearTimeout(sharedDebounceRef);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     // No-op: empty content with no existing note
     if (content.trim() === '' && useEditorStore.getState().activeNoteId === null) return;
@@ -93,52 +115,20 @@ export function useAutoSave(): void {
     // Skip auto-save when content was set by loadNote hydration, not user typing
     if (useEditorStore.getState().isHydrating) return;
 
-    sharedDebounceRef = setTimeout(async () => {
-      sharedDebounceRef = null;
-
-      // Skip if a createNote call is already in flight
-      if (isCreating) return;
-
-      const { setActiveNote, setSaveStatus, markSaved } = useEditorStore.getState();
-      // Fallback to 'Untitled' when the first line is blank (e.g. user pressed Enter first)
-      const firstLine = content.split('\n')[0].trim();
-      const title = firstLine.slice(0, 100) || 'Untitled';
-
-      setSaveStatus('saving');
+    debounceRef.current = setTimeout(async () => {
+      debounceRef.current = null;
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
 
-      let noteId = useEditorStore.getState().activeNoteId;
+      await performSave(isCreatingRef);
 
-      if (noteId === null) {
-        isCreating = true;
-        try {
-          const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-          const createResult = await commands.createNote(useEditorStore.getState().format, workspaceId);
-          if (createResult.status === 'error') {
-            setSaveStatus('failed');
-            console.error('createNote failed:', createResult.error);
-            return;
+      // Transition saved → idle after 2s
+      if (useEditorStore.getState().saveStatus === 'saved') {
+        idleTimerRef.current = setTimeout(() => {
+          if (useEditorStore.getState().saveStatus === 'saved') {
+            useEditorStore.getState().setSaveStatus('idle');
           }
-          noteId = createResult.data.id;
-          setActiveNote(noteId);
-        } finally {
-          isCreating = false;
-        }
+        }, 2000);
       }
-
-      const updateResult = await commands.updateNote(noteId, title, content, null);
-      if (updateResult.status === 'error') {
-        setSaveStatus('failed');
-        console.error('updateNote failed:', updateResult.error);
-        return;
-      }
-
-      markSaved(updateResult.data.updatedAt);
-      idleTimerRef.current = setTimeout(() => {
-        if (useEditorStore.getState().saveStatus === 'saved') {
-          useEditorStore.getState().setSaveStatus('idle');
-        }
-      }, 2000);
     }, 300);
   }, [content]);
 }
