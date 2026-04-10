@@ -144,3 +144,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 - ~~**`cargo install tauri-driver || true` swallows install failures** — If cargo install fails (network, compilation), the CI silently proceeds and E2E times out with no diagnostic. Remove `|| true` or add `which tauri-driver` post-install check. (`ci.yml:97`)~~ → Removed `|| true`
 - ~~**`npx tauri build --debug || true` swallows build failures** — Same pattern. The `test -f` guard catches missing binaries but loses all build diagnostics. Remove `|| true` and let the step fail noisily. (`ci.yml:101`)~~ → Removed `|| true` and redundant `test -f` guard
 - ~~**Stale comment references webkitgtk-6.0** — `e2e/run.mjs:9` says "webkitgtk-6.0 package" but the project uses WebKitGTK 4.1. Update to reference `webkit2gtk-driver`.~~ → Updated to `webkit2gtk-driver`
+
+### Deferred from: 4-3-tab-keyboard-navigation review (2026-04-10)
+
+- **macOS Cmd key parity for keyboard shortcuts** — Tab keyboard shortcuts only check `e.ctrlKey`, but CaptureWindow's Ctrl+F handler checks `(e.ctrlKey || e.metaKey)`. On macOS, users expect Cmd-based shortcuts. Cmd+Tab is consumed by the OS app switcher so it's moot, but Cmd+W and Cmd+1-9 may need platform-aware handling. Needs holistic treatment across all keyboard shortcuts, not just tab navigation. (`src/features/tabs/hooks/useTabKeyboardNav.ts`)

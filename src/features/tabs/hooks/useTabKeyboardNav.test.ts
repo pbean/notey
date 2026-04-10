@@ -1,0 +1,117 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import { useTabStore } from '../store';
+import { useSearchStore } from '../../search/store';
+import { useTabKeyboardNav } from './useTabKeyboardNav';
+
+/** Fire a keydown event on window with the given properties. */
+function pressKey(key: string, opts: Partial<KeyboardEventInit> = {}) {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
+}
+
+function ctrlKey(key: string, shift = false) {
+  pressKey(key, { ctrlKey: true, shiftKey: shift });
+}
+
+/** Set up N tabs with active at given index. */
+function setupTabs(count: number, activeIndex: number) {
+  useTabStore.setState({
+    tabs: Array.from({ length: count }, (_, i) => ({ noteId: i + 1, title: `Tab ${i + 1}` })),
+    activeTabIndex: activeIndex,
+  });
+}
+
+describe('useTabKeyboardNav', () => {
+  let unmount: () => void;
+
+  beforeEach(() => {
+    useTabStore.getState().reset();
+    const result = renderHook(() => useTabKeyboardNav());
+    unmount = result.unmount;
+  });
+
+  afterEach(() => {
+    unmount();
+  });
+
+  // --- Ctrl+Tab: next tab ---
+
+  it('Ctrl+Tab moves to next tab', () => {
+    setupTabs(3, 0);
+    ctrlKey('Tab');
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
+
+  it('Ctrl+Tab wraps from last to first', () => {
+    setupTabs(3, 2);
+    ctrlKey('Tab');
+    expect(useTabStore.getState().activeTabIndex).toBe(0);
+  });
+
+  // --- Ctrl+Shift+Tab: previous tab ---
+
+  it('Ctrl+Shift+Tab moves to previous tab', () => {
+    setupTabs(3, 1);
+    ctrlKey('Tab', true);
+    expect(useTabStore.getState().activeTabIndex).toBe(0);
+  });
+
+  it('Ctrl+Shift+Tab wraps from first to last', () => {
+    setupTabs(3, 0);
+    ctrlKey('Tab', true);
+    expect(useTabStore.getState().activeTabIndex).toBe(2);
+  });
+
+  // --- Ctrl+1-9: jump ---
+
+  it('Ctrl+3 jumps to third tab', () => {
+    setupTabs(5, 0);
+    ctrlKey('3');
+    expect(useTabStore.getState().activeTabIndex).toBe(2);
+  });
+
+  it('Ctrl+5 with only 3 tabs does nothing', () => {
+    setupTabs(3, 0);
+    ctrlKey('5');
+    expect(useTabStore.getState().activeTabIndex).toBe(0);
+  });
+
+  it('Ctrl+9 always jumps to last tab', () => {
+    setupTabs(5, 0);
+    ctrlKey('9');
+    expect(useTabStore.getState().activeTabIndex).toBe(4);
+  });
+
+  // --- Ctrl+W: close ---
+
+  it('Ctrl+W closes the active tab', () => {
+    setupTabs(3, 1);
+    ctrlKey('w');
+    expect(useTabStore.getState().tabs).toHaveLength(2);
+    // closeTab neighbor selection: right neighbor (was index 2, now index 1)
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
+
+  // --- Guards ---
+
+  it('all shortcuts are no-ops when no tabs are open', () => {
+    // Tabs empty by default from reset
+    ctrlKey('Tab');
+    ctrlKey('w');
+    ctrlKey('1');
+    expect(useTabStore.getState().tabs).toHaveLength(0);
+    expect(useTabStore.getState().activeTabIndex).toBeNull();
+  });
+
+  it('all shortcuts are no-ops when search overlay is open', () => {
+    setupTabs(3, 0);
+    useSearchStore.setState({ isOpen: true });
+    ctrlKey('Tab');
+    expect(useTabStore.getState().activeTabIndex).toBe(0); // unchanged
+    ctrlKey('w');
+    expect(useTabStore.getState().tabs).toHaveLength(3); // not closed
+    ctrlKey('3');
+    expect(useTabStore.getState().activeTabIndex).toBe(0); // not jumped
+    useSearchStore.setState({ isOpen: false });
+  });
+});

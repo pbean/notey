@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { EditorPane } from './EditorPane';
 import { StatusBar } from './StatusBar';
 import { TabBar } from '../../tabs/components/TabBar';
+import { useTabKeyboardNav } from '../../tabs/hooks/useTabKeyboardNav';
 import { SearchOverlay } from '../../search/components/SearchOverlay';
 import { useSearchStore } from '../../search/store';
 
@@ -11,6 +12,7 @@ import { useSearchStore } from '../../search/store';
  */
 export function CaptureWindow() {
   const isSearchOpen = useSearchStore((s) => s.isOpen);
+  useTabKeyboardNav();
 
   // Register Ctrl/Cmd+F to open search overlay
   useEffect(() => {
