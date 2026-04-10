@@ -1,6 +1,6 @@
 # Deferred Work
 
-## Deferred from: Epic 1 — Instant Note Capture (2026-04-03)
+## ~~Deferred from: Epic 1 — Instant Note Capture (2026-04-03)~~ DONE
 
 ### ~~Cluster 2: Frontend Core (Stories 1.6–1.10)~~ DONE
 
@@ -64,7 +64,7 @@ Source: `_bmad-output/implementation-artifacts/epic-1-retro-2026-04-04.md`
 - ~~**`flushSave` leaks `isCreating` on throw**~~ → Wrapped in `try/finally` in both flushSave and debounce callback
 - ~~**`useWindowFocus` StrictMode double-listener**~~ → Replaced ref with local `cancelled` variable scoped per effect invocation
 
-## Deferred from: Epic 2 Retro Action Items — Group B/C/D (2026-04-05)
+## ~~Deferred from: Epic 2 Retro Action Items — Group B/C/D (2026-04-05)~~ DONE
 
 Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
@@ -84,7 +84,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - ~~**Double-canonicalize in resolve_workspace chain** — `resolve_workspace` calls `detect_workspace` (which canonicalizes) then `create_workspace` (which canonicalizes again). Pre-existing architecture, redundant syscall, tiny TOCTOU window.~~ → Extracted `upsert_workspace` internal function; `resolve_workspace` bypasses re-canonicalization
 - ~~**FTS5 external content drift risk** — No `INSERT INTO notes_fts(notes_fts) VALUES('rebuild')` or periodic integrity check. If notes are ever modified bypassing triggers, the FTS index silently desyncs with no recovery mechanism.~~ → Added `rebuild_fts_index` service function + Tauri command
-- ~~**FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.~~ → Closed as by-design: forward-only migration strategy, SQLite transaction wrapping prevents partial application
+- ~~**FTS5 migration has no down migration** — None of the 3 migrations define `M::down()`. If migration 3 partially applies despite transaction wrapping, recovery requires manual DB intervention.~~ → Closed: by-design forward-only migration strategy, SQLite transaction wrapping prevents partial application
 - ~~**FTS5 MATCH syntax error on special characters** — When search is added (story 3.2), queries with `*`, `"`, `(`, `)`, `NEAR`, `OR`, `AND`, `NOT` will cause `fts5: syntax error`. Input escaping or query sanitization needed in the search command.~~ → Fixed in story 3.2: allowlist-based `sanitize_fts_query` strips all non-alphanumeric characters
 - ~~**`loadFilteredNotes` error handling inconsistency** — On error, `loadFilteredNotes` clears `filteredNotes` to `[]` (causing UI flash), while `loadWorkspaces` retains stale data. Asymmetric error UX.~~ → Aligned to retain stale data + `notesError` field
 - ~~**Windows `canonicalize` UNC prefix** — `std::fs::canonicalize` on Windows returns `\\?\C:\...` paths, which display in the UI. All lookups are consistent (both use canonical form) so no functional bug, but UX issue on Windows.~~ → Replaced with `dunce::canonicalize` which strips UNC prefixes on Windows
@@ -96,29 +96,29 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 **~~Group D — Test backlog:~~ DONE**
 - ~~**Item 6** (MEDIUM): Add remaining Epic 1 P0 tests — auto-save debounce, DB crash recovery, ACL coverage~~
 - ~~**Item 7** (MEDIUM): Add remaining Epic 1 P1 tests — error serialization, flush-on-dismiss, format toggle, migrations, state management~~
-- ~~P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E)~~ DONE — `e2e/run.mjs` via tauri-driver, 7/7 tests pass (requires `npx tauri build --debug` for embedded frontend binary)
+- ~~**P0-E2E-001 (capture loop E2E) and P1-INT-012 (window management E2E)**~~ → `e2e/run.mjs` via tauri-driver, 7/7 tests pass (requires `npx tauri build --debug` for embedded frontend binary)
 
 ### ~~Deferred from: review-pass2-cleanup code review (2026-04-05)~~ DONE
 
 - ~~**`reassignNoteWorkspace` fire-and-forget error recovery** — `reassignNoteWorkspace` calls `loadFilteredNotes()` and `loadWorkspaces()` fire-and-forget after a successful reassign. If either reload fails, the UI shows stale data with no error feedback. Pre-existing pattern across all store actions that trigger async reloads.~~ → Awaited with `Promise.all` + `.catch()` guard so reloads complete before returning and unexpected throws don't swallow `result.data`
 
-### Deferred from: code review pass 3 of 3-1-fts5-virtual-table-sync-triggers (2026-04-06)
+### ~~Deferred from: code review pass 3 of 3-1-fts5-virtual-table-sync-triggers (2026-04-06)~~ DONE
 
-- ~~**CI/E2E/bindings changes beyond story scope** — Infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command addition.~~ CLOSED: no action needed — bindings auto-generated, CI stable, ACL configured
+- ~~**CI/E2E/bindings changes beyond story scope** — Infrastructure fixes tangential to story 3.1, bindings change is consequence of rebuild_fts_index command addition.~~ → Closed: no action needed — bindings auto-generated, CI stable, ACL configured
 - ~~**`upsert_workspace` TOCTOU gap** — Directory could be deleted between `detect_workspace` canonicalizing and `upsert_workspace` inserting.~~ → Added `is_dir()` re-check in `upsert_workspace` (commit 77e6337)
 - ~~**Mutex poisoning recovery pattern** — `unwrap_or_else(|e| e.into_inner())` pre-existing across all Tauri commands.~~ → Added `eprintln!` warning before recovery across 13 instances (commit 77e6337)
-- ~~**`reassignNoteWorkspace` .catch() swallows reload errors** — Store functions return `{status}` and handle errors internally, so `Promise.all` only rejects on unexpected exceptions. Safety net pattern.~~ CLOSED: correct safety net — both reload functions handle errors internally via workspaceError/notesError state
+- ~~**`reassignNoteWorkspace` .catch() swallows reload errors** — Store functions return `{status}` and handle errors internally, so `Promise.all` only rejects on unexpected exceptions. Safety net pattern.~~ → Closed: correct safety net — both reload functions handle errors internally via workspaceError/notesError state
 - ~~**`detect_workspace` walks to root without depth limit**~~ → Capped at MAX_DETECT_DEPTH (20 levels) (commit 77e6337)
 - ~~**`detect_workspace` fallback to "workspace" for root/non-UTF-8 dirs**~~ → Replaced with deterministic FNV-1a `workspace_<hex8>` hash (commit 77e6337)
-- ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ CLOSED: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
+- ~~**`initWorkspace` continues after `listWorkspaces` failure**~~ → Closed: graceful degradation is intentional — dropdown auto-retries on open (`onOpenChange` calls `loadWorkspaces`). Error messages updated with retry hints.
 
-### Deferred from: code review of story 3-5-workspace-scoped-search-toggle (2026-04-09)
+### ~~Deferred from: code review of story 3-5-workspace-scoped-search-toggle (2026-04-09)~~ DONE
 
 - ~~**`scopeFilter` persists across workspace switches without resync** — When user toggles scope to "All Workspaces", then switches workspace via StatusBar, the scope filter remains "all" on next search open. AC 6 mandates session persistence, but resync on workspace switch could improve UX.~~ → Fixed: `resetScope()` called from `setActiveWorkspace`
 - ~~**Whitespace-only query: inconsistent `trim` handling** — `handleInput` checks `currentQuery === ''` (permits whitespace-only queries to hit backend), while `handleScopeToggle` checks `currentQuery.trim()` (blocks whitespace-only re-search on toggle). Pre-existing inconsistency.~~ → Fixed: `handleInput` now uses `currentQuery.trim() === ''` consistently
 - ~~**Whitespace-only query shows "No notes matching '   '" in empty state** — When user types only spaces, `setQuery` stores the raw whitespace. JSX checks `query !== ''` (not trimmed) for empty-state display, showing literal spaces in the message. Pre-existing UX artifact — our trim fix prevents the backend call but doesn't address the display.~~ → Fixed: JSX conditions use `query.trim()` for both visibility checks and display text
 
-### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06)
+### Deferred from: code review of 3-2-full-text-search-tauri-command (2026-04-06) — 1 open item remaining
 
 - ~~**Snippet `<mark>` HTML tags — XSS risk** — `snippet()` injects raw `<mark>` HTML into the snippet field. If story 3.3's frontend renders with innerHTML, note content containing malicious HTML could execute in the webview. Story 3.3 must use safe rendering.~~ → Verified safe: `HighlightedSnippet` component parses `<mark>` tags via regex, renders only extracted text as React text nodes — explicit XSS test exists at `HighlightedSnippet.test.tsx:43-52`
 - ~~**`std::Mutex` held across I/O in async handler** — Blocking mutex lock spans the full FTS5 query duration in an async context. Pre-existing pattern across all Tauri commands.~~ → Fixed: removed `async` from all 16 command handlers; Tauri now runs them on its blocking thread pool

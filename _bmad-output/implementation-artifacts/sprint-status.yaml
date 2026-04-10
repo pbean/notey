@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-09 # story 3.5 → done
+last_updated: 2026-04-09 # epic 3 → done, deferred work cleanup
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -77,7 +77,7 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Search & Discovery
-  epic-3: in-progress
+  epic-3: done
   3-1-fts5-virtual-table-sync-triggers: done
   3-2-full-text-search-tauri-command: done
   3-3-searchoverlay-ui-component: done
