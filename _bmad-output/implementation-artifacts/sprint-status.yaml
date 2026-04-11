@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-10 # epic-3 retro items audit — 4/5 done, shadcn spike deferred
+last_updated: 2026-04-11 # epic-4 stories 4.1–4.7 done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -86,14 +86,14 @@ development_status:
   epic-3-retrospective: done
 
   # Epic 4: Multi-Tab Editing & Command Palette
-  epic-4: backlog
-  4-1-tab-state-management-store: backlog
-  4-2-tabbar-component: backlog
-  4-3-tab-keyboard-navigation: backlog
-  4-4-editor-tab-integration: backlog
-  4-5-command-palette-core: backlog
-  4-6-command-palette-action-registry: backlog
-  4-7-tab-reordering: backlog
+  epic-4: in-progress
+  4-1-tab-state-management-store: done
+  4-2-tabbar-component: done
+  4-3-tab-keyboard-navigation: done
+  4-4-editor-tab-integration: done
+  4-5-command-palette-core: done
+  4-6-command-palette-action-registry: done
+  4-7-tab-reordering: done
   4-8-note-list-panel: backlog
   4-9-session-state-persistence: backlog
   epic-4-retrospective: optional
@@ -174,5 +174,5 @@ development_status:
   epic-3-retro-item-1-codemirror-multiinstance-research: done # commit cd27c68
   epic-3-retro-item-2-shared-test-reset-utility: done # commit f400f17
   epic-3-retro-item-3-eslint-unhandled-ipc-rule: done # commits f400f17, 3222cd4 (no-floating-promises + no-misused-promises)
-  epic-3-retro-item-4-shadcn-command-spike: backlog # deferred to Story 4.5
+  epic-3-retro-item-4-shadcn-command-spike: done # resolved by Story 4.5 (cmdk + shadcn command)
   epic-3-retro-item-5-trim-consistency-fix: done # commit 2ae2553
