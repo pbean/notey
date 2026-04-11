@@ -7,6 +7,8 @@ import { SearchOverlay } from '../../search/components/SearchOverlay';
 import { useSearchStore } from '../../search/store';
 import { CommandPalette } from '../../command-palette/components/CommandPalette';
 import { useCommandPaletteStore } from '../../command-palette/store';
+import { NoteListPanel } from '../../note-list/components/NoteListPanel';
+import { useNoteListStore } from '../../note-list/store';
 import { createNewNote, toggleTheme } from '../../command-palette/actions';
 
 /**
@@ -15,6 +17,7 @@ import { createNewNote, toggleTheme } from '../../command-palette/actions';
  */
 export function CaptureWindow() {
   const isSearchOpen = useSearchStore((s) => s.isOpen);
+  const isNoteListOpen = useNoteListStore((s) => s.isOpen);
   useTabKeyboardNav();
 
   // Register Ctrl/Cmd+F to open search overlay (closes command palette)
@@ -46,7 +49,7 @@ export function CaptureWindow() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      if (useCommandPaletteStore.getState().isOpen || useSearchStore.getState().isOpen) return;
+      if (useCommandPaletteStore.getState().isOpen || useSearchStore.getState().isOpen || useNoteListStore.getState().isOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
         void createNewNote();
@@ -56,10 +59,29 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Register Ctrl/Cmd+B to toggle note list panel
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        const { isOpen } = useNoteListStore.getState();
+        if (isOpen) {
+          useNoteListStore.getState().close();
+          const editor = document.querySelector<HTMLElement>('.cm-content');
+          editor?.focus();
+        } else {
+          useNoteListStore.getState().open();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // Register Ctrl/Cmd+Shift+T to toggle theme (guarded against overlays)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (useCommandPaletteStore.getState().isOpen || useSearchStore.getState().isOpen) return;
+      if (useCommandPaletteStore.getState().isOpen || useSearchStore.getState().isOpen || useNoteListStore.getState().isOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         void toggleTheme();
@@ -75,6 +97,7 @@ export function CaptureWindow() {
       <div className="relative flex-1 min-h-0">
         <EditorPane className="h-full" />
         {isSearchOpen && <SearchOverlay />}
+        {isNoteListOpen && <NoteListPanel />}
       </div>
       <CommandPalette />
       <StatusBar />

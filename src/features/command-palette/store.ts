@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useNoteListStore } from '../note-list/store';
 import { useSearchStore } from '../search/store';
 
 /** Command palette overlay state. */
@@ -24,6 +25,7 @@ export const useCommandPaletteStore = create<CommandPaletteState & CommandPalett
   isOpen: false,
   open: () => {
     useSearchStore.getState().closeSearch();
+    useNoteListStore.getState().close();
     set({ isOpen: true });
   },
   close: () => set({ isOpen: false }),
@@ -33,6 +35,7 @@ export const useCommandPaletteStore = create<CommandPaletteState & CommandPalett
       set({ isOpen: false });
     } else {
       useSearchStore.getState().closeSearch();
+      useNoteListStore.getState().close();
       set({ isOpen: true });
     }
   },

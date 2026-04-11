@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '../features/workspace/store';
 import { useSearchStore } from '../features/search/store';
 import { useTabStore } from '../features/tabs/store';
 import { useCommandPaletteStore } from '../features/command-palette/store';
+import { useNoteListStore } from '../features/note-list/store';
 
 /**
  * Per-test mock handler for Tauri IPC invoke calls.
@@ -33,6 +34,7 @@ afterEach(() => {
   useSearchStore.getState().resetSearch();
   useTabStore.getState().reset();
   useCommandPaletteStore.getState().resetCommandPalette();
+  useNoteListStore.getState().resetNoteList();
 
   // Remove CodeMirror DOM nodes that leak between tests
   document.querySelectorAll('.cm-editor, .cm-content').forEach((el) => el.remove());

@@ -7,6 +7,7 @@ import {
   toggleLayoutMode,
   stubAction,
 } from '../actions';
+import { useNoteListStore } from '../../note-list/store';
 
 let _isMac: boolean | null = null;
 function getIsMac(): boolean {
@@ -49,8 +50,8 @@ export function usePaletteCommands(): PaletteCommand[] {
       id: 'open-note-list',
       label: 'Open Note List',
       group: 'Navigation',
-      shortcut: '',
-      action: () => stubAction('Open Note List'),
+      shortcut: `${mod}+B`,
+      action: () => useNoteListStore.getState().open(),
     },
     {
       id: 'view-trash',

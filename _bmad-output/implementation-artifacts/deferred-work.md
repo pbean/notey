@@ -161,3 +161,8 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 ### Deferred from: 4-7-tab-reordering review (2026-04-10)
 
 - **`reorderTabs` store action doesn't validate integer inputs** — Passing `NaN` (e.g., from a failed `parseInt`) passes the bounds check (`NaN < 0` is false, `NaN >= length` is false) and reaches `splice(NaN, 1)`, which splices at index 0 — silently moving the wrong tab. Add integer validation. (`src/features/tabs/store.ts`)
+
+### Deferred from: 4-8-note-list-panel review (2026-04-11)
+
+- **Circular dependency ring expanded to three stores** — `note-list/store` imports `search/store` and `command-palette/store`; both reciprocate. Three-way circular import graph works via Zustand's lazy `getState()` but any refactor adding top-level side effects will break. Pre-existing pattern extended. Consider a shared overlay manager. (`src/features/note-list/store.ts`, `src/features/search/store.ts`, `src/features/command-palette/store.ts`)
+- **`loadNote` failure leaves orphan tab** — `selectNote` calls `openTab` synchronously then `loadNote` fire-and-forget. If `loadNote` fails, the tab exists but shows stale editor content. Pre-existing pattern shared with `SearchOverlay.openNote`. (`src/features/note-list/components/NoteListPanel.tsx`)
