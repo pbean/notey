@@ -52,8 +52,8 @@ describe('useCommandPaletteStore', () => {
 
   it('toggle() does not affect search overlay when closing', () => {
     useCommandPaletteStore.getState().open();
-    // Search is already closed from the open() call above
-    useSearchStore.getState().openSearch();
+    // Set search open directly (bypassing openSearch which would close palette via symmetric exclusion)
+    useSearchStore.setState({ isOpen: true });
     // Now toggle closes palette — should NOT close search
     useCommandPaletteStore.getState().toggle();
     expect(useCommandPaletteStore.getState().isOpen).toBe(false);

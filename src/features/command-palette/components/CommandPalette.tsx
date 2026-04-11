@@ -9,45 +9,25 @@ import {
   CommandDialog,
 } from '@/components/ui/command';
 import { useCommandPaletteStore } from '../store';
+import { usePaletteCommands } from '../hooks/usePaletteCommands';
+import type { PaletteCommand, CommandGroup as GroupType } from '../types';
 
-let _isMac: boolean | null = null;
-function getIsMac() {
-  if (_isMac === null) {
-    _isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
-  }
-  return _isMac;
-}
-const mod = getIsMac() ? '⌘' : 'Ctrl';
-
-/** Placeholder commands for UI verification. Replaced by real actions in Story 4.6. */
-const COMMAND_GROUPS = [
-  {
-    heading: 'Actions',
-    commands: [
-      { label: 'New Note', shortcut: `${mod}+N` },
-      { label: 'Search Notes', shortcut: `${mod}+F` },
-    ],
-  },
-  {
-    heading: 'Settings',
-    commands: [
-      { label: 'Toggle Theme', shortcut: `${mod}+Shift+T` },
-    ],
-  },
-  {
-    heading: 'Navigation',
-    commands: [
-      { label: 'Open Note List', shortcut: '' },
-    ],
-  },
-] as const;
+/** Group ordering for consistent display. */
+const GROUP_ORDER: GroupType[] = ['Actions', 'Settings', 'Navigation'];
 
 /**
  * Command palette overlay. Uses shadcn Command (wraps cmdk) for fuzzy search
- * and keyboard navigation. Renders via portal with backdrop.
+ * and keyboard navigation. Commands are provided by the usePaletteCommands registry.
  */
 export function CommandPalette() {
   const isOpen = useCommandPaletteStore((s) => s.isOpen);
+  const commands = usePaletteCommands();
+
+  // Group commands by their group field
+  const grouped = GROUP_ORDER.map((group) => ({
+    heading: group,
+    commands: commands.filter((cmd) => cmd.group === group),
+  })).filter((g) => g.commands.length > 0);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -57,11 +37,11 @@ export function CommandPalette() {
     }
   };
 
-  const handleSelect = () => {
-    // Placeholder: no-op. Real actions wired in Story 4.6.
+  const handleSelect = (cmd: PaletteCommand) => {
     useCommandPaletteStore.getState().close();
     const editor = document.querySelector<HTMLElement>('.cm-content');
     editor?.focus();
+    void cmd.action();
   };
 
   return (
@@ -81,10 +61,10 @@ export function CommandPalette() {
           />
           <CommandList>
             <CommandEmpty>No commands found.</CommandEmpty>
-            {COMMAND_GROUPS.map((group) => (
+            {grouped.map((group) => (
               <CommandGroup key={group.heading} heading={group.heading}>
                 {group.commands.map((cmd) => (
-                  <CommandItem key={cmd.label} onSelect={handleSelect}>
+                  <CommandItem key={cmd.id} onSelect={() => handleSelect(cmd)}>
                     <span>{cmd.label}</span>
                     {cmd.shortcut && (
                       <CommandShortcut>{cmd.shortcut}</CommandShortcut>

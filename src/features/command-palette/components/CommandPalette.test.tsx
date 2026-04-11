@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { useCommandPaletteStore } from '../store';
 import { CommandPalette } from './CommandPalette';
@@ -43,7 +43,7 @@ describe('CommandPalette', () => {
     });
   });
 
-  it('renders placeholder commands with labels', async () => {
+  it('renders registered commands with labels', async () => {
     act(() => useCommandPaletteStore.getState().open());
     render(<CommandPalette />);
     await waitFor(() => {
@@ -51,6 +51,8 @@ describe('CommandPalette', () => {
       expect(screen.getByText('Search Notes')).toBeDefined();
       expect(screen.getByText('Toggle Theme')).toBeDefined();
       expect(screen.getByText('Open Note List')).toBeDefined();
+      expect(screen.getByText('Toggle Format')).toBeDefined();
+      expect(screen.getByText('View Trash')).toBeDefined();
     });
   });
 
@@ -74,5 +76,25 @@ describe('CommandPalette', () => {
     await waitFor(() => {
       expect(useCommandPaletteStore.getState().isOpen).toBe(false);
     });
+  });
+
+  it('calls action and closes when a command is selected', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    act(() => useCommandPaletteStore.getState().open());
+    render(<CommandPalette />);
+
+    await waitFor(() => {
+      expect(screen.getByText('View Trash')).toBeDefined();
+    });
+
+    // cmdk handles selection via click on the item
+    fireEvent.click(screen.getByText('View Trash'));
+
+    await waitFor(() => {
+      expect(useCommandPaletteStore.getState().isOpen).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: View Trash');
+    });
+
+    warnSpy.mockRestore();
   });
 });

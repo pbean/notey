@@ -149,6 +149,11 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - **macOS Cmd key parity for keyboard shortcuts** — Tab keyboard shortcuts only check `e.ctrlKey`, but CaptureWindow's Ctrl+F handler checks `(e.ctrlKey || e.metaKey)`. On macOS, users expect Cmd-based shortcuts. Cmd+Tab is consumed by the OS app switcher so it's moot, but Cmd+W and Cmd+1-9 may need platform-aware handling. Needs holistic treatment across all keyboard shortcuts, not just tab navigation. (`src/features/tabs/hooks/useTabKeyboardNav.ts`)
 
-### Deferred from: 4-5-command-palette-core review (2026-04-10)
+### ~~Deferred from: 4-5-command-palette-core review (2026-04-10)~~ DONE
 
-- **Symmetric overlay mutual exclusion** — `useCommandPaletteStore.open()` closes search, and CaptureWindow's Ctrl+F handler closes the palette before opening search. However, `useSearchStore.openSearch()` does not close the command palette itself. If `openSearch()` is called from a future integration point (e.g., a button, a command palette action in 4.6), overlays could stack. Consider centralizing mutual exclusion in a shared overlay manager or having each store close the other.
+- ~~**Symmetric overlay mutual exclusion** — `useCommandPaletteStore.open()` closes search, and CaptureWindow's Ctrl+F handler closes the palette before opening search. However, `useSearchStore.openSearch()` does not close the command palette itself. If `openSearch()` is called from a future integration point (e.g., a button, a command palette action in 4.6), overlays could stack. Consider centralizing mutual exclusion in a shared overlay manager or having each store close the other.~~ → Fixed: `openSearch()` now calls `useCommandPaletteStore.getState().close()` (bidirectional exclusion)
+
+### Deferred from: 4-6-command-palette-action-registry review (2026-04-10)
+
+- **`toggleLayoutMode` has no visible UI effect** — `toggleLayoutMode` persists the layout mode config change to the backend but performs no client-side DOM or state change. The UI won't visually react until layout mode rendering is implemented. (`src/features/command-palette/actions.ts`)
+- **Circular import between search and command-palette stores** — `search/store.ts` imports `command-palette/store.ts` and vice versa. Works at runtime because Zustand stores use lazy `getState()` in action callbacks, but fragile — any refactor adding top-level side effects could cause a runtime crash. Consider a shared overlay manager. (`src/features/search/store.ts`, `src/features/command-palette/store.ts`)
