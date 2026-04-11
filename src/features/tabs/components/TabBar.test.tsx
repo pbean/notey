@@ -1,11 +1,55 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useTabStore } from '../store';
 import { TabBar } from './TabBar';
 
+/**
+ * Mock getBoundingClientRect for tab elements. Each tab-{noteId} element
+ * gets a rect based on its DOM order within [role="tablist"]. 100px per tab.
+ * Must be installed before dragOver fires (survives React re-renders).
+ */
+function installTabRectMock() {
+  const original = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const testId = this.getAttribute('data-testid');
+    if (testId?.startsWith('tab-') && this.getAttribute('role') === 'tab') {
+      const tablist = this.closest('[role="tablist"]');
+      if (tablist) {
+        const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+        const idx = tabs.indexOf(this);
+        if (idx >= 0) {
+          return {
+            left: idx * 100, right: (idx + 1) * 100, width: 100,
+            top: 0, bottom: 32, height: 32,
+            x: idx * 100, y: 0, toJSON: () => {},
+          } as DOMRect;
+        }
+      }
+    }
+    return original.call(this);
+  });
+}
+
+/**
+ * Create a drag event with proper clientX. jsdom has no DragEvent constructor,
+ * so fireEvent.dragOver/drop produce events with undefined clientX. We create
+ * a MouseEvent and attach a dataTransfer property.
+ */
+function dispatchDrag(el: HTMLElement, type: string, opts: { clientX: number; dataTransfer?: Record<string, unknown> }) {
+  const event = new MouseEvent(type, { clientX: opts.clientX, bubbles: true, cancelable: true });
+  if (opts.dataTransfer) {
+    Object.defineProperty(event, 'dataTransfer', { value: opts.dataTransfer });
+  }
+  act(() => { el.dispatchEvent(event); });
+}
+
 describe('TabBar', () => {
   beforeEach(() => {
     useTabStore.getState().reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('returns null when no tabs are open', () => {
@@ -143,6 +187,197 @@ describe('TabBar', () => {
     });
     render(<TabBar />);
     expect(screen.getByText('New note')).toBeDefined();
+  });
+
+  // --- Drag-and-drop tests ---
+
+  it('tabs have draggable="true" when multiple tabs are open', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+    expect(screen.getByTestId('tab-1').getAttribute('draggable')).toBe('true');
+    expect(screen.getByTestId('tab-2').getAttribute('draggable')).toBe('true');
+  });
+
+  it('single tab has draggable="false"', () => {
+    useTabStore.setState({
+      tabs: [{ noteId: 1, title: 'Solo' }],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+    expect(screen.getByTestId('tab-1').getAttribute('draggable')).toBe('false');
+  });
+
+  it('dragStart sets dragged tab to reduced opacity', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+        { noteId: 3, title: 'C' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+    const tab1 = screen.getByTestId('tab-1');
+
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { effectAllowed: '', setData: () => {} },
+    });
+
+    expect(tab1.style.opacity).toBe('0.5');
+  });
+
+  it('drop calls reorderTabs with correct indices', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+        { noteId: 3, title: 'C' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+
+    const tabBar = screen.getByTestId('tab-bar');
+    const container = tabBar.firstElementChild as HTMLElement;
+    installTabRectMock();
+
+    const tab1 = screen.getByTestId('tab-1');
+
+    // Start drag from index 0
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { effectAllowed: '', setData: () => {} },
+    });
+
+    // Drag over — cursor past midpoint of tab-3 (index 2, midpoint at 250px)
+    dispatchDrag(container, 'dragover', { clientX: 260, dataTransfer: { dropEffect: '' } });
+
+    // Drop — provide getData returning the source index
+    dispatchDrag(container, 'drop', { clientX: 260, dataTransfer: { dropEffect: '', getData: () => '0' } });
+
+    // Tab A (noteId 1) should have moved to end: [B, C, A]
+    const newTabs = useTabStore.getState().tabs;
+    expect(newTabs[0].noteId).toBe(2);
+    expect(newTabs[2].noteId).toBe(1);
+  });
+
+  it('dragEnd clears drop indicator', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+
+    const tabBar = screen.getByTestId('tab-bar');
+    const container = tabBar.firstElementChild as HTMLElement;
+    installTabRectMock();
+
+    const tab1 = screen.getByTestId('tab-1');
+
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { effectAllowed: '', setData: () => {} },
+    });
+
+    dispatchDrag(container, 'dragover', { clientX: 150, dataTransfer: { dropEffect: '' } });
+
+    // Indicator should be visible during drag
+    expect(screen.queryByTestId('tab-drop-indicator')).not.toBeNull();
+
+    // End drag
+    fireEvent.dragEnd(tab1);
+
+    // Indicator should be gone
+    expect(screen.queryByTestId('tab-drop-indicator')).toBeNull();
+  });
+
+  it('same-position drop does not reorder', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+        { noteId: 3, title: 'C' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+
+    const tabBar = screen.getByTestId('tab-bar');
+    const container = tabBar.firstElementChild as HTMLElement;
+    installTabRectMock();
+
+    const tab2 = screen.getByTestId('tab-2');
+
+    // Start drag from index 1
+    fireEvent.dragStart(tab2, {
+      dataTransfer: { effectAllowed: '', setData: () => {} },
+    });
+
+    // Drag over same position (index 1, midpoint at 150px — cursor in left half)
+    dispatchDrag(container, 'dragover', { clientX: 140, dataTransfer: { dropEffect: '' } });
+
+    // Drop at same position
+    dispatchDrag(container, 'drop', { clientX: 140, dataTransfer: { dropEffect: '', getData: () => '1' } });
+
+    // Order should be unchanged
+    const tabs = useTabStore.getState().tabs;
+    expect(tabs[0].noteId).toBe(1);
+    expect(tabs[1].noteId).toBe(2);
+    expect(tabs[2].noteId).toBe(3);
+  });
+
+  it('active tab stays active after being dragged to new position', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+        { noteId: 3, title: 'C' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+
+    const tabBar = screen.getByTestId('tab-bar');
+    const container = tabBar.firstElementChild as HTMLElement;
+    installTabRectMock();
+
+    const tab1 = screen.getByTestId('tab-1');
+
+    // Start drag from index 0 (active tab)
+    fireEvent.dragStart(tab1, {
+      dataTransfer: { effectAllowed: '', setData: () => {} },
+    });
+
+    // Drag past all tabs (cursor at 350px, past tab-3's right edge at 300px)
+    dispatchDrag(container, 'dragover', { clientX: 350, dataTransfer: { dropEffect: '' } });
+
+    // Drop — provide getData returning the source index
+    dispatchDrag(container, 'drop', { clientX: 350, dataTransfer: { dropEffect: '', getData: () => '0' } });
+
+    // Active tab should follow noteId 1
+    const state = useTabStore.getState();
+    const activeTab = state.tabs[state.activeTabIndex!];
+    expect(activeTab.noteId).toBe(1);
+  });
+
+  it('click-to-switch still works alongside draggable', () => {
+    useTabStore.setState({
+      tabs: [
+        { noteId: 1, title: 'A' },
+        { noteId: 2, title: 'B' },
+      ],
+      activeTabIndex: 0,
+    });
+    render(<TabBar />);
+    fireEvent.click(screen.getByTestId('tab-2'));
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
   });
 
   it('renders overflow button when hasOverflow is triggered', () => {

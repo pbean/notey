@@ -7,6 +7,21 @@ import {
   DropdownMenuItem,
 } from '../../../components/ui/dropdown-menu';
 
+/** Compute the drop target index from cursor position relative to tab elements. */
+function getDropIndex(
+  container: HTMLDivElement,
+  clientX: number,
+  tabCount: number,
+): number | null {
+  const tabElements = container.querySelectorAll<HTMLElement>('[role="tab"]');
+  for (let i = 0; i < tabElements.length; i++) {
+    const rect = tabElements[i].getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (clientX < midX) return i;
+  }
+  return tabCount;
+}
+
 /** Truncate title to ~20 chars with ellipsis, or show "New note" for empty. */
 function displayTitle(title: string): string {
   const trimmed = title.trim();
@@ -23,9 +38,12 @@ export function TabBar() {
   const activeTabIndex = useTabStore((s) => s.activeTabIndex);
   const switchTab = useTabStore((s) => s.switchTab);
   const closeTab = useTabStore((s) => s.closeTab);
+  const reorderTabs = useTabStore((s) => s.reorderTabs);
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
 
   const checkOverflow = useCallback(() => {
@@ -46,6 +64,53 @@ export function TabBar() {
   // Recheck overflow when tabs change
   useEffect(checkOverflow, [tabs, checkOverflow]);
 
+  const isDraggable = tabs.length > 1;
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, index: number) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+      setDragFromIndex(index);
+    },
+    [],
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      if (dragFromIndex === null) return; // ignore external drags
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const container = tabsContainerRef.current;
+      if (!container) return;
+      const targetIndex = getDropIndex(container, e.clientX, tabs.length);
+      setDropTargetIndex(targetIndex);
+    },
+    [dragFromIndex, tabs.length],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      const container = tabsContainerRef.current;
+      if (!Number.isNaN(fromIndex) && container) {
+        const rawTarget = getDropIndex(container, e.clientX, tabs.length);
+        const targetIdx = Math.min(rawTarget ?? fromIndex, tabs.length - 1);
+        if (fromIndex !== targetIdx) {
+          reorderTabs(fromIndex, targetIdx);
+        }
+      }
+      setDragFromIndex(null);
+      setDropTargetIndex(null);
+    },
+    [reorderTabs, tabs.length],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDragFromIndex(null);
+    setDropTargetIndex(null);
+  }, []);
+
   if (tabs.length === 0) return null;
 
   return (
@@ -63,21 +128,26 @@ export function TabBar() {
     >
       <div
         ref={tabsContainerRef}
+        onDragOver={isDraggable ? handleDragOver : undefined}
+        onDrop={isDraggable ? handleDrop : undefined}
         style={{
           display: 'flex',
           flex: 1,
           overflow: 'hidden',
           alignItems: 'stretch',
+          position: 'relative',
         }}
       >
         {tabs.map((tab, index) => {
           const isActive = index === activeTabIndex;
+          const isDragging = dragFromIndex === index;
           return (
             <div
               key={tab.noteId}
               data-testid={`tab-${tab.noteId}`}
               role="tab"
               aria-selected={isActive}
+              draggable={isDraggable}
               onClick={() => switchTab(index)}
               onAuxClick={(e) => {
                 if (e.button === 1) {
@@ -87,6 +157,8 @@ export function TabBar() {
               }}
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
+              onDragStart={isDraggable ? (e) => handleDragStart(e, index) : undefined}
+              onDragEnd={isDraggable ? handleDragEnd : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -102,6 +174,7 @@ export function TabBar() {
                 fontSize: '12px',
                 fontFamily: 'var(--font-mono)',
                 userSelect: 'none',
+                opacity: isDragging ? 0.5 : 1,
               }}
             >
               <span
@@ -136,6 +209,33 @@ export function TabBar() {
             </div>
           );
         })}
+        {dragFromIndex !== null && dropTargetIndex !== null && (
+          <div
+            data-testid="tab-drop-indicator"
+            style={{
+              position: 'absolute',
+              top: '15%',
+              height: '70%',
+              width: '2px',
+              background: 'var(--accent)',
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+            ref={(el) => {
+              if (!el || !tabsContainerRef.current) return;
+              const tabElements = tabsContainerRef.current.querySelectorAll<HTMLElement>('[role="tab"]');
+              if (tabElements.length === 0) return;
+              const containerRect = tabsContainerRef.current.getBoundingClientRect();
+              if (dropTargetIndex < tabElements.length) {
+                const tabRect = tabElements[dropTargetIndex].getBoundingClientRect();
+                el.style.left = `${tabRect.left - containerRect.left}px`;
+              } else {
+                const lastRect = tabElements[tabElements.length - 1].getBoundingClientRect();
+                el.style.left = `${lastRect.right - containerRect.left}px`;
+              }
+            }}
+          />
+        )}
       </div>
       {hasOverflow && (
         <DropdownMenu>

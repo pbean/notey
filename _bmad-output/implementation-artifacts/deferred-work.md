@@ -157,3 +157,7 @@ Source: `_bmad-output/implementation-artifacts/epic-2-action-items.md`
 
 - **`toggleLayoutMode` has no visible UI effect** — `toggleLayoutMode` persists the layout mode config change to the backend but performs no client-side DOM or state change. The UI won't visually react until layout mode rendering is implemented. (`src/features/command-palette/actions.ts`)
 - **Circular import between search and command-palette stores** — `search/store.ts` imports `command-palette/store.ts` and vice versa. Works at runtime because Zustand stores use lazy `getState()` in action callbacks, but fragile — any refactor adding top-level side effects could cause a runtime crash. Consider a shared overlay manager. (`src/features/search/store.ts`, `src/features/command-palette/store.ts`)
+
+### Deferred from: 4-7-tab-reordering review (2026-04-10)
+
+- **`reorderTabs` store action doesn't validate integer inputs** — Passing `NaN` (e.g., from a failed `parseInt`) passes the bounds check (`NaN < 0` is false, `NaN >= length` is false) and reaches `splice(NaN, 1)`, which splices at index 0 — silently moving the wrong tab. Add integer validation. (`src/features/tabs/store.ts`)
