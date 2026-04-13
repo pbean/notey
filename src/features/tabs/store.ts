@@ -120,6 +120,7 @@ export const useTabStore = create<TabState & TabActions>((set, get) => ({
 
   reorderTabs: (fromIndex, toIndex) => {
     const { tabs, activeTabIndex } = get();
+    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
     if (
       fromIndex < 0 ||
       fromIndex >= tabs.length ||

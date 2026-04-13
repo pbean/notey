@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { SearchResult } from '../../generated/bindings';
-import { useCommandPaletteStore } from '../command-palette/store';
-import { useNoteListStore } from '../note-list/store';
+import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
 
 /** Search overlay state. */
 interface SearchState {
@@ -48,8 +47,7 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
   scopeFilter: 'workspace',
   setQuery: (query) => set({ query, selectedIndex: 0 }),
   openSearch: () => {
-    useCommandPaletteStore.getState().close();
-    useNoteListStore.getState().close();
+    closeOtherOverlays('search');
     set({ isOpen: true, query: '', results: [], selectedIndex: 0 });
   },
   closeSearch: () => set({ isOpen: false, query: '', results: [], selectedIndex: 0 }),
@@ -69,3 +67,5 @@ export const useSearchStore = create<SearchState & SearchActions>((set, get) => 
   resetScope: () => set({ scopeFilter: 'workspace' }),
   resetSearch: () => set({ query: '', results: [], isOpen: false, selectedIndex: 0, scopeFilter: 'workspace' }),
 }));
+
+registerOverlay('search', () => useSearchStore.getState().closeSearch());

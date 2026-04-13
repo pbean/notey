@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { useSearchStore } from '../search/store';
-import { useCommandPaletteStore } from '../command-palette/store';
+import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
 
 /** Note list panel state. */
 interface NoteListState {
@@ -12,7 +11,7 @@ interface NoteListState {
 
 /** Actions for managing note list panel state. */
 interface NoteListActions {
-  /** Open the note list panel. Closes search and command palette (Layer 1 mutual exclusion). */
+  /** Open the note list panel. Closes other overlays via the manager. */
   open: () => void;
   /** Close the note list panel. */
   close: () => void;
@@ -29,8 +28,7 @@ export const useNoteListStore = create<NoteListState & NoteListActions>((set) =>
   isOpen: false,
   selectedIndex: 0,
   open: () => {
-    useSearchStore.getState().closeSearch();
-    useCommandPaletteStore.getState().close();
+    closeOtherOverlays('noteList');
     set({ isOpen: true, selectedIndex: 0 });
   },
   close: () => set({ isOpen: false }),
@@ -44,3 +42,5 @@ export const useNoteListStore = create<NoteListState & NoteListActions>((set) =>
   },
   resetNoteList: () => set({ isOpen: false, selectedIndex: 0 }),
 }));
+
+registerOverlay('noteList', () => useNoteListStore.getState().close());

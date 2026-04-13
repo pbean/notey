@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { mockInvoke } from '../../../test-utils/setup';
 import { useNoteListStore } from '../store';
 import { useWorkspaceStore } from '../../workspace/store';
 import { useTabStore } from '../../tabs/store';
+import { useEditorStore } from '../../editor/store';
 import { useSearchStore } from '../../search/store';
 import { useCommandPaletteStore } from '../../command-palette/store';
 import { NoteListPanel } from './NoteListPanel';
@@ -29,15 +30,16 @@ const MOCK_NOTES: Note[] = [
 
 describe('NoteListPanel', () => {
   beforeEach(() => {
-    mockInvoke.mockImplementation((cmd: string) => {
+    mockInvoke.mockImplementation((cmd: string, args?: { id?: number }) => {
       if (cmd === 'get_note') {
-        return Promise.resolve({
-          status: 'ok',
-          data: MOCK_NOTES[0],
-        });
+        const id = args?.id ?? 1;
+        const note = MOCK_NOTES.find((n) => n.id === id) ?? MOCK_NOTES[0];
+        return Promise.resolve(note);
       }
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
+    useTabStore.getState().reset();
+    useEditorStore.getState().resetNote();
     useNoteListStore.getState().open();
     useWorkspaceStore.setState({
       filteredNotes: MOCK_NOTES,
@@ -111,20 +113,22 @@ describe('NoteListPanel', () => {
     expect(useNoteListStore.getState().selectedIndex).toBe(2);
   });
 
-  it('Enter opens selected note in tab and closes panel', () => {
+  it('Enter opens selected note in tab and closes panel', async () => {
     render(<NoteListPanel />);
     const panel = screen.getByTestId('note-list-panel');
 
     fireEvent.keyDown(panel, { key: 'Enter' });
 
-    // Tab opened for first note
+    // Tab opens synchronously before the loadNote await
     const tabs = useTabStore.getState().tabs;
     expect(tabs.length).toBe(1);
     expect(tabs[0].noteId).toBe(1);
     expect(tabs[0].title).toBe('Meeting Notes');
 
-    // Panel closed
-    expect(useNoteListStore.getState().isOpen).toBe(false);
+    // Panel closes after loadNote resolves
+    await waitFor(() => {
+      expect(useNoteListStore.getState().isOpen).toBe(false);
+    });
   });
 
   it('Esc closes panel without opening a note', () => {
@@ -137,7 +141,7 @@ describe('NoteListPanel', () => {
     expect(useTabStore.getState().tabs.length).toBe(0);
   });
 
-  it('clicking a note opens it in a tab and closes panel', () => {
+  it('clicking a note opens it in a tab and closes panel', async () => {
     render(<NoteListPanel />);
     const second = screen.getByTestId('note-list-item-2');
 
@@ -147,7 +151,36 @@ describe('NoteListPanel', () => {
     expect(tabs.length).toBe(1);
     expect(tabs[0].noteId).toBe(2);
     expect(tabs[0].title).toBe('Shopping List');
-    expect(useNoteListStore.getState().isOpen).toBe(false);
+    await waitFor(() => {
+      expect(useNoteListStore.getState().isOpen).toBe(false);
+    });
+  });
+
+  it('closes orphan tab when loadNote fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_note') {
+        return Promise.reject({ type: 'Database', message: 'boom' });
+      }
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    render(<NoteListPanel />);
+    const target = screen.getByTestId('note-list-item-2');
+
+    fireEvent.click(target);
+
+    // Tab opens synchronously
+    expect(useTabStore.getState().tabs.length).toBe(1);
+    expect(useTabStore.getState().tabs[0].noteId).toBe(2);
+
+    // After loadNote rejects, the orphan tab is removed and panel stays open
+    await waitFor(() => {
+      expect(useTabStore.getState().tabs.length).toBe(0);
+    });
+    expect(useEditorStore.getState().saveStatus).toBe('failed');
+    expect(useNoteListStore.getState().isOpen).toBe(true);
+    consoleSpy.mockRestore();
   });
 
   it('clicking backdrop closes panel', () => {

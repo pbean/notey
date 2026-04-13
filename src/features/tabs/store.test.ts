@@ -181,6 +181,18 @@ describe('useTabStore', () => {
     expect(useTabStore.getState().tabs).toHaveLength(1);
   });
 
+  it('reorderTabs ignores non-integer indices (NaN, Infinity, float)', () => {
+    useTabStore.getState().openTab(1, 'A');
+    useTabStore.getState().openTab(2, 'B');
+    useTabStore.getState().openTab(3, 'C');
+    const before = useTabStore.getState().tabs.map((t) => t.noteId);
+    useTabStore.getState().reorderTabs(NaN, 1);
+    useTabStore.getState().reorderTabs(0, NaN);
+    useTabStore.getState().reorderTabs(1.5, 0);
+    useTabStore.getState().reorderTabs(0, Infinity);
+    expect(useTabStore.getState().tabs.map((t) => t.noteId)).toEqual(before);
+  });
+
   // --- updateTabTitle ---
 
   it('updateTabTitle updates the correct tab', () => {

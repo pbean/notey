@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { useNoteListStore } from '../note-list/store';
-import { useSearchStore } from '../search/store';
+import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
 
 /** Command palette overlay state. */
 interface CommandPaletteState {
@@ -10,7 +9,7 @@ interface CommandPaletteState {
 
 /** Actions for managing command palette state. */
 interface CommandPaletteActions {
-  /** Open the command palette. Closes search overlay to enforce Layer 1 mutual exclusion. */
+  /** Open the command palette. Closes other overlays via the manager. */
   open: () => void;
   /** Close the command palette. */
   close: () => void;
@@ -24,8 +23,7 @@ interface CommandPaletteActions {
 export const useCommandPaletteStore = create<CommandPaletteState & CommandPaletteActions>((set, get) => ({
   isOpen: false,
   open: () => {
-    useSearchStore.getState().closeSearch();
-    useNoteListStore.getState().close();
+    closeOtherOverlays('commandPalette');
     set({ isOpen: true });
   },
   close: () => set({ isOpen: false }),
@@ -34,10 +32,11 @@ export const useCommandPaletteStore = create<CommandPaletteState & CommandPalett
     if (isOpen) {
       set({ isOpen: false });
     } else {
-      useSearchStore.getState().closeSearch();
-      useNoteListStore.getState().close();
+      closeOtherOverlays('commandPalette');
       set({ isOpen: true });
     }
   },
   resetCommandPalette: () => set({ isOpen: false }),
 }));
+
+registerOverlay('commandPalette', () => useCommandPaletteStore.getState().close());

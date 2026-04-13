@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mockInvoke } from '../../test-utils/setup';
 import { buildNote, buildConfig } from '../../test-utils/factories';
 import { useEditorStore } from '../editor/store';
@@ -115,6 +115,14 @@ describe('toggleFormat', () => {
 });
 
 describe('toggleLayoutMode', () => {
+  beforeEach(() => {
+    document.documentElement.classList.remove('compact');
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove('compact');
+  });
+
   it('toggles from comfortable to compact', async () => {
     const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
     const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
@@ -130,9 +138,11 @@ describe('toggleLayoutMode', () => {
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
       partial: { general: { theme: null, layoutMode: 'compact' }, editor: null, hotkey: null },
     });
+    expect(document.documentElement.classList.contains('compact')).toBe(true);
   });
 
   it('toggles from compact to comfortable', async () => {
+    document.documentElement.classList.add('compact');
     const config = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
     const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
 
@@ -147,6 +157,22 @@ describe('toggleLayoutMode', () => {
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
       partial: { general: { theme: null, layoutMode: 'comfortable' }, editor: null, hotkey: null },
     });
+    expect(document.documentElement.classList.contains('compact')).toBe(false);
+  });
+
+  it('does not mutate DOM when updateConfig fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'update_config') return Promise.reject({ type: 'Database', message: 'boom' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleLayoutMode();
+
+    expect(document.documentElement.classList.contains('compact')).toBe(false);
+    consoleSpy.mockRestore();
   });
 });
 

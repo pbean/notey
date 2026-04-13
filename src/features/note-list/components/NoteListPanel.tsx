@@ -26,10 +26,22 @@ export function NoteListPanel() {
     ? `All workspaces \u00b7 ${filteredNotes.length} notes`
     : `${activeWorkspaceName ?? 'Workspace'} \u00b7 ${filteredNotes.length} notes`;
 
-  /** Open a note in a tab and dismiss the panel. */
-  const selectNote = (noteId: number, title: string) => {
+  /**
+   * Open a note in a tab and dismiss the panel. If loadNote fails to make
+   * `noteId` the active note, close the orphan tab so the user isn't left
+   * with a tab pointing at an unloaded note. Comparing `activeNoteId`
+   * (rather than the shared `saveStatus`) is race-safe under rapid clicks.
+   */
+  const selectNote = async (noteId: number, title: string) => {
     useTabStore.getState().openTab(noteId, title);
-    void useEditorStore.getState().loadNote(noteId);
+    await useEditorStore.getState().loadNote(noteId);
+    if (useEditorStore.getState().activeNoteId !== noteId) {
+      const tabIndex = useTabStore.getState().tabs.findIndex((t) => t.noteId === noteId);
+      if (tabIndex !== -1) {
+        useTabStore.getState().closeTab(tabIndex);
+      }
+      return;
+    }
     useNoteListStore.getState().close();
     const editor = document.querySelector<HTMLElement>('.cm-content');
     editor?.focus();
@@ -72,7 +84,7 @@ export function NoteListPanel() {
       e.preventDefault();
       if (noteCount === 0) return;
       const note = filteredNotes[useNoteListStore.getState().selectedIndex];
-      if (note) selectNote(note.id, note.title || 'New note');
+      if (note) void selectNote(note.id, note.title || 'New note');
     } else if (e.key === 'Tab') {
       // Focus trap: keep focus within the panel
       e.preventDefault();
@@ -169,7 +181,7 @@ export function NoteListPanel() {
                 role="option"
                 aria-selected={index === clampedIndex}
                 tabIndex={-1}
-                onClick={() => selectNote(note.id, note.title || 'New note')}
+                onClick={() => void selectNote(note.id, note.title || 'New note')}
                 style={{
                   padding: 'var(--space-2) var(--space-3)',
                   cursor: 'pointer',

@@ -13,6 +13,10 @@ function ctrlKey(key: string, shift = false) {
   pressKey(key, { ctrlKey: true, shiftKey: shift });
 }
 
+function metaKey(key: string, shift = false) {
+  pressKey(key, { metaKey: true, shiftKey: shift });
+}
+
 /** Set up N tabs with active at given index. */
 function setupTabs(count: number, activeIndex: number) {
   useTabStore.setState({
@@ -93,6 +97,27 @@ describe('useTabKeyboardNav', () => {
   });
 
   // --- Guards ---
+
+  // --- macOS Cmd parity ---
+
+  it('Cmd+W closes the active tab', () => {
+    setupTabs(3, 1);
+    metaKey('w');
+    expect(useTabStore.getState().tabs).toHaveLength(2);
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
+
+  it('Cmd+2 jumps to second tab', () => {
+    setupTabs(4, 0);
+    metaKey('2');
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
+
+  it('Cmd+Tab cycles tabs', () => {
+    setupTabs(3, 0);
+    metaKey('Tab');
+    expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
 
   it('all shortcuts are no-ops when no tabs are open', () => {
     // Tabs empty by default from reset

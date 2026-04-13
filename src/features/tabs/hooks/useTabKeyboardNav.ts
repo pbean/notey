@@ -20,8 +20,8 @@ export function useTabKeyboardNav(): void {
       // Guard: no-op when no tabs are open
       if (tabs.length === 0) return;
 
-      // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
-      if (e.ctrlKey && e.key === 'Tab') {
+      // Ctrl/Cmd+Tab / Ctrl/Cmd+Shift+Tab — cycle tabs
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab') {
         e.preventDefault();
         if (activeTabIndex === null) return;
         if (e.shiftKey) {
@@ -36,8 +36,8 @@ export function useTabKeyboardNav(): void {
         return;
       }
 
-      // Ctrl+W — close active tab
-      if (e.ctrlKey && e.key === 'w') {
+      // Ctrl/Cmd+W — close active tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
         e.preventDefault();
         if (activeTabIndex !== null) {
           closeTab(activeTabIndex);
@@ -45,8 +45,8 @@ export function useTabKeyboardNav(): void {
         return;
       }
 
-      // Ctrl+1-9 — jump to Nth tab
-      if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+      // Ctrl/Cmd+1-9 — jump to Nth tab
+      if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const n = parseInt(e.key, 10);
         if (n === 9) {

@@ -105,6 +105,8 @@ export async function toggleLayoutMode(): Promise<void> {
     console.error('updateConfig failed:', updateResult.error);
     return;
   }
+
+  document.documentElement.classList.toggle('compact', next === 'compact');
 }
 
 /** Open the search overlay. */
