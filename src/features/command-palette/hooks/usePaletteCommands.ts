@@ -9,6 +9,7 @@ import {
   stubAction,
 } from '../actions';
 import { useNoteListStore } from '../../note-list/store';
+import { useTrashStore } from '../../trash/store';
 
 let _isMac: boolean | null = null;
 function getIsMac(): boolean {
@@ -66,7 +67,7 @@ export function usePaletteCommands(): PaletteCommand[] {
       label: 'View Trash',
       group: 'Navigation',
       shortcut: '',
-      action: () => stubAction('View Trash'),
+      action: () => useTrashStore.getState().open(),
     },
 
     // Settings

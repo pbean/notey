@@ -82,6 +82,55 @@ pub fn trash_note(conn: &Connection, id: i64) -> Result<Note, NoteyError> {
     get_note(conn, id)
 }
 
+/// Restore a soft-deleted note by clearing `is_trashed` and `deleted_at`.
+///
+/// The exact inverse of [`trash_note`]: sets `is_trashed = 0`, `deleted_at = NULL`,
+/// and refreshes `updated_at`, guarded by `AND is_trashed = 1` so restoring an
+/// already-active or absent note returns [`NoteyError::NotFound`] rather than a
+/// silent no-op. The note's `workspace_id` is untouched, so it returns to its
+/// original workspace automatically.
+pub fn restore_note(conn: &Connection, id: i64) -> Result<Note, NoteyError> {
+    let now = Utc::now().to_rfc3339();
+    let rows_changed = conn.execute(
+        "UPDATE notes SET is_trashed = 0, deleted_at = NULL, updated_at = ?1 WHERE id = ?2 AND is_trashed = 1",
+        params![now, id],
+    )?;
+
+    if rows_changed == 0 {
+        return Err(NoteyError::NotFound);
+    }
+
+    get_note(conn, id)
+}
+
+/// Lists all soft-deleted (trashed) notes across every workspace.
+///
+/// Trash is global — there is no workspace filter. Results are ordered by
+/// `deleted_at` DESC so the most recently deleted note appears first.
+pub fn list_trashed_notes(conn: &Connection) -> Result<Vec<Note>, NoteyError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, content, format, workspace_id, created_at, updated_at, deleted_at, is_trashed
+         FROM notes WHERE is_trashed = 1
+         ORDER BY deleted_at DESC",
+    )?;
+    let notes = stmt
+        .query_map([], |row| {
+            Ok(Note {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                format: row.get(3)?,
+                workspace_id: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                deleted_at: row.get(7)?,
+                is_trashed: row.get::<_, i64>(8)? != 0,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(notes)
+}
+
 /// Reassign a note to a different workspace, or unscope it by passing None.
 pub fn reassign_note_workspace(
     conn: &Connection,
@@ -267,6 +316,102 @@ mod tests {
             matches!(result, Err(NoteyError::NotFound)),
             "trashing an already-trashed note should return NotFound"
         );
+    }
+
+    #[test]
+    fn test_restore_note_clears_fields() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
+        trash_note(&conn, note.id).expect("trash_note failed");
+
+        let restored = restore_note(&conn, note.id).expect("restore_note failed");
+        assert!(!restored.is_trashed, "is_trashed should be false after restore");
+        assert!(restored.deleted_at.is_none(), "deleted_at should be cleared after restore");
+        assert_eq!(restored.id, note.id);
+
+        // Restored note reappears in the active list.
+        let notes = list_notes(&conn, None).expect("list_notes failed");
+        assert!(notes.iter().any(|n| n.id == note.id), "restored note should be active again");
+    }
+
+    #[test]
+    fn test_restore_note_preserves_workspace() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params!["ws-restore", "/tmp/ws-restore", "2026-01-01T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        let ws_id = conn.last_insert_rowid();
+
+        let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+        let restored = restore_note(&conn, note.id).expect("restore note");
+        assert_eq!(restored.workspace_id, Some(ws_id), "restore must keep the original workspace");
+    }
+
+    #[test]
+    fn test_restore_note_not_found() {
+        let conn = setup_test_db();
+        let result = restore_note(&conn, 99999);
+        assert!(matches!(result, Err(NoteyError::NotFound)));
+    }
+
+    #[test]
+    fn test_restore_note_already_active() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create_note failed");
+        let result = restore_note(&conn, note.id);
+        assert!(
+            matches!(result, Err(NoteyError::NotFound)),
+            "restoring an already-active note should return NotFound"
+        );
+    }
+
+    #[test]
+    fn test_list_trashed_notes_returns_only_trashed() {
+        let conn = setup_test_db();
+        let active = create_note(&conn, "markdown", None).expect("create active note");
+        let trashed = create_note(&conn, "markdown", None).expect("create note to trash");
+        trash_note(&conn, trashed.id).expect("trash note");
+
+        let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, trashed.id);
+        assert!(result.iter().all(|n| n.is_trashed));
+        assert!(!result.iter().any(|n| n.id == active.id), "active notes must be excluded");
+    }
+
+    #[test]
+    fn test_list_trashed_notes_ordered_by_deleted_at_desc() {
+        let conn = setup_test_db();
+        let note1 = create_note(&conn, "markdown", None).expect("create note1");
+        trash_note(&conn, note1.id).expect("trash note1");
+        conn.execute(
+            "UPDATE notes SET deleted_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
+            params![note1.id],
+        )
+        .expect("backdate note1 deleted_at");
+        let note2 = create_note(&conn, "markdown", None).expect("create note2");
+        trash_note(&conn, note2.id).expect("trash note2");
+        conn.execute(
+            "UPDATE notes SET deleted_at = '2020-01-02T00:00:00+00:00' WHERE id = ?",
+            params![note2.id],
+        )
+        .expect("backdate note2 deleted_at");
+
+        let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].id, note2.id, "most recently deleted note should come first");
+        assert_eq!(result[1].id, note1.id);
+    }
+
+    #[test]
+    fn test_list_trashed_notes_empty() {
+        let conn = setup_test_db();
+        create_note(&conn, "markdown", None).expect("create active note");
+        let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
+        assert!(result.is_empty(), "no trashed notes should return empty vec");
     }
 
     #[test]

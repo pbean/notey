@@ -53,6 +53,27 @@ pub fn trash_note(
     services::notes::trash_note(&conn, id)
 }
 
+/// Restore a soft-deleted note from the trash back to its original workspace.
+#[tauri::command]
+#[specta::specta]
+pub fn restore_note(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    id: i64,
+) -> Result<Note, NoteyError> {
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
+    services::notes::restore_note(&conn, id)
+}
+
+/// List all soft-deleted notes, newest-deleted first, across every workspace.
+#[tauri::command]
+#[specta::specta]
+pub fn list_trashed_notes(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+) -> Result<Vec<Note>, NoteyError> {
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
+    services::notes::list_trashed_notes(&conn)
+}
+
 /// Reassign a note to a different workspace or unscope it.
 #[tauri::command]
 #[specta::specta]

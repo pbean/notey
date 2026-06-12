@@ -8,6 +8,8 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-get-note",
     "allow-update-note",
     "allow-trash-note",
+    "allow-restore-note",
+    "allow-list-trashed-notes",
     "allow-list-notes",
     "allow-get-config",
     "allow-update-config",

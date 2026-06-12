@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { useCommandPaletteStore } from '../store';
 import { CommandPalette } from './CommandPalette';
+import { useNoteListStore } from '../../note-list/store';
+import { useTrashStore } from '../../trash/store';
 
 // cmdk uses ResizeObserver internally, which jsdom does not provide
 class MockResizeObserver {
@@ -17,6 +19,8 @@ Element.prototype.scrollIntoView = function () {};
 describe('CommandPalette', () => {
   beforeEach(() => {
     useCommandPaletteStore.getState().resetCommandPalette();
+    useNoteListStore.getState().resetNoteList();
+    useTrashStore.getState().resetTrash();
   });
 
   it('does not render content when closed', () => {
@@ -78,21 +82,41 @@ describe('CommandPalette', () => {
     });
   });
 
-  it('calls action and closes when a command is selected', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    act(() => useCommandPaletteStore.getState().open());
+  it('opens trash and closes the palette when View Trash is selected', async () => {
+    act(() => {
+      useNoteListStore.getState().open();
+      useCommandPaletteStore.getState().open();
+    });
     render(<CommandPalette />);
 
     await waitFor(() => {
       expect(screen.getByText('View Trash')).toBeDefined();
     });
 
-    // cmdk handles selection via click on the item
     fireEvent.click(screen.getByText('View Trash'));
 
     await waitFor(() => {
       expect(useCommandPaletteStore.getState().isOpen).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: View Trash');
+      expect(useNoteListStore.getState().isOpen).toBe(false);
+      expect(useTrashStore.getState().isOpen).toBe(true);
+    });
+  });
+
+  it('calls action and closes when a stub command is selected', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    act(() => useCommandPaletteStore.getState().open());
+    render(<CommandPalette />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Open Settings')).toBeDefined();
+    });
+
+    // cmdk handles selection via click on the item
+    fireEvent.click(screen.getByText('Open Settings'));
+
+    await waitFor(() => {
+      expect(useCommandPaletteStore.getState().isOpen).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: Open Settings');
     });
 
     warnSpy.mockRestore();
