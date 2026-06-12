@@ -2,10 +2,12 @@ import { commands } from '../../generated/bindings';
 import { useEditorStore } from '../editor/store';
 import { useSearchStore } from '../search/store';
 import { useTabStore } from '../tabs/store';
+import { useToastStore } from '../toast/store';
 import { useWorkspaceStore } from '../workspace/store';
 import { flushSave } from '../editor/hooks/useAutoSave';
 
 let isCreatingNote = false;
+let isTrashingNote = false;
 
 /**
  * Create a new note, open it in a tab, and load it into the editor.
@@ -47,6 +49,54 @@ export async function createNewNote(): Promise<void> {
   } finally {
     isCreatingNote = false;
   }
+}
+
+/**
+ * Soft-delete the note in the active tab. No-op when no tab is active. Flushes
+ * pending auto-save first so the trashed note keeps the latest editor content.
+ * Guarded against concurrent calls to avoid duplicate trash requests and
+ * contradictory toasts.
+ */
+export async function trashActiveNote(): Promise<void> {
+  if (isTrashingNote) return;
+
+  const activeTab = useTabStore.getState().getActiveTab();
+  if (!activeTab) return;
+
+  isTrashingNote = true;
+
+  try {
+    try {
+      await flushSave();
+    } catch (err) {
+      console.error('flushSave failed before trash:', err);
+      useToastStore.getState().addToast("Couldn't move note to trash");
+      return;
+    }
+
+    if (useEditorStore.getState().saveStatus === 'failed') {
+      useToastStore.getState().addToast("Couldn't move note to trash");
+      return;
+    }
+
+    const note = await useWorkspaceStore.getState().trashNote(activeTab.noteId);
+    if (note) {
+      useToastStore.getState().addToast('Note moved to trash');
+    } else {
+      useToastStore.getState().addToast("Couldn't move note to trash");
+    }
+  } finally {
+    isTrashingNote = false;
+  }
+}
+
+/**
+ * Test-only reset for module-level action guards. Called from the global
+ * test cleanup to prevent in-flight markers leaking between tests.
+ */
+export function resetActionGuards(): void {
+  isCreatingNote = false;
+  isTrashingNote = false;
 }
 
 let isTogglingTheme = false;

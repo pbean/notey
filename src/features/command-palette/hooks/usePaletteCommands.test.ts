@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { usePaletteCommands } from './usePaletteCommands';
 
 describe('usePaletteCommands', () => {
-  it('returns 11 commands total', () => {
+  it('returns 12 commands total', () => {
     const commands = usePaletteCommands();
-    expect(commands).toHaveLength(11);
+    expect(commands).toHaveLength(12);
   });
 
   it('includes all three groups', () => {
@@ -15,11 +15,16 @@ describe('usePaletteCommands', () => {
     expect(groups).toContain('Navigation');
   });
 
-  it('has 3 action commands', () => {
+  it('has 4 action commands', () => {
     const commands = usePaletteCommands();
     const actions = commands.filter((c) => c.group === 'Actions');
-    expect(actions).toHaveLength(3);
-    expect(actions.map((c) => c.label)).toEqual(['New Note', 'Search Notes', 'Switch Workspace']);
+    expect(actions).toHaveLength(4);
+    expect(actions.map((c) => c.label)).toEqual([
+      'New Note',
+      'Search Notes',
+      'Switch Workspace',
+      'Move to Trash',
+    ]);
   });
 
   it('has 2 navigation commands', () => {

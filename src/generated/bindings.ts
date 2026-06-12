@@ -7,6 +7,8 @@ export const commands = {
 	createNote: (format: string, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("create_note", { format, workspaceId })),
 	getNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("get_note", { id })),
 	updateNote: (id: number, title: string | null, content: string | null, format: string | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("update_note", { id, title, content, format })),
+	// Soft-delete a note: move it to the trash so it can be recovered later.
+	trashNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("trash_note", { id })),
 	listNotes: (workspaceId: number | null) => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes", { workspaceId })),
 	// Reassign a note to a different workspace or unscope it.
 	reassignNoteWorkspace: (id: number, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("reassign_note_workspace", { id, workspaceId })),

@@ -36,10 +36,7 @@ export function NoteListPanel() {
     useTabStore.getState().openTab(noteId, title);
     await useEditorStore.getState().loadNote(noteId);
     if (useEditorStore.getState().activeNoteId !== noteId) {
-      const tabIndex = useTabStore.getState().tabs.findIndex((t) => t.noteId === noteId);
-      if (tabIndex !== -1) {
-        useTabStore.getState().closeTab(tabIndex);
-      }
+      useTabStore.getState().closeTabByNoteId(noteId);
       return;
     }
     useNoteListStore.getState().close();

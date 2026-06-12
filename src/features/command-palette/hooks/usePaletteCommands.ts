@@ -5,6 +5,7 @@ import {
   toggleTheme,
   toggleFormat,
   toggleLayoutMode,
+  trashActiveNote,
   stubAction,
 } from '../actions';
 import { useNoteListStore } from '../../note-list/store';
@@ -43,6 +44,13 @@ export function usePaletteCommands(): PaletteCommand[] {
       group: 'Actions',
       shortcut: `${mod}+Shift+W`,
       action: () => stubAction('Switch Workspace'),
+    },
+    {
+      id: 'move-to-trash',
+      label: 'Move to Trash',
+      group: 'Actions',
+      shortcut: '',
+      action: trashActiveNote,
     },
 
     // Navigation

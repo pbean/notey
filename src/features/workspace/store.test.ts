@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockInvoke } from '../../test-utils/setup';
 import { useWorkspaceStore } from './store';
+import { useTabStore } from '../tabs/store';
+import { buildNote } from '../../test-utils/factories';
 
 const MOCK_WORKSPACES = [
   { id: 7, name: 'project', path: '/home/user/project', createdAt: '2026-01-01T00:00:00+00:00', noteCount: 5 },
@@ -362,6 +364,49 @@ describe('useWorkspaceStore', () => {
     const state = useWorkspaceStore.getState();
     expect(state.filteredNotes).toEqual([]);
     expect(state.isLoadingNotes).toBe(false);
+    consoleSpy.mockRestore();
+  });
+
+  // --- trashNote ---
+
+  it('trashNote soft-deletes, closes the open tab, refreshes the list, and returns the note', async () => {
+    const trashed = buildNote({ id: 5, isTrashed: true, deletedAt: '2026-06-12T00:00:00+00:00' });
+    const remaining = [buildNote({ id: 6, title: 'Survivor' })];
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'trash_note') return Promise.resolve(trashed);
+      if (cmd === 'list_notes') return Promise.resolve(remaining);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTabStore.getState().reset();
+    useTabStore.getState().openTab(5, 'Doomed');
+
+    const returned = await useWorkspaceStore.getState().trashNote(5);
+
+    expect(returned).toEqual(trashed);
+    expect(mockInvoke).toHaveBeenCalledWith('trash_note', { id: 5 });
+    // The trashed note's tab is closed (it was the only tab → empty state)
+    expect(useTabStore.getState().tabs).toEqual([]);
+    expect(useTabStore.getState().activeTabIndex).toBeNull();
+    // The note list is refreshed without the trashed note
+    expect(useWorkspaceStore.getState().filteredNotes).toEqual(remaining);
+  });
+
+  it('trashNote returns null, sets notesError, and leaves tabs intact on backend error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'trash_note') return Promise.reject({ type: 'NotFound' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTabStore.getState().reset();
+    useTabStore.getState().openTab(5, 'Stays open');
+
+    const returned = await useWorkspaceStore.getState().trashNote(5);
+
+    expect(returned).toBeNull();
+    expect(useWorkspaceStore.getState().notesError).toBe('Failed to move note to trash');
+    // No list refresh, tab untouched
+    expect(mockInvoke).not.toHaveBeenCalledWith('list_notes', expect.anything());
+    expect(useTabStore.getState().tabs).toHaveLength(1);
     consoleSpy.mockRestore();
   });
 });

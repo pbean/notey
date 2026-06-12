@@ -42,6 +42,17 @@ pub fn update_note(
     services::notes::update_note(&conn, id, title, content, format)
 }
 
+/// Soft-delete a note: move it to the trash so it can be recovered later.
+#[tauri::command]
+#[specta::specta]
+pub fn trash_note(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    id: i64,
+) -> Result<Note, NoteyError> {
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
+    services::notes::trash_note(&conn, id)
+}
+
 /// Reassign a note to a different workspace or unscope it.
 #[tauri::command]
 #[specta::specta]

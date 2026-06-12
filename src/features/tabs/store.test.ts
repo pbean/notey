@@ -121,6 +121,37 @@ describe('useTabStore', () => {
     expect(useTabStore.getState().tabs).toHaveLength(1);
   });
 
+  // --- closeTabByNoteId ---
+
+  it('closeTabByNoteId closes the tab for the matching note', () => {
+    useTabStore.getState().openTab(1, 'A');
+    useTabStore.getState().openTab(2, 'B');
+    useTabStore.getState().openTab(3, 'C');
+    useTabStore.getState().switchTab(1); // B active
+
+    useTabStore.getState().closeTabByNoteId(2);
+
+    const state = useTabStore.getState();
+    expect(state.tabs.map((t) => t.noteId)).toEqual([1, 3]);
+    // Closing the active middle tab selects the right neighbor (now note 3)
+    expect(state.activeTabIndex).toBe(1);
+    expect(state.tabs[state.activeTabIndex!].noteId).toBe(3);
+  });
+
+  it('closeTabByNoteId closing the only tab yields the empty state', () => {
+    useTabStore.getState().openTab(9, 'Solo');
+    useTabStore.getState().closeTabByNoteId(9);
+    const state = useTabStore.getState();
+    expect(state.tabs).toEqual([]);
+    expect(state.activeTabIndex).toBeNull();
+  });
+
+  it('closeTabByNoteId is a no-op when no tab matches', () => {
+    useTabStore.getState().openTab(1, 'A');
+    useTabStore.getState().closeTabByNoteId(42);
+    expect(useTabStore.getState().tabs).toHaveLength(1);
+  });
+
   // --- switchTab ---
 
   it('switchTab sets activeTabIndex', () => {

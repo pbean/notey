@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { CaptureWindow } from './features/editor/components/CaptureWindow';
+import { Toaster } from './features/toast/components/Toaster';
 import { useWorkspaceStore } from './features/workspace/store';
 import { restoreSession, startSessionAutoSave } from './features/session/persistence';
 
-/** Application root — renders the main CaptureWindow. */
+/** Application root — renders the main CaptureWindow and the toast overlay. */
 function App() {
   useEffect(() => {
     let disposed = false;
@@ -34,7 +35,12 @@ function App() {
     };
   }, []);
 
-  return <CaptureWindow />;
+  return (
+    <>
+      <CaptureWindow />
+      <Toaster />
+    </>
+  );
 }
 
 export default App;

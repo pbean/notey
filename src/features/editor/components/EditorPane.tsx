@@ -30,8 +30,12 @@ export function EditorPane({ className, style }: EditorPaneProps) {
   const setContent = useEditorStore((s) => s.setContent);
   const format = useEditorStore((s) => s.format);
   const activeTabIndex = useTabStore((s) => s.activeTabIndex);
+  const activeTabNoteId = useTabStore((s) => (
+    s.activeTabIndex === null ? null : s.tabs[s.activeTabIndex]?.noteId ?? null
+  ));
 
   const prevTabIndexRef = useRef<number | null>(null);
+  const prevTabNoteIdRef = useRef<number | null>(null);
   const langCompartmentRef = useRef<Compartment | null>(null);
   /** Monotonic ID incremented on each switch — stale switches abort when their ID doesn't match. */
   const switchIdRef = useRef(0);
@@ -101,9 +105,10 @@ export function EditorPane({ className, style }: EditorPaneProps) {
     if (!view) return;
 
     const prevIndex = prevTabIndexRef.current;
+    const prevNoteId = prevTabNoteIdRef.current;
 
-    // Skip on initial render or no-op change
-    if (activeTabIndex === prevIndex) return;
+    // Skip only when both the numeric slot and the note in that slot are unchanged.
+    if (activeTabIndex === prevIndex && activeTabNoteId === prevNoteId) return;
 
     // Cancellation: increment switchId; stale switches abort after each await
     const switchId = ++switchIdRef.current;
@@ -111,16 +116,19 @@ export function EditorPane({ className, style }: EditorPaneProps) {
 
     // Update prev ref for the next switch
     prevTabIndexRef.current = activeTabIndex;
+    prevTabNoteIdRef.current = activeTabNoteId;
 
     void (async () => {
       // 1. Save current tab state before switching
-      if (prevIndex !== null) {
-        const prevTabs = useTabStore.getState().tabs;
-        if (prevIndex < prevTabs.length) {
-          await flushSave();
-          if (isStale()) return;
+      if (prevNoteId !== null) {
+        await flushSave();
+        if (isStale()) return;
+
+        const currentTabs = useTabStore.getState().tabs;
+        const prevTabIndex = currentTabs.findIndex((tab) => tab.noteId === prevNoteId);
+        if (prevTabIndex !== -1) {
           useTabStore.getState().saveTabState(
-            prevIndex,
+            prevTabIndex,
             view.state,
             view.scrollDOM.scrollTop,
             langCompartmentRef.current ?? undefined,
@@ -129,7 +137,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
       }
 
       // 2. No active tab → reset to empty
-      if (activeTabIndex === null) {
+      if (activeTabIndex === null || activeTabNoteId === null) {
         useEditorStore.getState().resetNote();
         const { extensions, langCompartment } = buildExtensions('markdown', {
           onEscape,
@@ -237,7 +245,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
         });
       }
     })();
-  }, [activeTabIndex, onEscape, onDocChanged]);
+  }, [activeTabIndex, activeTabNoteId, onEscape, onDocChanged]);
 
   // Reconfigure language compartment when format changes within a tab
   useEffect(() => {

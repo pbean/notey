@@ -3,10 +3,13 @@ import { mockInvoke } from '../../test-utils/setup';
 import { buildNote, buildConfig } from '../../test-utils/factories';
 import { useEditorStore } from '../editor/store';
 import { useTabStore } from '../tabs/store';
+import * as autoSave from '../editor/hooks/useAutoSave';
+import { useToastStore } from '../toast/store';
 import { useWorkspaceStore } from '../workspace/store';
 import { useSearchStore } from '../search/store';
 import {
   createNewNote,
+  trashActiveNote,
   toggleTheme,
   toggleFormat,
   toggleLayoutMode,
@@ -131,6 +134,84 @@ describe('toggleTheme', () => {
     expect(updateCalls).toHaveLength(1);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
     expect(document.documentElement.classList.contains('light')).toBe(true);
+  });
+});
+
+describe('trashActiveNote', () => {
+  beforeEach(() => {
+    useEditorStore.getState().resetNote();
+    useTabStore.getState().reset();
+    useToastStore.getState().reset();
+    useWorkspaceStore.getState().resetWorkspace();
+  });
+
+  it('no-ops when no tab is active', async () => {
+    const flushSaveSpy = vi.spyOn(autoSave, 'flushSave');
+
+    await trashActiveNote();
+
+    expect(flushSaveSpy).not.toHaveBeenCalled();
+    expect(mockInvoke).not.toHaveBeenCalledWith('trash_note', expect.anything());
+    expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it('flushes pending saves before trashing and shows a success toast', async () => {
+    const flushSaveSpy = vi.spyOn(autoSave, 'flushSave').mockImplementation(async () => {
+      useEditorStore.getState().setSaveStatus('saved');
+    });
+    const trashed = buildNote({ id: 5, isTrashed: true, deletedAt: '2026-06-12T00:00:00+00:00' });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'trash_note') return Promise.resolve(trashed);
+      if (cmd === 'list_notes') return Promise.resolve([]);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTabStore.getState().openTab(5, 'Doomed');
+
+    await trashActiveNote();
+
+    const trashCallOrder = mockInvoke.mock.invocationCallOrder.find(
+      (_callOrder, index) => mockInvoke.mock.calls[index]?.[0] === 'trash_note',
+    );
+    expect(flushSaveSpy).toHaveBeenCalledTimes(1);
+    expect(flushSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(trashCallOrder ?? Number.MAX_SAFE_INTEGER);
+    expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(['Note moved to trash']);
+    expect(useTabStore.getState().tabs).toEqual([]);
+  });
+
+  it('aborts the trash when save flushing fails and shows an error toast', async () => {
+    vi.spyOn(autoSave, 'flushSave').mockImplementation(async () => {
+      useEditorStore.getState().setSaveStatus('failed');
+    });
+    useTabStore.getState().openTab(5, 'Stays open');
+
+    await trashActiveNote();
+
+    expect(mockInvoke).not.toHaveBeenCalledWith('trash_note', expect.anything());
+    expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["Couldn't move note to trash"]);
+    expect(useTabStore.getState().tabs).toHaveLength(1);
+  });
+
+  it('drops a concurrent trash request while one is in flight', async () => {
+    vi.spyOn(autoSave, 'flushSave').mockResolvedValue(undefined);
+    let resolveTrash!: (value: unknown) => void;
+    const pendingTrash = new Promise((resolve) => {
+      resolveTrash = resolve;
+    });
+    const trashed = buildNote({ id: 5, isTrashed: true, deletedAt: '2026-06-12T00:00:00+00:00' });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'trash_note') return pendingTrash;
+      if (cmd === 'list_notes') return Promise.resolve([]);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTabStore.getState().openTab(5, 'Doomed');
+
+    const first = trashActiveNote();
+    const second = trashActiveNote();
+    resolveTrash(trashed);
+    await Promise.all([first, second]);
+
+    const trashCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'trash_note');
+    expect(trashCalls).toHaveLength(1);
   });
 });
 

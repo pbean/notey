@@ -42,6 +42,12 @@ interface TabActions {
    * activeTabIndex to null.
    */
   closeTab: (index: number) => void;
+  /**
+   * Close the tab displaying the given note, if one is open. No-op when no tab
+   * matches. Delegates to `closeTab`, so adjacent-tab selection and empty-state
+   * handling behave identically to a manual close.
+   */
+  closeTabByNoteId: (noteId: number) => void;
   /** Activate the tab at the given index. */
   switchTab: (index: number) => void;
   /**
@@ -123,6 +129,13 @@ export const useTabStore = create<TabState & TabActions>((set, get) => ({
     }
 
     set({ tabs: newTabs, activeTabIndex: newActiveIndex });
+  },
+
+  closeTabByNoteId: (noteId) => {
+    const index = get().tabs.findIndex((t) => t.noteId === noteId);
+    if (index !== -1) {
+      get().closeTab(index);
+    }
   },
 
   switchTab: (index) => {

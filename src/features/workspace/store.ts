@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { commands } from '../../generated/bindings';
 import type { WorkspaceInfo, Note } from '../../generated/bindings';
 import { useSearchStore } from '../search/store';
+import { useTabStore } from '../tabs/store';
 
 /** Workspace state for tracking the active workspace context. */
 interface WorkspaceState {
@@ -25,6 +26,12 @@ interface WorkspaceActions {
   loadWorkspaces: () => Promise<void>;
   loadFilteredNotes: () => Promise<void>;
   reassignNoteWorkspace: (noteId: number, workspaceId: number | null) => Promise<Note | null>;
+  /**
+   * Soft-delete a note to the trash. On success, closes the note's tab (if open)
+   * and refreshes the filtered note list so the note disappears from active
+   * views. Returns the trashed note, or null on failure (sets `notesError`).
+   */
+  trashNote: (noteId: number) => Promise<Note | null>;
   initWorkspace: () => Promise<void>;
   /**
    * Re-activate a workspace from a persisted session. Only applies when the id
@@ -79,6 +86,19 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       return result.data;
     } else {
       console.error('reassignNoteWorkspace failed:', result.error);
+      return null;
+    }
+  },
+
+  trashNote: async (noteId) => {
+    const result = await commands.trashNote(noteId);
+    if (result.status === 'ok') {
+      useTabStore.getState().closeTabByNoteId(noteId);
+      await get().loadFilteredNotes();
+      return result.data;
+    } else {
+      console.error('trashNote failed:', result.error);
+      set({ notesError: 'Failed to move note to trash' });
       return null;
     }
   },
