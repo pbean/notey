@@ -33,14 +33,14 @@ model = ""                   # empty = CLI default model
 # keys above.
 # [adapter.dev]
 # model = "opus"
-# [adapter.review]
-# name = "codex"
+[adapter.review]
+name = "codex"               # review runs on codex (registered via `bmad-auto init --cli codex`)
 # model = "gpt-5-codex"
 # [adapter.triage]
 # model = "opus"
 
 [sweep]
 # Deferred-work sweep: triage + execute open deferred-work.md entries.
-auto = "never"               # never | per-epic | run-end (auto-triggered sweeps never prompt)
+auto = "per-epic"               # never | per-epic | run-end (auto-triggered sweeps never prompt)
 max_bundles = 5              # bundles executed per sweep; triage excess is truncated
 max_triage_attempts = 2      # triage validation retries before escalating
