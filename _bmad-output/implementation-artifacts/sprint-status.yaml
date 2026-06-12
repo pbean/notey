@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-12 # story 4.9 → done
+last_updated: 2026-06-12 # epic-4 retrospective → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -86,7 +86,7 @@ development_status:
   epic-3-retrospective: done
 
   # Epic 4: Multi-Tab Editing & Command Palette
-  epic-4: in-progress
+  epic-4: done
   4-1-tab-state-management-store: done
   4-2-tabbar-component: done
   4-3-tab-keyboard-navigation: done
@@ -96,7 +96,7 @@ development_status:
   4-7-tab-reordering: done
   4-8-note-list-panel: done
   4-9-session-state-persistence: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # Epic 5: Note Lifecycle & Data Export
   epic-5: backlog
@@ -176,3 +176,10 @@ development_status:
   epic-3-retro-item-3-eslint-unhandled-ipc-rule: done # commits f400f17, 3222cd4 (no-floating-promises + no-misused-promises)
   epic-3-retro-item-4-shadcn-command-spike: done # resolved by Story 4.5 (cmdk + shadcn command)
   epic-3-retro-item-5-trim-consistency-fix: done # commit 2ae2553
+
+  # Epic 4 Retro Items (2026-06-12):
+  epic-4-retro-item-1-startup-config-apply-layoutmode-theme: backlog # HIGH — main.tsx applies .dark only; layoutMode/theme not applied at boot
+  epic-4-retro-item-2-toggle-concurrency-guard: backlog # HIGH — toggleLayoutMode/toggleTheme lost-update on rapid double-call
+  epic-4-retro-item-3-investigate-frontend-test-growth: backlog # MEDIUM — confirm jsdom limits vs coverage gaps (~+7 tests/9 stories)
+  epic-4-retro-item-4-wire-palette-stubs-epic5-acs: backlog # MEDIUM — View Trash / Export-MD / Export-JSON as Epic 5 acceptance criteria
+  # Deferred (logged, not committed): first E2E smoke test — 4-epic zero-E2E streak, revisit at Epic 5 retro

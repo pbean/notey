@@ -44,3 +44,4 @@ name = "codex"               # review runs on codex (registered via `bmad-auto i
 auto = "per-epic"               # never | per-epic | run-end (auto-triggered sweeps never prompt)
 max_bundles = 5              # bundles executed per sweep; triage excess is truncated
 max_triage_attempts = 2      # triage validation retries before escalating
+repeat = true
