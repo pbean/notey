@@ -646,7 +646,8 @@ resolution: Added a shared sticky per-dimension marker (`userToggled = { theme, 
 origin: migrated from legacy ledger ("Deferred from: spec-layout-theme-persistence-fix review (2026-06-12)"), 2026-06-12
 location: src/features/command-palette/actions.ts
 reason: No OS `system` theme resolution (LOW) — `theme: 'system'` (a value the backend `String` field permits, and the `buildConfig` test-factory default) is mapped to light visuals rather than resolved against `prefers-color-scheme`. There is no `matchMedia` logic anywhere. Intentionally out of scope per the spec's Ask-First boundary; revisit if real system-theme support is wanted. (`src/features/command-palette/actions.ts`)
-status: open
+status: done 2026-06-12
+resolution: `applyThemeClass` now resolves `system` via a cached, feature-detected `matchMedia('(prefers-color-scheme: dark)')` (dark iff `.matches`); `applyStartupConfig` binds a one-time `change` listener so a persisted `theme: 'system'` tracks OS appearance live, gated to opt out once an explicit toggle picks dark/light. Spec: spec-dw-decision-dw-83.md.
 decision: 2026-06-12 Build system-theme resolution — Add `matchMedia('(prefers-color-scheme: dark)')` resolution so a persisted `theme: 'system'` tracks the OS appearance live (apply on startup in `applyStartupConfig`, subscribe to changes, and resolve 'system' to dark/light in `applyThemeClass`).
 
 ### DW-84: `layoutMode: 'floating'` has no distinct styling (LOW, pre-existing)

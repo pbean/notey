@@ -64,13 +64,63 @@ let isTogglingLayoutMode = false;
 const userToggled = { theme: false, layoutMode: false };
 
 /**
- * Reset the per-session toggle tracking. Test-only — the production marker is
- * sticky by design; tests call this (via the global `afterEach`) to prevent the
- * flags bleeding between cases.
+ * True while the active theme is the OS-tracking `system` value. Consulted by
+ * {@link handleSystemThemeChange} so a live `prefers-color-scheme` change
+ * re-applies the resolved class only while `system` is active — an explicit
+ * dark/light choice (toggle) opts the session out until the user re-selects
+ * system. Set by {@link applyThemeClass} on every apply.
+ */
+let systemThemeActive = false;
+
+/**
+ * Cached `prefers-color-scheme: dark` media query. A `MediaQueryList` is a live
+ * object whose `.matches` updates on its own, so one cached instance with a
+ * single `change` listener suffices. `null` when `window.matchMedia` is absent
+ * (jsdom, or a degraded webview) — callers must fall back to light.
+ */
+let systemThemeQuery: MediaQueryList | null = null;
+
+/** Guards {@link applyStartupConfig} against binding the `change` listener twice. */
+let systemThemeListenerBound = false;
+
+/** Detaches the current OS-theme listener so tests can reset module state cleanly. */
+let systemThemeListenerCleanup: (() => void) | null = null;
+
+/**
+ * Lazily resolve the cached `prefers-color-scheme: dark` media query, or `null`
+ * when `window.matchMedia` is unavailable. Feature-detected so the theme code
+ * never throws in jsdom or a degraded webview.
+ */
+function getSystemThemeQuery(): MediaQueryList | null {
+  if (systemThemeQuery) return systemThemeQuery;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  try {
+    systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  } catch {
+    return null;
+  }
+  return systemThemeQuery;
+}
+
+/** Whether the OS currently prefers a dark color scheme; `false` when unknown. */
+function systemPrefersDark(): boolean {
+  return getSystemThemeQuery()?.matches ?? false;
+}
+
+/**
+ * Reset the per-session toggle tracking and system-theme state. Test-only — the
+ * production markers are sticky by design; tests call this (via the global
+ * `afterEach`) to prevent state bleeding between cases. Clearing the cached
+ * query and listener flag lets each test install a fresh `matchMedia` mock.
  */
 export function resetToggleTracking(): void {
+  systemThemeListenerCleanup?.();
   userToggled.theme = false;
   userToggled.layoutMode = false;
+  systemThemeActive = false;
+  systemThemeQuery = null;
+  systemThemeListenerBound = false;
+  systemThemeListenerCleanup = null;
 }
 
 /**
@@ -81,14 +131,56 @@ export function resetToggleTracking(): void {
  * are light-first in `:root` (overridden by `.dark`), while Notey's custom
  * tokens are dark-first in `:root` (overridden by `.light`). Applying only one
  * class leaves the other token system on its `:root` default, producing a mixed
- * palette — so dark needs `.dark` + no `.light`, and any non-dark value (light,
- * system) needs `.light` + no `.dark`.
+ * palette — so dark needs `.dark` + no `.light`, and any non-dark value needs
+ * `.light` + no `.dark`.
+ *
+ * Resolution: `dark` → dark; `system` → dark iff the OS prefers a dark scheme
+ * (`prefers-color-scheme`); any other value (`light`, unknown, or `system` when
+ * `matchMedia` is unavailable) → light.
  */
 function applyThemeClass(theme: string): void {
-  const isDark = theme === 'dark';
+  systemThemeActive = theme === 'system';
+  const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark());
   const root = document.documentElement;
   root.classList.toggle('dark', isDark);
   root.classList.toggle('light', !isDark);
+}
+
+/**
+ * Re-apply the theme when the OS `prefers-color-scheme` changes, but only while
+ * the active theme is `system`. An explicit dark/light toggle clears
+ * {@link systemThemeActive}, so this no-ops once the user has opted out.
+ */
+function handleSystemThemeChange(_event?: MediaQueryListEvent): void {
+  if (systemThemeActive) applyThemeClass('system');
+}
+
+/**
+ * Subscribe once to OS `prefers-color-scheme` changes so a persisted
+ * `theme: 'system'` tracks the OS appearance live. No-ops when `matchMedia` is
+ * unavailable, the environment exposes neither subscription API, or the
+ * listener is already bound.
+ */
+function bindSystemThemeListener(): void {
+  if (systemThemeListenerBound) return;
+  const query = getSystemThemeQuery();
+  if (!query) return;
+  if (typeof query.addEventListener === 'function') {
+    query.addEventListener('change', handleSystemThemeChange);
+    systemThemeListenerCleanup = () => {
+      query.removeEventListener?.('change', handleSystemThemeChange);
+    };
+    systemThemeListenerBound = true;
+    return;
+  }
+
+  if (typeof query.addListener === 'function') {
+    query.addListener(handleSystemThemeChange);
+    systemThemeListenerCleanup = () => {
+      query.removeListener?.(handleSystemThemeChange);
+    };
+    systemThemeListenerBound = true;
+  }
 }
 
 /**
@@ -104,7 +196,9 @@ function applyLayoutModeClass(layoutMode: string): void {
 /**
  * Read the persisted config once at startup and apply the saved theme and
  * layout mode to the DOM. Called from `main.tsx` after the synchronous dark
- * default, so the persisted preferences are honored across restarts.
+ * default, so the persisted preferences are honored across restarts. Also
+ * subscribes once to OS `prefers-color-scheme` changes so a persisted
+ * `theme: 'system'` tracks the OS appearance live.
  * On config-read failure, the synchronous defaults are left in place.
  */
 export async function applyStartupConfig(): Promise<void> {
@@ -115,11 +209,17 @@ export async function applyStartupConfig(): Promise<void> {
   }
 
   const general = configResult.data.general;
+  const theme = general?.theme ?? 'dark';
   // Skip any dimension the user has already toggled this session: their explicit
   // choice (applied and persisted by the toggle) must not be reverted to this
   // possibly-stale boot-time snapshot. Each dimension is guarded independently.
-  if (!userToggled.theme) applyThemeClass(general?.theme ?? 'dark');
+  if (!userToggled.theme) applyThemeClass(theme);
   if (!userToggled.layoutMode) applyLayoutModeClass(general?.layoutMode ?? 'comfortable');
+
+  // Track live OS appearance changes for the `system` theme. Bound once; the
+  // handler no-ops unless `system` is the active theme.
+  bindSystemThemeListener();
+  if (!userToggled.theme && theme === 'system') handleSystemThemeChange();
 }
 
 /**

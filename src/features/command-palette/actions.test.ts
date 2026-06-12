@@ -444,6 +444,186 @@ describe('startup-vs-toggle race', () => {
   });
 });
 
+describe('system theme resolution', () => {
+  const originalMatchMedia = window.matchMedia;
+  type MockMediaQueryList = {
+    addEventListener?: (type: string, cb: (e: MediaQueryListEvent) => void) => void;
+    addListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+    dispatchChange: (next: boolean) => void;
+    matches: boolean;
+    media: string;
+    onchange: null;
+    removeEventListener?: (type: string, cb: (e: MediaQueryListEvent) => void) => void;
+    removeListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+  };
+
+  /**
+   * Install a capturable `prefers-color-scheme: dark` media query mock.
+   * `dispatchChange` simulates a live OS appearance change.
+   */
+  function mockMatchMedia(
+    matches: boolean,
+    options?: { legacyListenerApi?: boolean; nextMatchOnSubscribe?: boolean },
+  ) {
+    const listeners = new Set<(e: MediaQueryListEvent) => void>();
+    const mql: MockMediaQueryList = {
+      matches,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      dispatchChange: (next: boolean) => {
+        mql.matches = next;
+        listeners.forEach((cb) => cb({ matches: next } as MediaQueryListEvent));
+      },
+    };
+    if (options?.legacyListenerApi) {
+      mql.addListener = (cb: (e: MediaQueryListEvent) => void) => {
+        if (typeof options.nextMatchOnSubscribe === 'boolean') mql.matches = options.nextMatchOnSubscribe;
+        listeners.add(cb);
+      };
+      mql.removeListener = (cb: (e: MediaQueryListEvent) => void) => {
+        listeners.delete(cb);
+      };
+    } else {
+      mql.addEventListener = (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+        if (typeof options?.nextMatchOnSubscribe === 'boolean') {
+          mql.matches = options.nextMatchOnSubscribe;
+        }
+        listeners.add(cb);
+      };
+      mql.removeEventListener = (_type: string, cb: (e: MediaQueryListEvent) => void) => {
+        listeners.delete(cb);
+      };
+    }
+    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+    return mql;
+  }
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    document.documentElement.classList.remove('dark', 'light', 'compact');
+  });
+
+  function mockSystemConfig() {
+    const config = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+  }
+
+  it('resolves system to dark when the OS prefers dark', async () => {
+    document.documentElement.classList.add('light');
+    mockMatchMedia(true);
+    mockSystemConfig();
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+  });
+
+  it('resolves system to light when the OS prefers light', async () => {
+    document.documentElement.classList.add('dark');
+    mockMatchMedia(false);
+    mockSystemConfig();
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('tracks a live OS appearance change while system is active', async () => {
+    document.documentElement.classList.add('light');
+    const mql = mockMatchMedia(true);
+    mockSystemConfig();
+
+    await applyStartupConfig();
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+    mql.dispatchChange(false); // OS flips dark → light
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('re-applies the current OS theme after binding the startup listener', async () => {
+    document.documentElement.classList.add('light');
+    mockMatchMedia(true, { nextMatchOnSubscribe: false });
+    mockSystemConfig();
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('tracks system changes with legacy addListener-only media queries', async () => {
+    document.documentElement.classList.add('light');
+    const mql = mockMatchMedia(true, { legacyListenerApi: true });
+    mockSystemConfig();
+
+    await applyStartupConfig();
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+    mql.dispatchChange(false);
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('ignores OS changes after an explicit toggle opts the session out', async () => {
+    document.documentElement.classList.add('light');
+    const mql = mockMatchMedia(true);
+    const systemConfig = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    const toggledConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+
+    let getCallCount = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') {
+        getCallCount += 1;
+        // 1st get_config is startup (system); 2nd is the toggle's read.
+        return Promise.resolve(getCallCount === 1 ? systemConfig : systemConfig);
+      }
+      if (cmd === 'update_config') return Promise.resolve(toggledConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig(); // system + OS dark → .dark, listener bound
+    await toggleTheme(); // system → dark, opts out of system tracking
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+
+    mql.dispatchChange(false); // OS flips to light — must be ignored
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+  });
+
+  it('falls back to light and does not throw when matchMedia is unavailable', async () => {
+    document.documentElement.classList.add('dark');
+    window.matchMedia = undefined as unknown as typeof window.matchMedia;
+    mockSystemConfig();
+
+    await expect(applyStartupConfig()).resolves.toBeUndefined();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('falls back to light and does not throw when matchMedia throws', async () => {
+    document.documentElement.classList.add('dark');
+    window.matchMedia = vi.fn(() => {
+      throw new Error('matchMedia unavailable');
+    }) as unknown as typeof window.matchMedia;
+    mockSystemConfig();
+
+    await expect(applyStartupConfig()).resolves.toBeUndefined();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+});
+
 describe('openSearch', () => {
   beforeEach(() => {
     useSearchStore.getState().resetSearch();
