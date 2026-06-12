@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-04-11 # epic-4 stories 4.1–4.7 done
+last_updated: 2026-06-12 # story 4.9 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -95,7 +95,7 @@ development_status:
   4-6-command-palette-action-registry: done
   4-7-tab-reordering: done
   4-8-note-list-panel: done
-  4-9-session-state-persistence: backlog
+  4-9-session-state-persistence: done
   epic-4-retrospective: optional
 
   # Epic 5: Note Lifecycle & Data Export

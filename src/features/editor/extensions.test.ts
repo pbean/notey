@@ -5,6 +5,7 @@ describe('buildExtensions', () => {
   const stubCallbacks = {
     onEscape: () => {},
     onDocChanged: () => {},
+    onSessionActivity: () => {},
   };
 
   it('returns an extensions array and a langCompartment', () => {

@@ -26,6 +26,12 @@ interface WorkspaceActions {
   loadFilteredNotes: () => Promise<void>;
   reassignNoteWorkspace: (noteId: number, workspaceId: number | null) => Promise<Note | null>;
   initWorkspace: () => Promise<void>;
+  /**
+   * Re-activate a workspace from a persisted session. Only applies when the id
+   * still exists in the loaded `workspaces` list; otherwise no-ops, keeping the
+   * cwd-resolved default from `initWorkspace`.
+   */
+  restoreWorkspaceId: (id: number) => Promise<void>;
   /** Reset all workspace state to initial values (test cleanup only). */
   resetWorkspace: () => void;
 }
@@ -127,6 +133,15 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
       activeWorkspaceName: found?.name ?? ws.name,
     });
     await get().loadFilteredNotes();
+  },
+
+  restoreWorkspaceId: async (id) => {
+    if (get().workspaces.length === 0) {
+      await get().loadWorkspaces();
+    }
+    if (get().workspaces.some((w) => w.id === id)) {
+      await get().setActiveWorkspace(id);
+    }
   },
 
   resetWorkspace: () =>

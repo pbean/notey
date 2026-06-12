@@ -16,6 +16,11 @@ export interface Tab {
   langCompartment?: Compartment;
   /** Content format for this tab's note. */
   format?: 'markdown' | 'plaintext';
+  /**
+   * Cursor position carried over from a restored session, applied when the
+   * tab's `editorState` is first built. Ignored once `editorState` exists.
+   */
+  cursorPos?: number;
 }
 
 interface TabState {
@@ -48,6 +53,15 @@ interface TabActions {
   updateTabTitle: (index: number, title: string) => void;
   /** Save CodeMirror state and scroll position for a tab. */
   saveTabState: (index: number, editorState: CMEditorState, scrollTop: number, langCompartment?: Compartment) => void;
+  /**
+   * Bulk-hydrate tabs from a persisted session in a single update. Does not
+   * carry `editorState`/`langCompartment` — EditorPane rebuilds those (and
+   * applies each tab's `cursorPos`) on first activation.
+   */
+  restoreTabs: (
+    tabs: Pick<Tab, 'noteId' | 'title' | 'format' | 'scrollTop' | 'cursorPos'>[],
+    activeIndex: number | null,
+  ) => void;
   /** Get the currently active tab, or null. */
   getActiveTab: () => Tab | null;
   /** Reset all tab state to initial values. */
@@ -164,6 +178,16 @@ export const useTabStore = create<TabState & TabActions>((set, get) => ({
     const newTabs = [...tabs];
     newTabs[index] = { ...newTabs[index], editorState, scrollTop, langCompartment };
     set({ tabs: newTabs });
+  },
+
+  restoreTabs: (tabs, activeIndex) => {
+    const nextTabs = tabs.map((t) => ({ ...t }));
+    const inRange =
+      activeIndex !== null && activeIndex >= 0 && activeIndex < nextTabs.length;
+    set({
+      tabs: nextTabs,
+      activeTabIndex: nextTabs.length === 0 ? null : inRange ? activeIndex : 0,
+    });
   },
 
   getActiveTab: () => {

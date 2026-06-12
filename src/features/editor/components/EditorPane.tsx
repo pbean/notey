@@ -10,6 +10,8 @@ import { useTabStore } from '../../tabs/store';
 import { buildExtensions } from '../extensions';
 import { commands } from '../../../generated/bindings';
 import type { NoteFormat } from '../store';
+import { editorViewRef } from '../editorViewRef';
+import { queueSessionSave } from '../../session/persistence';
 
 /** Props for the CodeMirror editor pane component. */
 interface EditorPaneProps {
@@ -68,6 +70,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
     const { extensions, langCompartment } = buildExtensions(initialFormat, {
       onEscape,
       onDocChanged,
+      onSessionActivity: queueSessionSave,
     });
     langCompartmentRef.current = langCompartment;
 
@@ -77,10 +80,18 @@ export function EditorPane({ className, style }: EditorPaneProps) {
     });
 
     viewRef.current = view;
+    editorViewRef.current = view;
+
+    const onScroll = () => {
+      queueSessionSave();
+    };
+    view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
 
     return () => {
+      view.scrollDOM.removeEventListener('scroll', onScroll);
       view.destroy();
       viewRef.current = null;
+      editorViewRef.current = null;
     };
   }, [onEscape, onDocChanged]);
 
@@ -123,6 +134,7 @@ export function EditorPane({ className, style }: EditorPaneProps) {
         const { extensions, langCompartment } = buildExtensions('markdown', {
           onEscape,
           onDocChanged,
+          onSessionActivity: queueSessionSave,
         });
         langCompartmentRef.current = langCompartment;
         isSwitchingRef.current = true;
@@ -170,11 +182,17 @@ export function EditorPane({ className, style }: EditorPaneProps) {
         const { extensions, langCompartment } = buildExtensions(noteFormat, {
           onEscape,
           onDocChanged,
+          onSessionActivity: queueSessionSave,
         });
         langCompartmentRef.current = langCompartment;
 
+        // Seed the cursor from a restored session, clamped to the current doc.
+        const restoredCursor = activeTab.cursorPos;
         const newState = CMEditorState.create({
           doc: note.content,
+          ...(restoredCursor != null
+            ? { selection: { anchor: Math.min(Math.max(restoredCursor, 0), note.content.length) } }
+            : {}),
           extensions,
         });
         isSwitchingRef.current = true;

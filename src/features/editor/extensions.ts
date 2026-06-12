@@ -10,6 +10,8 @@ interface ExtensionCallbacks {
   onEscape: () => void;
   /** Called on every document change with the new content. */
   onDocChanged: (content: string) => void;
+  /** Called when editor activity should refresh persisted session state. */
+  onSessionActivity: () => void;
 }
 
 /** Result of buildExtensions: the extensions array and the language compartment. */
@@ -46,6 +48,9 @@ export function buildExtensions(
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         callbacks.onDocChanged(update.state.doc.toString());
+      }
+      if (update.docChanged || update.selectionSet) {
+        callbacks.onSessionActivity();
       }
     }),
     EditorView.theme({
