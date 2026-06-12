@@ -208,6 +208,72 @@ describe('useTrashStore', () => {
     expect(useTrashStore.getState().selectedIndex).toBe(1);
   });
 
+  it('requestPermanentDelete and cancelPermanentDelete toggle pendingDeleteNote', () => {
+    expect(useTrashStore.getState().pendingDeleteNote).toBeNull();
+    useTrashStore.getState().requestPermanentDelete(TRASHED[0]);
+    expect(useTrashStore.getState().pendingDeleteNote?.id).toBe(1);
+    useTrashStore.getState().cancelPermanentDelete();
+    expect(useTrashStore.getState().pendingDeleteNote).toBeNull();
+  });
+
+  it('permanentlyDeleteNote removes the note, clamps selection, clears pending, returns true', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'delete_note_permanently') return Promise.resolve(null);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTrashStore.setState({
+      trashedNotes: [...TRASHED],
+      selectedIndex: 1,
+      pendingDeleteNote: TRASHED[1],
+    });
+
+    const ok = await useTrashStore.getState().permanentlyDeleteNote(2);
+
+    expect(ok).toBe(true);
+    expect(useTrashStore.getState().trashedNotes.map((n) => n.id)).toEqual([1]);
+    expect(useTrashStore.getState().selectedIndex).toBe(0);
+    expect(useTrashStore.getState().pendingDeleteNote).toBeNull();
+  });
+
+  it('permanentlyDeleteNote returns false and keeps the list on backend error', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'delete_note_permanently') return Promise.reject({ type: 'NotFound' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTrashStore.setState({ trashedNotes: [...TRASHED] });
+
+    const ok = await useTrashStore.getState().permanentlyDeleteNote(1);
+
+    expect(ok).toBe(false);
+    expect(useTrashStore.getState().trashedNotes.map((n) => n.id)).toEqual([1, 2]);
+  });
+
+  it('ignores a concurrent permanent delete of the same note (single backend call)', async () => {
+    let deleteCalls = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'delete_note_permanently') {
+        deleteCalls += 1;
+        return Promise.resolve(null);
+      }
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    useTrashStore.setState({ trashedNotes: [...TRASHED] });
+
+    const [first, second] = await Promise.all([
+      useTrashStore.getState().permanentlyDeleteNote(1),
+      useTrashStore.getState().permanentlyDeleteNote(1),
+    ]);
+
+    expect(deleteCalls).toBe(1);
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('resetTrash clears a pending permanent-delete', () => {
+    useTrashStore.setState({ pendingDeleteNote: TRASHED[0] });
+    useTrashStore.getState().resetTrash();
+    expect(useTrashStore.getState().pendingDeleteNote).toBeNull();
+  });
+
   it('uses the note original workspace implicitly — restore never sends a workspace id', async () => {
     let capturedArgs: unknown;
     mockInvoke.mockImplementation((cmd: string, args?: unknown) => {

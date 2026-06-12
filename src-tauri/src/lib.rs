@@ -22,6 +22,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::notes::trash_note,
         commands::notes::restore_note,
         commands::notes::list_trashed_notes,
+        commands::notes::delete_note_permanently,
         commands::notes::list_notes,
         commands::notes::reassign_note_workspace,
         commands::notes::rebuild_fts_index,

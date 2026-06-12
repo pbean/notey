@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTrashStore } from '../store';
 import { useToastStore } from '../../toast/store';
 import { formatRelativeDate } from '../../../lib/format-relative-date';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 
 /**
  * Slide-from-left overlay panel listing soft-deleted notes with a per-note
@@ -58,6 +59,11 @@ export function TrashPanel() {
 
   /** Handle keyboard navigation within the panel. */
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // While the confirm-delete alertdialog is open it owns the keyboard
+    // (Esc cancels the delete, not the panel). The dialog is portaled but Base
+    // UI preserves React-tree event bubbling, so guard here to avoid double-handling.
+    if (useTrashStore.getState().pendingDeleteNote) return;
+
     const noteCount = trashedNotes.length;
 
     if (e.key === 'Escape') {
@@ -236,11 +242,33 @@ export function TrashPanel() {
                 >
                   Restore
                 </button>
+                {/* Permanent delete action (opens confirmation) */}
+                <button
+                  type="button"
+                  data-testid={`trash-delete-${note.id}`}
+                  aria-label={`Permanently delete ${note.title || 'New note'}`}
+                  onClick={() => useTrashStore.getState().requestPermanentDelete(note)}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--error)',
+                    padding: '2px 6px',
+                    borderRadius: '2px',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-surface)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Permanent-delete confirmation modal */}
+      <ConfirmDeleteDialog />
     </>
   );
 }

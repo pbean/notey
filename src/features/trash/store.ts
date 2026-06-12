@@ -12,6 +12,12 @@ import { useWorkspaceStore } from '../workspace/store';
  * different notes in quick succession still works.
  */
 const restoringIds = new Set<number>();
+/**
+ * Note ids with a permanent-delete request currently in flight. Guards against a
+ * double-click on "Delete Forever" issuing two backend deletes (and two toasts)
+ * for the same note. Module-level, mirroring {@link restoringIds}.
+ */
+const deletingIds = new Set<number>();
 let latestTrashLoadRequestId = 0;
 
 /** Trash view overlay state. */
@@ -28,6 +34,11 @@ interface TrashState {
   error: string | null;
   /** Index of the currently selected note in the list. */
   selectedIndex: number;
+  /**
+   * The trashed note awaiting permanent-delete confirmation, or null when the
+   * confirmation dialog is closed. Drives the irreversible-delete alertdialog.
+   */
+  pendingDeleteNote: Note | null;
 }
 
 /** Actions for managing trash view state. */
@@ -45,6 +56,19 @@ interface TrashActions {
    * id are ignored.
    */
   restoreNote: (noteId: number) => Promise<Note | null>;
+  /** Open the permanent-delete confirmation dialog for the given note. */
+  requestPermanentDelete: (note: Note) => void;
+  /** Dismiss the permanent-delete confirmation dialog without deleting. */
+  cancelPermanentDelete: () => void;
+  /**
+   * Permanently delete a trashed note (irreversible). On success, removes it from
+   * `trashedNotes`, clamps `selectedIndex`, and closes the confirmation dialog.
+   * Returns `true` on success, `false` on failure. Concurrent calls for the same
+   * id are ignored.
+   */
+  permanentlyDeleteNote: (noteId: number) => Promise<boolean>;
+  /** Whether a permanent-delete request is currently in flight for the note id. */
+  isPermanentlyDeleting: (noteId: number) => boolean;
   /** Move selection to the next note (wrapping). */
   selectNext: (noteCount: number) => void;
   /** Move selection to the previous note (wrapping). */
@@ -61,6 +85,7 @@ export const useTrashStore = create<TrashState & TrashActions>((set, get) => ({
   isLoading: false,
   error: null,
   selectedIndex: 0,
+  pendingDeleteNote: null,
 
   open: () => {
     closeOtherOverlays('trash');
@@ -122,6 +147,40 @@ export const useTrashStore = create<TrashState & TrashActions>((set, get) => ({
     }
   },
 
+  requestPermanentDelete: (note) => set({ pendingDeleteNote: note }),
+
+  cancelPermanentDelete: () => set({ pendingDeleteNote: null }),
+
+  permanentlyDeleteNote: async (noteId) => {
+    if (deletingIds.has(noteId)) return false;
+    deletingIds.add(noteId);
+    try {
+      const result = await commands.deleteNotePermanently(noteId);
+      if (result.status === 'ok') {
+        set((state) => {
+          const trashedNotes = state.trashedNotes.filter((n) => n.id !== noteId);
+          return {
+            trashedNotes,
+            selectedIndex: Math.min(state.selectedIndex, Math.max(0, trashedNotes.length - 1)),
+            pendingDeleteNote:
+              state.pendingDeleteNote?.id === noteId ? null : state.pendingDeleteNote,
+          };
+        });
+        return true;
+      } else {
+        console.error('deleteNotePermanently failed:', result.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('deleteNotePermanently failed:', error);
+      return false;
+    } finally {
+      deletingIds.delete(noteId);
+    }
+  },
+
+  isPermanentlyDeleting: (noteId) => deletingIds.has(noteId),
+
   selectNext: (noteCount) => {
     if (noteCount === 0) return;
     set((state) => ({ selectedIndex: (state.selectedIndex + 1) % noteCount }));
@@ -134,6 +193,7 @@ export const useTrashStore = create<TrashState & TrashActions>((set, get) => ({
 
   resetTrash: () => {
     restoringIds.clear();
+    deletingIds.clear();
     latestTrashLoadRequestId += 1;
     set({
       isOpen: false,
@@ -142,6 +202,7 @@ export const useTrashStore = create<TrashState & TrashActions>((set, get) => ({
       isLoading: false,
       error: null,
       selectedIndex: 0,
+      pendingDeleteNote: null,
     });
   },
 }));

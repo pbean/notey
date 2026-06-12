@@ -13,6 +13,11 @@ export const commands = {
 	restoreNote: (id: number) => typedError<Note, NoteyError>(__TAURI_INVOKE("restore_note", { id })),
 	// List all soft-deleted notes, newest-deleted first, across every workspace.
 	listTrashedNotes: () => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_trashed_notes")),
+	/**
+	 *  Permanently delete a trashed note. Irreversible — only notes already in the
+	 *  trash can be hard-deleted; the FTS index is kept in sync by the DELETE trigger.
+	 */
+	deleteNotePermanently: (id: number) => typedError<null, NoteyError>(__TAURI_INVOKE("delete_note_permanently", { id })),
 	listNotes: (workspaceId: number | null) => typedError<Note[], NoteyError>(__TAURI_INVOKE("list_notes", { workspaceId })),
 	// Reassign a note to a different workspace or unscope it.
 	reassignNoteWorkspace: (id: number, workspaceId: number | null) => typedError<Note, NoteyError>(__TAURI_INVOKE("reassign_note_workspace", { id, workspaceId })),

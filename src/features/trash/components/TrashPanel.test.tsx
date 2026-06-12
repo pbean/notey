@@ -195,4 +195,19 @@ describe('TrashPanel', () => {
     fireEvent.click(screen.getByTestId('trash-backdrop'));
     expect(useTrashStore.getState().isOpen).toBe(false);
   });
+
+  it('clicking a row Delete button opens the confirm dialog (sets pendingDeleteNote)', () => {
+    render(<TrashPanel />);
+    expect(useTrashStore.getState().pendingDeleteNote).toBeNull();
+    fireEvent.click(screen.getByTestId('trash-delete-1'));
+    expect(useTrashStore.getState().pendingDeleteNote?.id).toBe(1);
+  });
+
+  it('Escape does not close the Trash panel while the confirm dialog is open', () => {
+    useTrashStore.setState({ pendingDeleteNote: TRASHED[0] });
+    render(<TrashPanel />);
+    fireEvent.keyDown(screen.getByTestId('trash-panel'), { key: 'Escape' });
+    // The confirm dialog owns the keyboard; the panel must stay open.
+    expect(useTrashStore.getState().isOpen).toBe(true);
+  });
 });

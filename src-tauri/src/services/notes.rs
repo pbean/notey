@@ -131,6 +131,26 @@ pub fn list_trashed_notes(conn: &Connection) -> Result<Vec<Note>, NoteyError> {
     Ok(notes)
 }
 
+/// Permanently delete a trashed note, removing the row from `notes` for good.
+///
+/// Guarded by `AND is_trashed = 1` so only notes already in the trash can be
+/// hard-deleted — an active note, a missing id, or an already-deleted id all
+/// change 0 rows and return [`NoteyError::NotFound`]. The `notes_fts_ad` DELETE
+/// trigger removes the matching `notes_fts` row automatically; never mutate the
+/// FTS table by hand. This is the only irreversible note operation.
+pub fn delete_note_permanently(conn: &Connection, id: i64) -> Result<(), NoteyError> {
+    let rows_changed = conn.execute(
+        "DELETE FROM notes WHERE id = ?1 AND is_trashed = 1",
+        params![id],
+    )?;
+
+    if rows_changed == 0 {
+        return Err(NoteyError::NotFound);
+    }
+
+    Ok(())
+}
+
 /// Reassign a note to a different workspace, or unscope it by passing None.
 pub fn reassign_note_workspace(
     conn: &Connection,
@@ -412,6 +432,86 @@ mod tests {
         create_note(&conn, "markdown", None).expect("create active note");
         let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
         assert!(result.is_empty(), "no trashed notes should return empty vec");
+    }
+
+    #[test]
+    fn test_delete_note_permanently_removes_trashed_note() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+
+        delete_note_permanently(&conn, note.id).expect("permanent delete should succeed");
+
+        assert!(
+            matches!(get_note(&conn, note.id), Err(NoteyError::NotFound)),
+            "deleted note row should be gone"
+        );
+        let trashed = list_trashed_notes(&conn).expect("list_trashed_notes failed");
+        assert!(!trashed.iter().any(|n| n.id == note.id), "note must leave the trash list");
+    }
+
+    #[test]
+    fn test_delete_note_permanently_not_found() {
+        let conn = setup_test_db();
+        let result = delete_note_permanently(&conn, 99999);
+        assert!(matches!(result, Err(NoteyError::NotFound)));
+    }
+
+    #[test]
+    fn test_delete_note_permanently_rejects_active_note() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+
+        let result = delete_note_permanently(&conn, note.id);
+        assert!(
+            matches!(result, Err(NoteyError::NotFound)),
+            "an active (non-trashed) note must not be hard-deletable"
+        );
+        assert!(get_note(&conn, note.id).is_ok(), "active note must still exist");
+    }
+
+    #[test]
+    fn test_delete_note_permanently_already_deleted() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+        delete_note_permanently(&conn, note.id).expect("first permanent delete should succeed");
+
+        let result = delete_note_permanently(&conn, note.id);
+        assert!(
+            matches!(result, Err(NoteyError::NotFound)),
+            "deleting an already-deleted note should return NotFound"
+        );
+    }
+
+    #[test]
+    fn test_delete_note_permanently_removes_fts_row() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        update_note(&conn, note.id, Some("zebracrossing".to_string()), None, None)
+            .expect("update note title");
+        trash_note(&conn, note.id).expect("trash note");
+
+        // Sanity: the term is indexed before the permanent delete.
+        let before: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+                params!["zebracrossing"],
+                |row| row.get(0),
+            )
+            .expect("fts query before delete");
+        assert_eq!(before, 1, "term should be indexed before delete");
+
+        delete_note_permanently(&conn, note.id).expect("permanent delete should succeed");
+
+        let after: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+                params!["zebracrossing"],
+                |row| row.get(0),
+            )
+            .expect("fts query after delete");
+        assert_eq!(after, 0, "DELETE trigger should remove the note's FTS row");
     }
 
     #[test]

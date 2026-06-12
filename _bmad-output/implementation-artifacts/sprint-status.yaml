@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-12 # story 5.2 → done
+last_updated: 2026-06-12 # story 5.3 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -102,7 +102,7 @@ development_status:
   epic-5: in-progress
   5-1-soft-delete-note-to-trash-with-toast: done
   5-2-trash-view-note-restoration: done
-  5-3-permanent-delete-with-confirmation-dialog: backlog
+  5-3-permanent-delete-with-confirmation-dialog: done
   5-4-trash-auto-purge: backlog
   5-5-markdown-export-with-native-file-picker: backlog
   5-6-json-export: backlog

@@ -74,6 +74,18 @@ pub fn list_trashed_notes(
     services::notes::list_trashed_notes(&conn)
 }
 
+/// Permanently delete a trashed note. Irreversible — only notes already in the
+/// trash can be hard-deleted; the FTS index is kept in sync by the DELETE trigger.
+#[tauri::command]
+#[specta::specta]
+pub fn delete_note_permanently(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    id: i64,
+) -> Result<(), NoteyError> {
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
+    services::notes::delete_note_permanently(&conn, id)
+}
+
 /// Reassign a note to a different workspace or unscope it.
 #[tauri::command]
 #[specta::specta]
