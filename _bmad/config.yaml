@@ -1,0 +1,9 @@
+document_output_language: English
+output_folder: '{project-root}/_bmad-output'
+bauto:
+  name: BMAD Automator Skills
+  description: 'Automation-mode skills driven by the bmad-auto orchestrator: unattended
+    dev (bmad-auto-dev), adversarial review (bmad-auto-review), and deferred-work
+    sweep triage (bmad-auto-sweep)'
+  version: 1.0.0
+  default_selected: false

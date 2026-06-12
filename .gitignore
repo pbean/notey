@@ -26,3 +26,4 @@ dist-ssr
 .codex/auth.json
 .claude/
 .codex/
+.automator/runs/
