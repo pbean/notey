@@ -638,7 +638,8 @@ resolution: Added `isTogglingTheme` / `isTogglingLayoutMode` in-flight boolean g
 origin: migrated from legacy ledger ("Deferred from: spec-layout-theme-persistence-fix review (2026-06-12)"), 2026-06-12
 location: src/main.tsx
 reason: Startup-vs-toggle race (LOW) — `applyStartupConfig` and the `toggleTheme`/`toggleLayoutMode` guards are independent, so a user toggle fired during the brief boot window before `applyStartupConfig`'s `getConfig` resolves could race the two `applyThemeClass` calls and leave the DOM disagreeing with persisted config until next restart. Reachability is near-zero (no interactive UI mounts until after `applyStartupConfig` is kicked off, and `getConfig` is a fast local TOML read), so not patched. If hardened later: have `applyStartupConfig` skip applying a dimension whose toggle guard is set, or share the guards. (`src/main.tsx`, `src/features/command-palette/actions.ts`)
-status: open
+status: done 2026-06-12
+resolution: Added a shared sticky per-dimension marker (`userToggled = { theme, layoutMode }`) in `actions.ts`; toggles set their dimension on the success path and `applyStartupConfig` skips any marked dimension, so a boot-window toggle is never clobbered. Fix is self-contained in `actions.ts` (in-flight guards preserved; `main.tsx` boot ordering unchanged to protect first-paint budgets); `resetToggleTracking()` wired into the global test `afterEach`. See spec-dw-startup-toggle-race-guard.md.
 
 ### DW-83: No OS `system` theme resolution (LOW)
 

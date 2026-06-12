@@ -6,6 +6,7 @@ import { useSearchStore } from '../features/search/store';
 import { useTabStore } from '../features/tabs/store';
 import { useCommandPaletteStore } from '../features/command-palette/store';
 import { useNoteListStore } from '../features/note-list/store';
+import { resetToggleTracking } from '../features/command-palette/actions';
 
 /**
  * Per-test mock handler for Tauri IPC invoke calls.
@@ -35,6 +36,9 @@ afterEach(() => {
   useTabStore.getState().reset();
   useCommandPaletteStore.getState().resetCommandPalette();
   useNoteListStore.getState().resetNoteList();
+
+  // Clear the sticky per-session theme/layout toggle markers (module-level, not a store)
+  resetToggleTracking();
 
   // Remove CodeMirror DOM nodes that leak between tests
   document.querySelectorAll('.cm-editor, .cm-content').forEach((el) => el.remove());

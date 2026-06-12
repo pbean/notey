@@ -53,6 +53,27 @@ let isTogglingTheme = false;
 let isTogglingLayoutMode = false;
 
 /**
+ * Display dimensions the user has explicitly toggled this session. Consulted by
+ * {@link applyStartupConfig} so a toggle fired during the brief boot window —
+ * before the startup `getConfig` resolves — is never clobbered by the now-stale
+ * startup snapshot. Sticky for the session: an explicit toggle wins over the
+ * boot-time config for the rest of the run. Each dimension is tracked
+ * independently so a theme toggle never suppresses layout startup application
+ * (or vice versa).
+ */
+const userToggled = { theme: false, layoutMode: false };
+
+/**
+ * Reset the per-session toggle tracking. Test-only — the production marker is
+ * sticky by design; tests call this (via the global `afterEach`) to prevent the
+ * flags bleeding between cases.
+ */
+export function resetToggleTracking(): void {
+  userToggled.theme = false;
+  userToggled.layoutMode = false;
+}
+
+/**
  * Apply the theme classes to `<html>`. Single source of truth for the theme
  * class rule, shared by startup application and the toggle.
  *
@@ -94,8 +115,11 @@ export async function applyStartupConfig(): Promise<void> {
   }
 
   const general = configResult.data.general;
-  applyThemeClass(general?.theme ?? 'dark');
-  applyLayoutModeClass(general?.layoutMode ?? 'comfortable');
+  // Skip any dimension the user has already toggled this session: their explicit
+  // choice (applied and persisted by the toggle) must not be reverted to this
+  // possibly-stale boot-time snapshot. Each dimension is guarded independently.
+  if (!userToggled.theme) applyThemeClass(general?.theme ?? 'dark');
+  if (!userToggled.layoutMode) applyLayoutModeClass(general?.layoutMode ?? 'comfortable');
 }
 
 /**
@@ -128,6 +152,10 @@ export async function toggleTheme(): Promise<void> {
       return;
     }
 
+    // Mark theme as user-controlled before applying, so a concurrent startup
+    // application (still awaiting its getConfig) will skip it. Set only on the
+    // success path — a failed toggle must not suppress startup application.
+    userToggled.theme = true;
     applyThemeClass(next);
   } finally {
     isTogglingTheme = false;
@@ -170,6 +198,9 @@ export async function toggleLayoutMode(): Promise<void> {
       return;
     }
 
+    // Mark layout as user-controlled before applying (see toggleTheme). Success
+    // path only, so a failed toggle does not suppress startup application.
+    userToggled.layoutMode = true;
     applyLayoutModeClass(next);
   } finally {
     isTogglingLayoutMode = false;

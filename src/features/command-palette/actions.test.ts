@@ -305,6 +305,145 @@ describe('applyStartupConfig', () => {
   });
 });
 
+describe('startup-vs-toggle race', () => {
+  afterEach(() => {
+    document.documentElement.classList.remove('dark', 'light', 'compact');
+  });
+
+  it('does not revert a theme toggled during the boot window', async () => {
+    // Startup kicks off its get_config first (deferred), then a user toggle
+    // fires and applies light before startup resolves with the stale dark snapshot.
+    document.documentElement.classList.add('dark');
+    let resolveStartupGet!: (value: unknown) => void;
+    const pendingStartupGet = new Promise((resolve) => {
+      resolveStartupGet = resolve;
+    });
+    const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const updatedConfig = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
+
+    let getCallCount = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') {
+        getCallCount += 1;
+        // First get_config belongs to applyStartupConfig (deferred); the
+        // toggle's get_config resolves immediately.
+        return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
+      }
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const startup = applyStartupConfig(); // awaits the deferred get_config
+    await toggleTheme(); // applies light, marks theme as user-toggled
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+
+    resolveStartupGet(startupConfig); // stale dark snapshot resolves now
+    await startup;
+
+    // Startup must skip the toggled theme dimension — light stands.
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('does not revert a layout toggled during the boot window', async () => {
+    document.documentElement.classList.add('light');
+    let resolveStartupGet!: (value: unknown) => void;
+    const pendingStartupGet = new Promise((resolve) => {
+      resolveStartupGet = resolve;
+    });
+    const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+
+    let getCallCount = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') {
+        getCallCount += 1;
+        return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
+      }
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const startup = applyStartupConfig();
+    await toggleLayoutMode(); // applies compact, marks layout as user-toggled
+
+    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+
+    resolveStartupGet(startupConfig); // stale comfortable snapshot
+    await startup;
+
+    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+  });
+
+  it('still applies persisted layout when only theme was toggled (dimensions independent)', async () => {
+    document.documentElement.classList.add('dark');
+    let resolveStartupGet!: (value: unknown) => void;
+    const pendingStartupGet = new Promise((resolve) => {
+      resolveStartupGet = resolve;
+    });
+    // Startup snapshot has compact layout; user only toggles theme in the window.
+    const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+    const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+    const updatedConfig = buildConfig({ general: { theme: 'light', layoutMode: 'compact' } });
+
+    let getCallCount = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') {
+        getCallCount += 1;
+        return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
+      }
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const startup = applyStartupConfig();
+    await toggleTheme(); // marks theme only
+
+    resolveStartupGet(startupConfig);
+    await startup;
+
+    // Theme stays as toggled (light), but layout was NOT toggled, so startup
+    // applies the persisted compact.
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('compact')).toBe(true);
+  });
+
+  it('lets startup apply the persisted value when a toggle failed before applying', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      document.documentElement.classList.add('dark');
+      const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+      const startupConfig = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
+
+      // A toggle whose update_config fails must NOT mark the dimension.
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'get_config') return Promise.resolve(toggleConfig);
+        if (cmd === 'update_config') return Promise.reject({ type: 'Database', message: 'boom' });
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+      await toggleTheme(); // fails at update_config, dimension stays unmarked
+
+      // Now startup runs with the persisted light config and must apply it.
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'get_config') return Promise.resolve(startupConfig);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+      await applyStartupConfig();
+
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+      expect(document.documentElement.classList.contains('dark')).toBe(false);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+});
+
 describe('openSearch', () => {
   beforeEach(() => {
     useSearchStore.getState().resetSearch();
