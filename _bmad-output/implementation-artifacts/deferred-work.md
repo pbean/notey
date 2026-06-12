@@ -511,6 +511,7 @@ origin: migrated from legacy ledger ("Deferred from: code review of 3-2-full-tex
 location: n/a
 reason: `i64`-to-`number` precision loss — Specta 2.0.0-rc.24 maps Rust `i64` to JS `number` (IEEE 754 float). IDs beyond 2^53 lose precision silently. No BigInt support in current specta version; fixing would break 5 frontend files for zero practical risk in a notes app.
 status: open
+decision: 2026-06-12 Keep open, monitor specta
 
 ### DW-67: Title-only matches produce empty snippets
 
@@ -645,6 +646,7 @@ origin: migrated from legacy ledger ("Deferred from: spec-layout-theme-persisten
 location: src/features/command-palette/actions.ts
 reason: No OS `system` theme resolution (LOW) — `theme: 'system'` (a value the backend `String` field permits, and the `buildConfig` test-factory default) is mapped to light visuals rather than resolved against `prefers-color-scheme`. There is no `matchMedia` logic anywhere. Intentionally out of scope per the spec's Ask-First boundary; revisit if real system-theme support is wanted. (`src/features/command-palette/actions.ts`)
 status: open
+decision: 2026-06-12 Build system-theme resolution — Add `matchMedia('(prefers-color-scheme: dark)')` resolution so a persisted `theme: 'system'` tracks the OS appearance live (apply on startup in `applyStartupConfig`, subscribe to changes, and resolve 'system' to dark/light in `applyThemeClass`).
 
 ### DW-84: `layoutMode: 'floating'` has no distinct styling (LOW, pre-existing)
 
@@ -652,3 +654,4 @@ origin: migrated from legacy ledger ("Deferred from: spec-layout-theme-persisten
 location: src-tauri/src/models/config.rs
 reason: `layoutMode: 'floating'` has no distinct styling (LOW, pre-existing) — The backend default `layout_mode` is `"floating"` (`src-tauri/src/models/config.rs`), but `index.css` defines only `.compact`; `floating`/`comfortable`/any non-compact value all render as the comfortable base. A saved `floating` preference is indistinguishable from comfortable. Pre-existing vocabulary mismatch between backend default and frontend toggle (`comfortable`↔`compact`). (`src-tauri/src/models/config.rs`, `src/index.css`, `src/features/command-palette/actions.ts`)
 status: open
+decision: 2026-06-12 Align default to 'comfortable' — Change the backend `GeneralConfig` default `layout_mode` from 'floating' to 'comfortable' so the persisted vocabulary matches the frontend's comfortable/compact toggle, removing the dead 'floating' value and the double-toggle wart. Verify no other code depends on the literal 'floating'.
