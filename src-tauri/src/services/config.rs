@@ -166,6 +166,59 @@ globalShortcut = "Ctrl+Shift+M"
     }
 
     #[test]
+    fn default_trash_retention_is_30_days() {
+        let config = AppConfig::default();
+        assert_eq!(config.trash.retention_days, 30);
+    }
+
+    #[test]
+    fn load_reads_trash_retention_days() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[trash]
+retentionDays = 7
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(config.trash.retention_days, 7);
+    }
+
+    #[test]
+    fn load_defaults_trash_retention_when_section_missing() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[editor]
+fontSize = 18
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(
+            config.trash.retention_days, 30,
+            "missing [trash] section must fall back to the default"
+        );
+    }
+
+    #[test]
+    fn load_defaults_trash_retention_when_key_missing_in_section() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[trash]
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(
+            config.trash.retention_days, 30,
+            "missing retentionDays key must fall back to the default"
+        );
+    }
+
+    #[test]
     fn load_falls_back_on_corrupt_toml() {
         let tmp = TempDir::new().unwrap();
         fs::create_dir_all(tmp.path()).unwrap();

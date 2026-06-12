@@ -50,6 +50,7 @@ export type AppConfig = {
 	general?: GeneralConfig,
 	editor?: EditorConfig,
 	hotkey?: HotkeyConfig,
+	trash?: TrashConfig,
 };
 
 /**
@@ -122,6 +123,18 @@ export type SearchResult = {
 	workspaceName: string | null,
 	updatedAt: string,
 	format: string,
+};
+
+/**
+ *  Trash retention settings.
+ * 
+ *  `retention_days` controls how long soft-deleted notes remain recoverable
+ *  before the startup auto-purge removes them for good. The default of 30 days
+ *  upholds the product's "recoverable for at least 30 days" guarantee. Serialized
+ *  in `config.toml` as `[trash] retentionDays`.
+ */
+export type TrashConfig = {
+	retentionDays?: number,
 };
 
 // A workspace maps to a project directory on disk.

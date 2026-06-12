@@ -11,6 +11,8 @@ pub struct AppConfig {
     pub editor: EditorConfig,
     #[serde(default)]
     pub hotkey: HotkeyConfig,
+    #[serde(default)]
+    pub trash: TrashConfig,
 }
 
 /// General application settings.
@@ -35,6 +37,23 @@ pub struct HotkeyConfig {
     pub global_shortcut: String,
 }
 
+/// Trash retention settings.
+///
+/// `retention_days` controls how long soft-deleted notes remain recoverable
+/// before the startup auto-purge removes them for good. The default of 30 days
+/// upholds the product's "recoverable for at least 30 days" guarantee. Serialized
+/// in `config.toml` as `[trash] retentionDays`.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashConfig {
+    #[serde(default = "default_trash_retention_days")]
+    pub retention_days: u32,
+}
+
+const fn default_trash_retention_days() -> u32 {
+    30
+}
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
@@ -54,6 +73,14 @@ impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
             global_shortcut: "Ctrl+Shift+N".to_string(),
+        }
+    }
+}
+
+impl Default for TrashConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: default_trash_retention_days(),
         }
     }
 }

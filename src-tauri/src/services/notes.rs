@@ -151,6 +151,39 @@ pub fn delete_note_permanently(conn: &Connection, id: i64) -> Result<(), NoteyEr
     Ok(())
 }
 
+/// Permanently delete every trashed note whose `deleted_at` is older than the
+/// retention window. Runs as a silent startup maintenance task and returns the
+/// number of rows purged.
+///
+/// The cutoff is computed in Rust as `Utc::now() - retention_days` and formatted
+/// with `to_rfc3339()` — the same formatter used to write `deleted_at` — so the
+/// `deleted_at < ?cutoff` comparison is an exact lexicographic match against the
+/// stored RFC3339 strings. SQLite's `datetime('now', …)` is deliberately avoided:
+/// its space-separated, offset-less format does not sort consistently against
+/// RFC3339 values and would mis-purge near the boundary.
+///
+/// The comparison is strict (`<`), so a note deleted exactly `retention_days` ago
+/// is kept — this upholds the "recoverable for at least `retention_days`"
+/// guarantee. Only trashed rows (`is_trashed = 1`) are ever touched; active notes
+/// are never affected. The `notes_fts_ad` DELETE trigger removes the matching
+/// `notes_fts` rows automatically — never mutate the FTS table by hand.
+pub fn purge_expired_trash(conn: &Connection, retention_days: u32) -> Result<usize, NoteyError> {
+    let cutoff = Utc::now()
+        .checked_sub_signed(chrono::Duration::days(retention_days as i64))
+        .ok_or_else(|| {
+            NoteyError::Config(format!(
+                "trash.retentionDays={} is out of range",
+                retention_days
+            ))
+        })?
+        .to_rfc3339();
+    let purged = conn.execute(
+        "DELETE FROM notes WHERE is_trashed = 1 AND deleted_at IS NOT NULL AND deleted_at < ?1",
+        params![cutoff],
+    )?;
+    Ok(purged)
+}
+
 /// Reassign a note to a different workspace, or unscope it by passing None.
 pub fn reassign_note_workspace(
     conn: &Connection,
@@ -512,6 +545,140 @@ mod tests {
             )
             .expect("fts query after delete");
         assert_eq!(after, 0, "DELETE trigger should remove the note's FTS row");
+    }
+
+    #[test]
+    fn test_purge_expired_trash_removes_aged_note() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        update_note(&conn, note.id, Some("quokkasnack".to_string()), None, None)
+            .expect("update note title");
+        trash_note(&conn, note.id).expect("trash note");
+        // Age the note well past the 30-day window.
+        let aged = (Utc::now() - chrono::Duration::days(40)).to_rfc3339();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params![aged, note.id],
+        )
+        .expect("backdate deleted_at");
+
+        let purged = purge_expired_trash(&conn, 30).expect("purge failed");
+        assert_eq!(purged, 1, "the aged note should be purged");
+        assert!(
+            matches!(get_note(&conn, note.id), Err(NoteyError::NotFound)),
+            "purged note row should be gone"
+        );
+        let trashed = list_trashed_notes(&conn).expect("list_trashed_notes failed");
+        assert!(!trashed.iter().any(|n| n.id == note.id), "note must leave the trash list");
+        // FTS row removed by the DELETE trigger.
+        let fts: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH ?1",
+                params!["quokkasnack"],
+                |row| row.get(0),
+            )
+            .expect("fts query after purge");
+        assert_eq!(fts, 0, "purge should remove the note's FTS row via the trigger");
+    }
+
+    #[test]
+    fn test_purge_expired_trash_keeps_recent_note() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+        let recent = (Utc::now() - chrono::Duration::days(5)).to_rfc3339();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params![recent, note.id],
+        )
+        .expect("backdate deleted_at");
+
+        let purged = purge_expired_trash(&conn, 30).expect("purge failed");
+        assert_eq!(purged, 0, "a note within the window must be kept");
+        assert!(get_note(&conn, note.id).is_ok(), "recent note must still exist");
+    }
+
+    #[test]
+    fn test_purge_expired_trash_respects_boundary() {
+        let conn = setup_test_db();
+        // Just inside the window (29d 23h old) — must be kept.
+        let inside = create_note(&conn, "markdown", None).expect("create inside note");
+        trash_note(&conn, inside.id).expect("trash inside note");
+        let inside_ts = (Utc::now() - chrono::Duration::days(30) + chrono::Duration::hours(1))
+            .to_rfc3339();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params![inside_ts, inside.id],
+        )
+        .expect("backdate inside note");
+        // Just outside the window (30d 1h old) — must be purged.
+        let outside = create_note(&conn, "markdown", None).expect("create outside note");
+        trash_note(&conn, outside.id).expect("trash outside note");
+        let outside_ts = (Utc::now() - chrono::Duration::days(30) - chrono::Duration::hours(1))
+            .to_rfc3339();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params![outside_ts, outside.id],
+        )
+        .expect("backdate outside note");
+
+        let purged = purge_expired_trash(&conn, 30).expect("purge failed");
+        assert_eq!(purged, 1, "only the note past the boundary should be purged");
+        assert!(get_note(&conn, inside.id).is_ok(), "boundary-inside note must be kept");
+        assert!(
+            matches!(get_note(&conn, outside.id), Err(NoteyError::NotFound)),
+            "boundary-outside note must be purged"
+        );
+    }
+
+    #[test]
+    fn test_purge_expired_trash_ignores_active_notes() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        // Force a stale deleted_at while leaving the note active (is_trashed = 0).
+        let aged = (Utc::now() - chrono::Duration::days(365)).to_rfc3339();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params![aged, note.id],
+        )
+        .expect("set stale deleted_at on active note");
+
+        let purged = purge_expired_trash(&conn, 30).expect("purge failed");
+        assert_eq!(purged, 0, "active notes must never be purged");
+        assert!(get_note(&conn, note.id).is_ok(), "active note must still exist");
+    }
+
+    #[test]
+    fn test_purge_expired_trash_no_trash_returns_zero() {
+        let conn = setup_test_db();
+        create_note(&conn, "markdown", None).expect("create active note");
+        let purged = purge_expired_trash(&conn, 30).expect("purge failed");
+        assert_eq!(purged, 0, "nothing to purge should return 0");
+    }
+
+    #[test]
+    fn test_purge_expired_trash_zero_retention_purges_all_trash() {
+        let conn = setup_test_db();
+        let note = create_note(&conn, "markdown", None).expect("create note");
+        trash_note(&conn, note.id).expect("trash note");
+
+        // retention_days = 0 → cutoff is now; the just-trashed note is older.
+        let purged = purge_expired_trash(&conn, 0).expect("purge failed");
+        assert_eq!(purged, 1, "zero retention should purge currently-trashed notes");
+        assert!(
+            matches!(get_note(&conn, note.id), Err(NoteyError::NotFound)),
+            "note should be purged under zero retention"
+        );
+    }
+
+    #[test]
+    fn test_purge_expired_trash_rejects_out_of_range_retention() {
+        let conn = setup_test_db();
+        let err = purge_expired_trash(&conn, u32::MAX).expect_err("overflowing retention must error");
+        assert!(
+            matches!(err, NoteyError::Config(_)),
+            "overflowing retention must surface as a config error"
+        );
     }
 
     #[test]

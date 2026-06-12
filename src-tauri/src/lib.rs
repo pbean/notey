@@ -131,6 +131,22 @@ pub fn run() {
             let config = services::config::load_or_create(&config_dir)
                 .expect("Failed to load config");
             let shortcut_str = config.hotkey.global_shortcut.clone();
+
+            // --- Trash auto-purge (silent startup maintenance) ---
+            // Permanently remove soft-deleted notes older than the configured
+            // retention window. Non-fatal: a failure here is logged but must
+            // never block app startup, and there is no user-facing notification.
+            {
+                let retention_days = config.trash.retention_days;
+                let conn_state = app.state::<Mutex<rusqlite::Connection>>();
+                let conn = conn_state
+                    .lock()
+                    .unwrap_or_else(commands::recover_poisoned_db);
+                if let Err(e) = services::notes::purge_expired_trash(&conn, retention_days) {
+                    eprintln!("warning: trash auto-purge failed: {e}");
+                }
+            }
+
             app.manage(Mutex::new(config));
             app.manage(ConfigDir(config_dir));
 
