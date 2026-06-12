@@ -9,7 +9,7 @@ max_review_cycles = 3
 max_dev_attempts = 2
 session_timeout_min = 45
 stop_without_result_nudges = 1
-max_tokens_per_story = 2000000
+max_tokens_per_story = 4500000   # default 2M fits one clean pass; 4.5M absorbs a dev retry
 cache_read_weight = 0.1      # cache reads bill at ~0.1x input on all vendors; 1.0 = count raw
 
 [verify]
