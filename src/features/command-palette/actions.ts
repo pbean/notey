@@ -187,7 +187,7 @@ function bindSystemThemeListener(): void {
  * Apply the compact layout class to `<html>`. Single source of truth for the
  * layout class rule, shared by startup application and the toggle.
  * Compact is applied iff `layoutMode === 'compact'`; any other value
- * (comfortable, floating) clears it.
+ * (such as `comfortable`) clears it.
  */
 function applyLayoutModeClass(layoutMode: string): void {
   document.documentElement.classList.toggle('compact', layoutMode === 'compact');
@@ -286,7 +286,7 @@ export async function toggleLayoutMode(): Promise<void> {
     }
 
     const current = configResult.data.general?.layoutMode ?? 'comfortable';
-    const next = current === 'comfortable' ? 'compact' : 'comfortable';
+    const next = current === 'compact' ? 'comfortable' : 'compact';
 
     const updateResult = await commands.updateConfig({
       general: { theme: null, layoutMode: next },

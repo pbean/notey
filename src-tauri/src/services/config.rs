@@ -136,6 +136,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let config = load_or_create(tmp.path()).unwrap();
         assert_eq!(config.general.theme, "dark");
+        assert_eq!(config.general.layout_mode, "comfortable");
         assert_eq!(config.editor.font_size, 14);
         assert_eq!(config.hotkey.global_shortcut, "Ctrl+Shift+N");
         assert!(tmp.path().join("config.toml").exists());
@@ -147,7 +148,7 @@ mod tests {
         let toml_content = r#"
 [general]
 theme = "light"
-layoutMode = "floating"
+layoutMode = "comfortable"
 
 [editor]
 fontSize = 18

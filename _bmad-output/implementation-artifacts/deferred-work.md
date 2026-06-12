@@ -655,5 +655,6 @@ decision: 2026-06-12 Build system-theme resolution — Add `matchMedia('(prefers
 origin: migrated from legacy ledger ("Deferred from: spec-layout-theme-persistence-fix review (2026-06-12)"), 2026-06-12
 location: src-tauri/src/models/config.rs
 reason: `layoutMode: 'floating'` has no distinct styling (LOW, pre-existing) — The backend default `layout_mode` is `"floating"` (`src-tauri/src/models/config.rs`), but `index.css` defines only `.compact`; `floating`/`comfortable`/any non-compact value all render as the comfortable base. A saved `floating` preference is indistinguishable from comfortable. Pre-existing vocabulary mismatch between backend default and frontend toggle (`comfortable`↔`compact`). (`src-tauri/src/models/config.rs`, `src/index.css`, `src/features/command-palette/actions.ts`)
-status: open
+status: done 2026-06-12
+resolution: Changed `GeneralConfig::default().layout_mode` from "floating" to "comfortable"; purged the dead 'floating' literal from production code and the backend test fixture/comment, added a default-assertion test, and reframed the frontend test as an explicit legacy backward-compat case. Verified no production code depends on the literal 'floating'.
 decision: 2026-06-12 Align default to 'comfortable' — Change the backend `GeneralConfig` default `layout_mode` from 'floating' to 'comfortable' so the persisted vocabulary matches the frontend's comfortable/compact toggle, removing the dead 'floating' value and the double-toggle wart. Verify no other code depends on the literal 'floating'.

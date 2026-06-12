@@ -39,7 +39,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             theme: "dark".to_string(),
-            layout_mode: "floating".to_string(),
+            layout_mode: "comfortable".to_string(),
         }
     }
 }

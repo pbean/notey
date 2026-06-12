@@ -179,6 +179,24 @@ describe('toggleLayoutMode', () => {
     expect(document.documentElement.classList.contains('compact')).toBe(true);
   });
 
+  it('treats a legacy "floating" value like comfortable when toggling', async () => {
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
+    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleLayoutMode();
+
+    expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+      partial: { general: { theme: null, layoutMode: 'compact' }, editor: null, hotkey: null },
+    });
+    expect(document.documentElement.classList.contains('compact')).toBe(true);
+  });
+
   it('toggles from compact to comfortable', async () => {
     document.documentElement.classList.add('compact');
     const config = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
@@ -276,7 +294,10 @@ describe('applyStartupConfig', () => {
     expect(document.documentElement.classList.contains('compact')).toBe(false);
   });
 
-  it('treats the default floating layout as non-compact', async () => {
+  // Backward-compat: 'floating' was the old backend default before it was
+  // aligned to 'comfortable'. Configs persisted by older builds still hold it,
+  // and any non-'compact' value must render as non-compact.
+  it('treats a legacy "floating" layout value as non-compact', async () => {
     document.documentElement.classList.add('compact');
     const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
     mockInvoke.mockImplementation((cmd: string) => {
