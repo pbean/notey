@@ -22,6 +22,9 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 interprocess = "2"
+# Mirrors `src-tauri`'s runtime-dir resolution so the CLI finds the same per-user
+# socket the server binds (pinned to match src-tauri exactly). AC6: no shared code.
+dirs = "5"
 
 [dev-dependencies]
 serde_json = "1"

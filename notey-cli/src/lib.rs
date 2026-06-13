@@ -1,24 +1,28 @@
-//! `notey` CLI — Story 6.1 implementation (scaffold, argument parsing, validation).
+//! `notey` CLI — terminal-native note capture, listing, and search.
 //!
-//! This crate is a **standalone binary** (`notey`) that will talk to the running
+//! This crate is a **standalone binary** (`notey`) that talks to the running
 //! desktop app over a local IPC socket. Per Story 6.1 **AC6** it shares **no
 //! code** with `src-tauri/`; the IPC protocol types are duplicated here as
-//! simple JSON structs (see [`CliRequest`] / [`CliResponse`]).
+//! simple JSON structs (see [`CliRequest`] / [`CliResponse`]) and the socket
+//! transport is duplicated in [`mod@client`].
 //!
 //! ## Story scope
-//! Story 6.1 owns the crate scaffold, `clap` argument parsing, input validation
-//! ([`validate_content`] / [`validate_workspace`]), and exit-code mapping
-//! ([`exit_code_for`]). The actual IPC round-trip in [`run`] is deferred to
-//! Story 6.2 (the `interprocess` socket client); until then [`run`] parses and
-//! validates, then reports that the desktop connection is unavailable.
+//! Story 6.1 delivered the crate scaffold, `clap` argument parsing, input
+//! validation ([`validate_content`] / [`validate_workspace`]), and exit-code
+//! mapping ([`exit_code_for`]). Story 6.3 wires the `add` command end-to-end:
+//! [`run`] collects content (argv or stdin), validates it, attaches the
+//! auto-detected workspace, and round-trips a `create_note` request to the app.
+//! `list` / `search` parse and validate but remain deferred to Stories 6.4 / 6.5.
 
 use std::{
     ffi::OsString,
-    io::{self, Read},
+    io::{self, IsTerminal, Read},
 };
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
+
+mod client;
 
 /// Maximum accepted note-content size: 1 MiB. Content **at** this size is
 /// accepted; one byte more is rejected (Story 6.1 / RISK-E6-001).
@@ -248,13 +252,14 @@ pub fn exit_code_for(outcome: &CommandOutcome) -> i32 {
     }
 }
 
-/// Top-level entrypoint used by `main`: parse → validate → (IPC, Story 6.2) →
-/// exit code. Returns the process exit code.
+/// Top-level entrypoint used by `main`: parse → validate → IPC → exit code.
+/// Returns the process exit code.
 ///
-/// Story 6.1 implements parsing, validation, and `--help`/`--version`/usage
-/// exit-code plumbing. The IPC dispatch is deferred to Story 6.2; once a command
-/// parses and validates, this prints an actionable stderr message and returns
-/// the [`CommandOutcome::NotRunning`] code, since no socket client exists yet.
+/// `--help` / `--version` / usage errors keep clap's convention (stdout + exit 0,
+/// or stderr + exit 2). `add` (Story 6.3) collects its content once, validates it,
+/// attaches the auto-detected workspace, and round-trips a `create_note` request
+/// to the desktop app over the IPC socket. `list` / `search` parse and validate
+/// but remain deferred to Stories 6.4 / 6.5, so they report the app as unreachable.
 pub fn run<I, T>(args: I) -> i32
 where
     I: IntoIterator<Item = T>,
@@ -275,31 +280,53 @@ where
         }
     };
 
+    let stderr_tty = io::stderr().is_terminal();
+
     let command = match command_from_subcommand(cli.command) {
         Ok(command) => command,
         Err(CliError::Parse(message)) => {
-            eprintln!("✕ {message}");
+            eprintln!("{}", error_line(&message, stderr_tty));
             return 2;
         }
         Err(other) => unreachable!("unexpected parse-stage error: {other:?}"),
     };
 
-    match validate_command_for_run(&command) {
-        Ok(()) => {}
-        Err(RunValidationError::Usage(message)) => {
-            eprintln!("✕ {message}");
-            return 2;
+    let outcome = match command {
+        Command::Add {
+            text,
+            stdin,
+            format,
+        } => match prepare_add(text, stdin, format) {
+            Ok(request) => dispatch(request),
+            Err(RunValidationError::Usage(message)) => {
+                eprintln!("{}", error_line(&message, stderr_tty));
+                return 2;
+            }
+            Err(RunValidationError::Io(message)) => {
+                eprintln!("{}", error_line(&message, stderr_tty));
+                return 1;
+            }
+        },
+        // `list` / `search` validate their workspace then stop short of dispatch —
+        // their output/formatting lands in Stories 6.4 / 6.5.
+        list_or_search => {
+            if let Err(err) = validate_non_add_workspace(&list_or_search) {
+                return match err {
+                    RunValidationError::Usage(message) => {
+                        eprintln!("{}", error_line(&message, stderr_tty));
+                        2
+                    }
+                    RunValidationError::Io(message) => {
+                        eprintln!("{}", error_line(&message, stderr_tty));
+                        1
+                    }
+                };
+            }
+            CommandOutcome::NotRunning
         }
-        Err(RunValidationError::Io(message)) => {
-            eprintln!("✕ {message}");
-            return 1;
-        }
-    }
+    };
 
-    // IPC dispatch arrives in Story 6.2. Until then, the CLI cannot reach the
-    // desktop app.
-    eprintln!("✕ Notey is not running. Start the application first.");
-    exit_code_for(&CommandOutcome::NotRunning)
+    emit_outcome(&outcome)
 }
 
 /// Internal validation errors surfaced by [`run`] before any IPC happens.
@@ -309,6 +336,132 @@ enum RunValidationError {
     Usage(String),
     /// Local runtime failure while collecting input.
     Io(String),
+}
+
+/// Collect, validate, and package an `add` command's content into a `create_note`
+/// IPC request. Stdin is read exactly once (it is not re-readable), so this both
+/// validates and captures the bytes for the wire payload.
+fn prepare_add(
+    text: Option<String>,
+    stdin: bool,
+    format: Format,
+) -> Result<CliRequest, RunValidationError> {
+    let bytes = match (text, stdin) {
+        (Some(text), false) => text.into_bytes(),
+        (None, true) => read_stdin_bytes()
+            .map_err(|err| RunValidationError::Io(format!("failed to read stdin: {err}")))?,
+        _ => unreachable!("input-source conflict should be rejected during parse"),
+    };
+
+    validate_content(&bytes).map_err(map_content_validation_error)?;
+
+    // The payload is JSON, whose strings are UTF-8; reject non-UTF-8 content as a
+    // usage error rather than corrupting the request.
+    let content = String::from_utf8(bytes)
+        .map_err(|_| RunValidationError::Usage("note content must be valid UTF-8".to_string()))?;
+
+    Ok(build_create_request(content, format, current_workspace_path()))
+}
+
+/// Build the `create_note` request envelope. The wire action verb is
+/// `create_note` (the server dispatcher's name), not `add`; the payload is
+/// camelCase to match `src-tauri`'s `CreateNotePayload`.
+fn build_create_request(
+    content: String,
+    format: Format,
+    workspace_path: Option<String>,
+) -> CliRequest {
+    let mut payload = serde_json::json!({
+        "content": content,
+        "format": format_wire_value(format),
+    });
+    if let Some(path) = workspace_path {
+        payload["workspacePath"] = serde_json::Value::String(path);
+    }
+    CliRequest {
+        action: "create_note".to_string(),
+        payload,
+    }
+}
+
+/// Wire form of [`Format`] expected by the server payload.
+fn format_wire_value(format: Format) -> &'static str {
+    match format {
+        Format::Markdown => "markdown",
+        Format::Plaintext => "plaintext",
+    }
+}
+
+/// The canonicalized current working directory, sent as `workspacePath` so the
+/// server resolves/dedups the workspace with the SAME Epic-2 git-detection logic
+/// the GUI uses (RISK-E6-006 mitigated by delegation). Returns `None` — omitting
+/// the field — if the directory cannot be determined or is not valid UTF-8;
+/// `add` never fails over workspace detection.
+fn current_workspace_path() -> Option<String> {
+    let cwd = std::env::current_dir().ok()?;
+    let resolved = std::fs::canonicalize(cwd).ok()?;
+    resolved.into_os_string().into_string().ok()
+}
+
+/// Dispatch a prepared request to the desktop app and fold the result into a
+/// terminal [`CommandOutcome`].
+fn dispatch(request: CliRequest) -> CommandOutcome {
+    match client::send_request(&request) {
+        Ok(response) if response.success => CommandOutcome::Success,
+        Ok(response) => {
+            CommandOutcome::AppError(response.error.unwrap_or_else(|| "unknown error".to_string()))
+        }
+        Err(client::ClientError::NotRunning) => CommandOutcome::NotRunning,
+        Err(other) => CommandOutcome::AppError(other.to_string()),
+    }
+}
+
+/// Print the user-facing line for an outcome (TTY-aware) and return its exit code.
+fn emit_outcome(outcome: &CommandOutcome) -> i32 {
+    match outcome {
+        CommandOutcome::Success => {
+            println!("{}", success_line("Note created", io::stdout().is_terminal()));
+        }
+        CommandOutcome::AppError(message) => {
+            eprintln!("{}", error_line(message, io::stderr().is_terminal()));
+        }
+        CommandOutcome::NotRunning => {
+            eprintln!(
+                "{}",
+                error_line(
+                    "Notey is not running. Start the application first.",
+                    io::stderr().is_terminal(),
+                )
+            );
+        }
+        CommandOutcome::Timeout => {
+            eprintln!(
+                "{}",
+                error_line("Notey did not respond in time.", io::stderr().is_terminal())
+            );
+        }
+    }
+    exit_code_for(outcome)
+}
+
+/// Format a success line. On a TTY the `✓` glyph is ANSI green; when piped the
+/// line is plain text with no escape codes (UX-DR60 / UX-DR61).
+fn success_line(message: &str, is_terminal: bool) -> String {
+    if is_terminal {
+        format!("\u{1b}[32m\u{2713}\u{1b}[0m {message}")
+    } else {
+        format!("\u{2713} {message}")
+    }
+}
+
+/// Format an error line. On a TTY the `✕` glyph is ANSI red; when piped the line
+/// is plain text with no escape codes (UX-DR60 / UX-DR61).
+fn error_line(message: &str, is_terminal: bool) -> String {
+    if is_terminal {
+        format!("\u{1b}[31m\u{2717}\u{1b}[0m {message}")
+    } else {
+        format!("\u{2717} {message}")
+    }
 }
 
 /// Convert a parsed clap subcommand to the public [`Command`] contract.
@@ -340,26 +493,10 @@ fn command_from_subcommand(sub: CliSub) -> Result<Command, CliError> {
     }
 }
 
-/// Apply the Story 6.1 validation contract to a parsed command.
-fn validate_command_for_run(command: &Command) -> Result<(), RunValidationError> {
+/// Validate the optional `--workspace` of a `list` / `search` command. `add` is
+/// handled by [`prepare_add`]; this never sees it.
+fn validate_non_add_workspace(command: &Command) -> Result<(), RunValidationError> {
     match command {
-        Command::Add {
-            text: Some(text),
-            stdin: false,
-            ..
-        } => validate_content(text.as_bytes()).map_err(map_content_validation_error),
-        Command::Add {
-            text: None,
-            stdin: true,
-            ..
-        } => {
-            let bytes = read_stdin_bytes()
-                .map_err(|err| RunValidationError::Io(format!("failed to read stdin: {err}")))?;
-            validate_content(&bytes).map_err(map_content_validation_error)
-        }
-        Command::Add { .. } => {
-            unreachable!("input-source conflict should be rejected during parse")
-        }
         Command::List {
             workspace: Some(workspace),
         }
@@ -368,10 +505,7 @@ fn validate_command_for_run(command: &Command) -> Result<(), RunValidationError>
             ..
         } => validate_workspace(workspace)
             .map_err(|_| RunValidationError::Usage(format!("invalid workspace name: {workspace}"))),
-        Command::List { workspace: None }
-        | Command::Search {
-            workspace: None, ..
-        } => Ok(()),
+        _ => Ok(()),
     }
 }
 
@@ -388,7 +522,147 @@ fn map_content_validation_error(error: CliError) -> RunValidationError {
 }
 
 fn read_stdin_bytes() -> io::Result<Vec<u8>> {
+    read_bytes_capped(&mut io::stdin().lock(), MAX_CONTENT_BYTES)
+}
+
+/// Read at most `max_bytes + 1` bytes so oversized stdin is rejected without
+/// buffering an unbounded stream into memory first.
+fn read_bytes_capped(reader: &mut impl Read, max_bytes: usize) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    io::stdin().lock().read_to_end(&mut bytes)?;
+    let mut chunk = [0u8; 8192];
+
+    loop {
+        let remaining = max_bytes.saturating_add(1).saturating_sub(bytes.len());
+        if remaining == 0 {
+            break;
+        }
+
+        let read_cap = chunk.len().min(remaining);
+        let read_len = reader.read(&mut chunk[..read_cap])?;
+        if read_len == 0 {
+            break;
+        }
+
+        bytes.extend_from_slice(&chunk[..read_len]);
+    }
+
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── 6.3-UNIT-001 — TTY-aware output (UX-DR60 / UX-DR61) ──────────────────
+
+    #[test]
+    fn success_line_is_plain_when_piped() {
+        let line = success_line("Note created", false);
+        assert_eq!(line, "\u{2713} Note created");
+        assert!(
+            !line.contains('\u{1b}'),
+            "piped success line must carry no ANSI escape"
+        );
+    }
+
+    #[test]
+    fn success_line_is_green_on_tty() {
+        let line = success_line("Note created", true);
+        assert!(line.starts_with("\u{1b}[32m"), "TTY success uses green");
+        assert!(line.contains("\u{1b}[0m"), "TTY success resets color");
+        assert!(line.ends_with("Note created"));
+    }
+
+    #[test]
+    fn error_line_is_plain_when_piped() {
+        let line = error_line("boom", false);
+        assert_eq!(line, "\u{2717} boom");
+        assert!(!line.contains('\u{1b}'));
+    }
+
+    #[test]
+    fn error_line_is_red_on_tty() {
+        let line = error_line("boom", true);
+        assert!(line.starts_with("\u{1b}[31m"), "TTY error uses red");
+        assert!(line.contains("\u{1b}[0m"));
+    }
+
+    // ── create_note request builder (wire-shape pin for Story 6.3) ───────────
+
+    #[test]
+    fn build_create_request_uses_create_note_action_and_camelcase_payload() {
+        let req = build_create_request(
+            "hello".to_string(),
+            Format::Markdown,
+            Some("/home/me/proj".to_string()),
+        );
+        assert_eq!(req.action, "create_note");
+        assert_eq!(req.payload["content"], serde_json::json!("hello"));
+        assert_eq!(req.payload["format"], serde_json::json!("markdown"));
+        assert_eq!(
+            req.payload["workspacePath"],
+            serde_json::json!("/home/me/proj")
+        );
+    }
+
+    #[test]
+    fn build_create_request_omits_workspace_when_absent() {
+        let req = build_create_request("x".to_string(), Format::Plaintext, None);
+        assert_eq!(req.payload["format"], serde_json::json!("plaintext"));
+        assert!(
+            req.payload.get("workspacePath").is_none(),
+            "absent workspace must not appear in the payload"
+        );
+    }
+
+    #[test]
+    fn format_wire_value_maps_both_variants() {
+        assert_eq!(format_wire_value(Format::Markdown), "markdown");
+        assert_eq!(format_wire_value(Format::Plaintext), "plaintext");
+    }
+
+    #[test]
+    fn current_workspace_path_omits_uncanonicalizable_dirs() {
+        let path = missing_temp_dir_path();
+        std::fs::create_dir_all(&path).expect("create temp dir");
+        std::fs::remove_dir_all(&path).expect("remove temp dir");
+
+        let resolved = std::fs::canonicalize(&path).ok();
+        assert!(resolved.is_none(), "test path should no longer canonicalize");
+        assert!(
+            workspace_path_from_cwd(path).is_none(),
+            "uncanonicalizable cwd must omit workspacePath"
+        );
+    }
+
+    #[test]
+    fn read_bytes_capped_stops_one_byte_past_the_limit() {
+        let input = vec![b'a'; MAX_CONTENT_BYTES + 1024];
+        let mut cursor = io::Cursor::new(input);
+        let bytes = read_bytes_capped(&mut cursor, MAX_CONTENT_BYTES).expect("read capped bytes");
+
+        assert_eq!(bytes.len(), MAX_CONTENT_BYTES + 1);
+    }
+
+    // ── outcome → exit code wiring ───────────────────────────────────────────
+
+    #[test]
+    fn emit_outcome_returns_canonical_exit_codes() {
+        assert_eq!(emit_outcome(&CommandOutcome::Success), 0);
+        assert_eq!(emit_outcome(&CommandOutcome::AppError("e".into())), 1);
+        assert_eq!(emit_outcome(&CommandOutcome::NotRunning), 2);
+        assert_eq!(emit_outcome(&CommandOutcome::Timeout), 2);
+    }
+
+    fn workspace_path_from_cwd(cwd: std::path::PathBuf) -> Option<String> {
+        let resolved = std::fs::canonicalize(cwd).ok()?;
+        resolved.into_os_string().into_string().ok()
+    }
+
+    fn missing_temp_dir_path() -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "notey-cli-missing-cwd-{}",
+            std::process::id()
+        ))
+    }
 }
