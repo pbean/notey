@@ -18,13 +18,16 @@ use notey_cli::{
     cli_command, exit_code_for, parse_args, validate_content, validate_workspace, CliError,
     CliRequest, CliResponse, Command, CommandOutcome, Format, MAX_CONTENT_BYTES,
 };
+use std::{
+    io::Write,
+    process::{Command as ProcessCommand, Output, Stdio},
+};
 
 // ───────────────────────────────────────────────────────────────────────────
 // 6.1-UNIT-001 — clap argument parsing (P0, AC1–AC5, RISK-E6-005)
 // ───────────────────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): parse_args not implemented"]
 fn add_parses_positional_text() {
     let cmd = parse_args(["notey", "add", "hello world"]).expect("add <TEXT> should parse");
     assert_eq!(
@@ -38,7 +41,6 @@ fn add_parses_positional_text() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): --stdin flag"]
 fn add_parses_stdin_flag() {
     let cmd = parse_args(["notey", "add", "--stdin"]).expect("add --stdin should parse");
     match cmd {
@@ -48,7 +50,6 @@ fn add_parses_stdin_flag() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): --format defaults to markdown"]
 fn add_format_defaults_to_markdown() {
     let cmd = parse_args(["notey", "add", "note"]).expect("should parse");
     match cmd {
@@ -58,7 +59,6 @@ fn add_format_defaults_to_markdown() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): --format plaintext"]
 fn add_format_plaintext_parses() {
     let cmd = parse_args(["notey", "add", "note", "--format", "plaintext"]).expect("should parse");
     match cmd {
@@ -68,7 +68,6 @@ fn add_format_plaintext_parses() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): invalid --format rejected"]
 fn add_invalid_format_is_rejected() {
     let result = parse_args(["notey", "add", "note", "--format", "rtf"]);
     assert!(
@@ -78,40 +77,48 @@ fn add_invalid_format_is_rejected() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): list --workspace is optional"]
 fn list_parses_with_and_without_workspace() {
     assert_eq!(
         parse_args(["notey", "list"]).expect("list should parse"),
         Command::List { workspace: None }
     );
     assert_eq!(
-        parse_args(["notey", "list", "--workspace", "notey"]).expect("list --workspace should parse"),
-        Command::List { workspace: Some("notey".to_string()) }
+        parse_args(["notey", "list", "--workspace", "notey"])
+            .expect("list --workspace should parse"),
+        Command::List {
+            workspace: Some("notey".to_string())
+        }
     );
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): search positional query + workspace"]
 fn search_parses_query_and_workspace() {
     assert_eq!(
         parse_args(["notey", "search", "rust traits"]).expect("search <QUERY> should parse"),
-        Command::Search { query: "rust traits".to_string(), workspace: None }
+        Command::Search {
+            query: "rust traits".to_string(),
+            workspace: None
+        }
     );
     assert_eq!(
         parse_args(["notey", "search", "rust", "--workspace", "notey"])
             .expect("search --workspace should parse"),
-        Command::Search { query: "rust".to_string(), workspace: Some("notey".to_string()) }
+        Command::Search {
+            query: "rust".to_string(),
+            workspace: Some("notey".to_string())
+        }
     );
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): search requires a query"]
 fn search_without_query_is_rejected() {
-    assert!(parse_args(["notey", "search"]).is_err(), "search with no query must error");
+    assert!(
+        parse_args(["notey", "search"]).is_err(),
+        "search with no query must error"
+    );
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): add requires text or --stdin"]
 fn add_without_text_or_stdin_is_rejected() {
     assert!(
         parse_args(["notey", "add"]).is_err(),
@@ -120,18 +127,21 @@ fn add_without_text_or_stdin_is_rejected() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-001): --help exposes exactly 3 subcommands"]
+fn add_with_text_and_stdin_is_rejected() {
+    let result = parse_args(["notey", "add", "note", "--stdin"]);
+    assert!(
+        matches!(result, Err(CliError::Parse(_))),
+        "add with both <TEXT> and --stdin must be a parse error, got {result:?}"
+    );
+}
+
+#[test]
 fn help_lists_three_subcommands() {
     let names: Vec<String> = cli_command()
         .get_subcommands()
         .map(|c| c.get_name().to_string())
         .collect();
-    for expected in ["add", "list", "search"] {
-        assert!(
-            names.contains(&expected.to_string()),
-            "subcommand `{expected}` should exist; got {names:?}"
-        );
-    }
+    assert_eq!(names, vec!["add", "list", "search"]);
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -139,21 +149,21 @@ fn help_lists_three_subcommands() {
 // ───────────────────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): 1MiB content accepted (boundary)"]
 fn content_at_size_cap_is_accepted() {
     let content = vec![b'a'; MAX_CONTENT_BYTES];
-    assert!(validate_content(&content).is_ok(), "exactly 1MiB must be accepted");
+    assert!(
+        validate_content(&content).is_ok(),
+        "exactly 1MiB must be accepted"
+    );
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): >1MiB content rejected"]
 fn content_over_size_cap_is_rejected() {
     let content = vec![b'a'; MAX_CONTENT_BYTES + 1];
     assert_eq!(validate_content(&content), Err(CliError::ContentTooLarge));
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): NUL / control chars rejected"]
 fn content_with_control_chars_is_rejected() {
     assert_eq!(
         validate_content(b"valid\0byte"),
@@ -168,14 +178,15 @@ fn content_with_control_chars_is_rejected() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): ordinary content (newlines/tabs) passes"]
 fn ordinary_content_passes_validation() {
     let content = "a normal markdown note\nwith newlines\tand tabs\r\n".as_bytes();
-    assert!(validate_content(content).is_ok(), "tab/newline/CR must be allowed");
+    assert!(
+        validate_content(content).is_ok(),
+        "tab/newline/CR must be allowed"
+    );
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): workspace path-traversal rejected"]
 fn workspace_path_traversal_is_rejected() {
     for bad in ["../../etc/passwd", "..", "foo/bar", "/abs/path", "a\0b"] {
         assert_eq!(
@@ -187,7 +198,6 @@ fn workspace_path_traversal_is_rejected() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-002): ordinary workspace name accepted"]
 fn ordinary_workspace_name_is_accepted() {
     assert!(validate_workspace("notey").is_ok());
 }
@@ -199,25 +209,21 @@ fn ordinary_workspace_name_is_accepted() {
 // ───────────────────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-003): success -> 0"]
 fn exit_code_success_is_zero() {
     assert_eq!(exit_code_for(&CommandOutcome::Success), 0);
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-003): app error -> 1"]
 fn exit_code_app_error_is_one() {
     assert_eq!(exit_code_for(&CommandOutcome::AppError("boom".into())), 1);
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-003): app not running -> 2"]
 fn exit_code_not_running_is_two() {
     assert_eq!(exit_code_for(&CommandOutcome::NotRunning), 2);
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-003): timeout -> 2"]
 fn exit_code_timeout_is_two() {
     assert_eq!(exit_code_for(&CommandOutcome::Timeout), 2);
 }
@@ -229,7 +235,6 @@ fn exit_code_timeout_is_two() {
 // ───────────────────────────────────────────────────────────────────────────
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-004): request shape pin {action,payload}"]
 fn request_serializes_to_action_payload_shape() {
     let req = CliRequest {
         action: "add".to_string(),
@@ -246,7 +251,6 @@ fn request_serializes_to_action_payload_shape() {
 }
 
 #[test]
-#[ignore = "ATDD red phase (6.1-UNIT-004): response shape pin {success,data,error}"]
 fn response_round_trips_success_data_error_shape() {
     let resp = CliResponse {
         success: true,
@@ -266,6 +270,77 @@ fn response_round_trips_success_data_error_shape() {
     .expect("deserialize");
     assert_eq!(
         round,
-        CliResponse { success: false, data: None, error: Some("app not running".to_string()) }
+        CliResponse {
+            success: false,
+            data: None,
+            error: Some("app not running".to_string())
+        }
+    );
+}
+
+fn run_notey(args: &[&str], stdin: Option<&[u8]>) -> Output {
+    let mut child = ProcessCommand::new(env!("CARGO_BIN_EXE_notey"))
+        .args(args)
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn notey binary");
+
+    if let Some(stdin_bytes) = stdin {
+        child
+            .stdin
+            .as_mut()
+            .expect("stdin pipe should exist")
+            .write_all(stdin_bytes)
+            .expect("write stdin");
+    }
+
+    child.wait_with_output().expect("wait for notey")
+}
+
+#[test]
+fn binary_help_lists_only_story_subcommands() {
+    let output = run_notey(&["--help"], None);
+    assert_eq!(output.status.code(), Some(0));
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be UTF-8");
+    assert!(stdout.contains("  add"));
+    assert!(stdout.contains("  list"));
+    assert!(stdout.contains("  search"));
+    assert!(
+        !stdout.contains("\n  help    "),
+        "generated help subcommand must be hidden: {stdout}"
+    );
+}
+
+#[test]
+fn binary_invalid_workspace_exits_two_before_not_running() {
+    let output = run_notey(&["list", "--workspace", "a/b"], None);
+    assert_eq!(output.status.code(), Some(2));
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
+    assert!(stderr.contains("invalid workspace name: a/b"));
+    assert!(
+        !stderr.contains("Notey is not running"),
+        "local validation should fail before the deferred IPC path: {stderr}"
+    );
+}
+
+#[test]
+fn binary_oversized_stdin_exits_two_before_not_running() {
+    let oversized = vec![b'a'; MAX_CONTENT_BYTES + 1];
+    let output = run_notey(&["add", "--stdin"], Some(&oversized));
+    assert_eq!(output.status.code(), Some(2));
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
+    assert!(stderr.contains("note content exceeds the 1 MiB limit"));
+    assert!(
+        !stderr.contains("Notey is not running"),
+        "stdin validation should run before the deferred IPC path: {stderr}"
     );
 }

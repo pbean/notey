@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-12 # epic-5 retrospective → done
+last_updated: 2026-06-13 # story 6.1 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -109,8 +109,8 @@ development_status:
   epic-5-retrospective: done # epic-5-retro-2026-06-12.md
 
   # Epic 6: CLI Integration
-  epic-6: backlog
-  6-1-cli-crate-scaffold-argument-parsing: backlog
+  epic-6: in-progress
+  6-1-cli-crate-scaffold-argument-parsing: done
   6-2-ipc-socket-server-in-desktop-app: backlog
   6-3-cli-add-command: backlog
   6-4-cli-list-command: backlog
