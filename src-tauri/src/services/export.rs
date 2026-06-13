@@ -587,7 +587,7 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(entries.len(), 1);
-        assert!(entries[0].as_bytes().len() <= MAX_FILENAME_BYTES);
+        assert!(entries[0].len() <= MAX_FILENAME_BYTES);
     }
 
     // ----- JSON export -----
@@ -599,7 +599,10 @@ mod tests {
         let count = export_json_to_file(conn, &path).expect("json export failed");
         let raw = fs::read_to_string(&path).expect("export file missing");
         let parsed: serde_json::Value = serde_json::from_str(&raw).expect("invalid JSON");
-        let arr = parsed.as_array().expect("top level is not an array").clone();
+        let arr = parsed
+            .as_array()
+            .expect("top level is not an array")
+            .clone();
         (count, arr)
     }
 

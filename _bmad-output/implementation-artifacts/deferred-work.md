@@ -658,3 +658,10 @@ reason: `layoutMode: 'floating'` has no distinct styling (LOW, pre-existing) —
 status: done 2026-06-12
 resolution: Changed `GeneralConfig::default().layout_mode` from "floating" to "comfortable"; purged the dead 'floating' literal from production code and the backend test fixture/comment, added a default-assertion test, and reframed the frontend test as an explicit legacy backward-compat case. Verified no production code depends on the literal 'floating'.
 decision: 2026-06-12 Align default to 'comfortable' — Change the backend `GeneralConfig` default `layout_mode` from 'floating' to 'comfortable' so the persisted vocabulary matches the frontend's comfortable/compact toggle, removing the dead 'floating' value and the double-toggle wart. Verify no other code depends on the literal 'floating'.
+
+### DW-85: Bound worker lifetime and connection budget for many half-open IPC clients
+
+origin: code review of spec-6-2-ipc-socket-server-in-desktop-app.md, 2026-06-13
+location: src-tauri/src/ipc/socket_server.rs:199, src-tauri/src/ipc/socket_server.rs:284
+reason: The current one-thread-per-connection model satisfies the story's single slow-client acceptance criterion, but a broader timeout / worker-budget policy is still undefined, and Windows named pipes in `interprocess` do not support I/O timeouts. This needs an explicit cross-platform design call before patching.
+status: open

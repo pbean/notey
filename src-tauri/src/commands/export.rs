@@ -87,9 +87,8 @@ fn resolve_export_json_target(file_path: &str) -> Result<PathBuf, NoteyError> {
         NoteyError::Validation("export path has no filename component".to_string())
     })?;
     let parent = requested.parent().filter(|p| !p.as_os_str().is_empty());
-    let parent = parent.ok_or_else(|| {
-        NoteyError::Validation("export path has no parent directory".to_string())
-    })?;
+    let parent = parent
+        .ok_or_else(|| NoteyError::Validation("export path has no parent directory".to_string()))?;
 
     let canonical_parent = dunce::canonicalize(parent).map_err(|err| match err.kind() {
         std::io::ErrorKind::NotFound => {
@@ -157,9 +156,7 @@ mod tests {
 
         let result = resolve_export_json_target(link_path.to_str().unwrap());
 
-        assert!(
-            matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("symlink"))
-        );
+        assert!(matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("symlink")));
     }
 
     #[cfg(unix)]

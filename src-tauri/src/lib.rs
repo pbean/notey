@@ -1,6 +1,7 @@
 mod commands;
 pub mod db;
 pub mod errors;
+pub mod ipc;
 pub mod models;
 pub mod services;
 
@@ -254,11 +255,42 @@ pub fn run() {
                 });
             }
 
+            // --- IPC socket server (CLI ↔ app) ---
+            // Serves the standalone `notey` CLI over a per-user, owner-only local
+            // socket. The handler locks the SAME managed connection the Tauri
+            // commands use (single-Mutex rule). A bind failure is logged but never
+            // blocks app startup. Torn down on `RunEvent::Exit` (see `run`).
+            {
+                let app_handle = app.handle().clone();
+                let handler: ipc::socket_server::Handler =
+                    std::sync::Arc::new(move |raw: &[u8]| {
+                        let state = app_handle.state::<Mutex<rusqlite::Connection>>();
+                        let conn = state.lock().unwrap_or_else(commands::recover_poisoned_db);
+                        ipc::protocol::handle_request(&conn, raw)
+                    });
+                let socket = ipc::socket_server::socket_path();
+                match ipc::socket_server::IpcServer::start(&socket, handler) {
+                    Ok(server) => {
+                        app.manage(Mutex::new(server));
+                    }
+                    Err(e) => eprintln!("warning: IPC socket server failed to start: {e}"),
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(builder.invoke_handler())
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Stop the IPC server and unlink its socket on shutdown.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(server) = app_handle.try_state::<Mutex<ipc::socket_server::IpcServer>>()
+                {
+                    server.lock().unwrap_or_else(|e| e.into_inner()).shutdown();
+                }
+            }
+        });
 }
 
 #[cfg(test)]

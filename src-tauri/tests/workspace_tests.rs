@@ -708,7 +708,7 @@ fn test_list_notes_filtered_by_workspace_integration() {
     let ws_b = workspace_service::create_workspace(&conn, "Bravo", dir_b.path().to_str().unwrap())
         .expect("create bravo");
 
-    let note_a1 = NoteBuilder::new()
+    let _note_a1 = NoteBuilder::new()
         .title("A1")
         .workspace_id(ws_a.id)
         .insert(&conn);
