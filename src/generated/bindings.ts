@@ -53,6 +53,18 @@ export const commands = {
 	 *  [`PROGRESS_EMIT_INTERVAL`] notes (and once at completion).
 	 */
 	exportMarkdown: (directory: string) => typedError<number, NoteyError>(__TAURI_INVOKE("export_markdown", { directory })),
+	/**
+	 *  Export every active (non-trashed) note as a single 2-space-indented JSON
+	 *  array to the user-selected `file_path` (chosen via the frontend's native
+	 *  file-save dialog). Returns the number of notes written.
+	 * 
+	 *  The target file may not exist yet, so the **parent directory** is
+	 *  canonicalized and required to exist before any write; the validated parent is
+	 *  rejoined with the chosen filename, confining the write to a real directory
+	 *  and blocking path traversal. All serialization is delegated to the testable
+	 *  export service.
+	 */
+	exportJson: (filePath: string) => typedError<number, NoteyError>(__TAURI_INVOKE("export_json", { filePath })),
 };
 
 /* Types */

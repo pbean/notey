@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-12 # story 5.5 → done
+last_updated: 2026-06-12 # story 5.6 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -105,7 +105,7 @@ development_status:
   5-3-permanent-delete-with-confirmation-dialog: done
   5-4-trash-auto-purge: done
   5-5-markdown-export-with-native-file-picker: done
-  5-6-json-export: backlog
+  5-6-json-export: done
   epic-5-retrospective: optional
 
   # Epic 6: CLI Integration

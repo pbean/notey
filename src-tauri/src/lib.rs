@@ -37,6 +37,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::system::get_current_dir,
         commands::search::search_notes,
         commands::export::export_markdown,
+        commands::export::export_json,
     ])
 }
 

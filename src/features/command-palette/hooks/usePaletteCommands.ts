@@ -11,6 +11,7 @@ import {
 import { useNoteListStore } from "../../note-list/store";
 import { useTrashStore } from "../../trash/store";
 import { exportToMarkdown } from "../../export/exportMarkdown";
+import { exportToJson } from "../../export/exportJson";
 
 let _isMac: boolean | null = null;
 function getIsMac(): boolean {
@@ -114,7 +115,7 @@ export function usePaletteCommands(): PaletteCommand[] {
       label: "Export to JSON",
       group: "Settings",
       shortcut: "",
-      action: () => stubAction("Export to JSON"),
+      action: exportToJson,
     },
   ];
 }

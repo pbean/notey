@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -58,4 +58,127 @@ pub fn export_markdown(
             );
         }
     })
+}
+
+/// Export every active (non-trashed) note as a single 2-space-indented JSON
+/// array to the user-selected `file_path` (chosen via the frontend's native
+/// file-save dialog). Returns the number of notes written.
+///
+/// The target file may not exist yet, so the **parent directory** is
+/// canonicalized and required to exist before any write; the validated parent is
+/// rejoined with the chosen filename, confining the write to a real directory
+/// and blocking path traversal. All serialization is delegated to the testable
+/// export service.
+#[tauri::command]
+#[specta::specta]
+pub fn export_json(
+    state: State<'_, Mutex<rusqlite::Connection>>,
+    file_path: String,
+) -> Result<usize, NoteyError> {
+    let target = resolve_export_json_target(&file_path)?;
+
+    let conn = state.lock().unwrap_or_else(recover_poisoned_db);
+    services::export::export_json_to_file(&conn, &target)
+}
+
+fn resolve_export_json_target(file_path: &str) -> Result<PathBuf, NoteyError> {
+    let requested = Path::new(file_path);
+    let file_name = requested.file_name().ok_or_else(|| {
+        NoteyError::Validation("export path has no filename component".to_string())
+    })?;
+    let parent = requested.parent().filter(|p| !p.as_os_str().is_empty());
+    let parent = parent.ok_or_else(|| {
+        NoteyError::Validation("export path has no parent directory".to_string())
+    })?;
+
+    let canonical_parent = dunce::canonicalize(parent).map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => {
+            NoteyError::Validation("export directory does not exist".to_string())
+        }
+        _ => NoteyError::Io(err),
+    })?;
+    if !canonical_parent.is_dir() {
+        return Err(NoteyError::Validation(
+            "export target's parent is not a directory".to_string(),
+        ));
+    }
+
+    let target = canonical_parent.join(file_name);
+    match std::fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(NoteyError::Validation(
+            "export target may not be a symlink".to_string(),
+        )),
+        Ok(_) => Ok(target),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(target),
+        Err(err) => Err(NoteyError::Io(err)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_export_json_target;
+    use crate::errors::NoteyError;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_resolve_export_json_target_rejects_missing_parent_directory() {
+        let base = tempdir().unwrap();
+        let missing = base.path().join("missing").join("export.json");
+
+        let result = resolve_export_json_target(missing.to_str().unwrap());
+
+        assert!(
+            matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("does not exist"))
+        );
+    }
+
+    #[test]
+    fn test_resolve_export_json_target_rejects_non_directory_parent() {
+        let base = tempdir().unwrap();
+        let file_parent = base.path().join("not-a-dir");
+        fs::write(&file_parent, "seed").unwrap();
+        let target = file_parent.join("export.json");
+
+        let result = resolve_export_json_target(target.to_str().unwrap());
+
+        assert!(
+            matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("not a directory"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_export_json_target_rejects_symlink_target() {
+        let base = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let link_path = base.path().join("export.json");
+        std::os::unix::fs::symlink(outside.path().join("outside.json"), &link_path).unwrap();
+
+        let result = resolve_export_json_target(link_path.to_str().unwrap());
+
+        assert!(
+            matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("symlink"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_export_json_target_permission_denied_is_io() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let base = tempdir().unwrap();
+        let secret = base.path().join("secret");
+        let hidden = secret.join("hidden");
+        fs::create_dir(&secret).unwrap();
+        fs::create_dir(&hidden).unwrap();
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let target = hidden.join("export.json");
+        let result = resolve_export_json_target(target.to_str().unwrap());
+
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(matches!(result, Err(NoteyError::Io(_))));
+    }
 }

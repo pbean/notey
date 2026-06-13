@@ -25,6 +25,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-rebuild-fts-index",
     "allow-search-notes",
     "allow-export-markdown",
+    "allow-export-json",
 ];
 
 // P0-INT-006: Tauri ACL rejects unauthorized commands
