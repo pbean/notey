@@ -1,10 +1,14 @@
 use chrono::Utc;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::errors::NoteyError;
 use crate::models::Note;
 
-pub fn create_note(conn: &Connection, format: &str, workspace_id: Option<i64>) -> Result<Note, NoteyError> {
+pub fn create_note(
+    conn: &Connection,
+    format: &str,
+    workspace_id: Option<i64>,
+) -> Result<Note, NoteyError> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO notes (title, content, format, workspace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -235,7 +239,8 @@ pub fn list_notes(conn: &Connection, workspace_id: Option<i64>) -> Result<Vec<No
                  FROM notes WHERE is_trashed = 0 AND workspace_id = ?1
                  ORDER BY updated_at DESC",
             )?;
-            let rows = stmt.query_map(params![ws_id], row_mapper)?
+            let rows = stmt
+                .query_map(params![ws_id], row_mapper)?
                 .collect::<Result<Vec<_>, _>>()?;
             rows
         }
@@ -245,7 +250,8 @@ pub fn list_notes(conn: &Connection, workspace_id: Option<i64>) -> Result<Vec<No
                  FROM notes WHERE is_trashed = 0
                  ORDER BY updated_at DESC",
             )?;
-            let rows = stmt.query_map([], row_mapper)?
+            let rows = stmt
+                .query_map([], row_mapper)?
                 .collect::<Result<Vec<_>, _>>()?;
             rows
         }
@@ -288,8 +294,14 @@ mod tests {
         let conn = setup_test_db();
         let note = create_note(&conn, "markdown", None).expect("create_note failed");
         // ISO 8601 with RFC3339 format: YYYY-MM-DDTHH:MM:SS+00:00
-        assert!(note.created_at.contains('T'), "created_at should be ISO8601");
-        assert!(note.updated_at.contains('T'), "updated_at should be ISO8601");
+        assert!(
+            note.created_at.contains('T'),
+            "created_at should be ISO8601"
+        );
+        assert!(
+            note.updated_at.contains('T'),
+            "updated_at should be ISO8601"
+        );
     }
 
     #[test]
@@ -378,13 +390,22 @@ mod tests {
         trash_note(&conn, note.id).expect("trash_note failed");
 
         let restored = restore_note(&conn, note.id).expect("restore_note failed");
-        assert!(!restored.is_trashed, "is_trashed should be false after restore");
-        assert!(restored.deleted_at.is_none(), "deleted_at should be cleared after restore");
+        assert!(
+            !restored.is_trashed,
+            "is_trashed should be false after restore"
+        );
+        assert!(
+            restored.deleted_at.is_none(),
+            "deleted_at should be cleared after restore"
+        );
         assert_eq!(restored.id, note.id);
 
         // Restored note reappears in the active list.
         let notes = list_notes(&conn, None).expect("list_notes failed");
-        assert!(notes.iter().any(|n| n.id == note.id), "restored note should be active again");
+        assert!(
+            notes.iter().any(|n| n.id == note.id),
+            "restored note should be active again"
+        );
     }
 
     #[test]
@@ -400,7 +421,11 @@ mod tests {
         let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
         trash_note(&conn, note.id).expect("trash note");
         let restored = restore_note(&conn, note.id).expect("restore note");
-        assert_eq!(restored.workspace_id, Some(ws_id), "restore must keep the original workspace");
+        assert_eq!(
+            restored.workspace_id,
+            Some(ws_id),
+            "restore must keep the original workspace"
+        );
     }
 
     #[test]
@@ -432,7 +457,10 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, trashed.id);
         assert!(result.iter().all(|n| n.is_trashed));
-        assert!(!result.iter().any(|n| n.id == active.id), "active notes must be excluded");
+        assert!(
+            !result.iter().any(|n| n.id == active.id),
+            "active notes must be excluded"
+        );
     }
 
     #[test]
@@ -455,7 +483,10 @@ mod tests {
 
         let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].id, note2.id, "most recently deleted note should come first");
+        assert_eq!(
+            result[0].id, note2.id,
+            "most recently deleted note should come first"
+        );
         assert_eq!(result[1].id, note1.id);
     }
 
@@ -464,7 +495,10 @@ mod tests {
         let conn = setup_test_db();
         create_note(&conn, "markdown", None).expect("create active note");
         let result = list_trashed_notes(&conn).expect("list_trashed_notes failed");
-        assert!(result.is_empty(), "no trashed notes should return empty vec");
+        assert!(
+            result.is_empty(),
+            "no trashed notes should return empty vec"
+        );
     }
 
     #[test]
@@ -480,7 +514,10 @@ mod tests {
             "deleted note row should be gone"
         );
         let trashed = list_trashed_notes(&conn).expect("list_trashed_notes failed");
-        assert!(!trashed.iter().any(|n| n.id == note.id), "note must leave the trash list");
+        assert!(
+            !trashed.iter().any(|n| n.id == note.id),
+            "note must leave the trash list"
+        );
     }
 
     #[test]
@@ -500,7 +537,10 @@ mod tests {
             matches!(result, Err(NoteyError::NotFound)),
             "an active (non-trashed) note must not be hard-deletable"
         );
-        assert!(get_note(&conn, note.id).is_ok(), "active note must still exist");
+        assert!(
+            get_note(&conn, note.id).is_ok(),
+            "active note must still exist"
+        );
     }
 
     #[test]
@@ -521,8 +561,14 @@ mod tests {
     fn test_delete_note_permanently_removes_fts_row() {
         let conn = setup_test_db();
         let note = create_note(&conn, "markdown", None).expect("create note");
-        update_note(&conn, note.id, Some("zebracrossing".to_string()), None, None)
-            .expect("update note title");
+        update_note(
+            &conn,
+            note.id,
+            Some("zebracrossing".to_string()),
+            None,
+            None,
+        )
+        .expect("update note title");
         trash_note(&conn, note.id).expect("trash note");
 
         // Sanity: the term is indexed before the permanent delete.
@@ -569,7 +615,10 @@ mod tests {
             "purged note row should be gone"
         );
         let trashed = list_trashed_notes(&conn).expect("list_trashed_notes failed");
-        assert!(!trashed.iter().any(|n| n.id == note.id), "note must leave the trash list");
+        assert!(
+            !trashed.iter().any(|n| n.id == note.id),
+            "note must leave the trash list"
+        );
         // FTS row removed by the DELETE trigger.
         let fts: i64 = conn
             .query_row(
@@ -578,7 +627,10 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("fts query after purge");
-        assert_eq!(fts, 0, "purge should remove the note's FTS row via the trigger");
+        assert_eq!(
+            fts, 0,
+            "purge should remove the note's FTS row via the trigger"
+        );
     }
 
     #[test]
@@ -595,7 +647,10 @@ mod tests {
 
         let purged = purge_expired_trash(&conn, 30).expect("purge failed");
         assert_eq!(purged, 0, "a note within the window must be kept");
-        assert!(get_note(&conn, note.id).is_ok(), "recent note must still exist");
+        assert!(
+            get_note(&conn, note.id).is_ok(),
+            "recent note must still exist"
+        );
     }
 
     #[test]
@@ -604,8 +659,8 @@ mod tests {
         // Just inside the window (29d 23h old) — must be kept.
         let inside = create_note(&conn, "markdown", None).expect("create inside note");
         trash_note(&conn, inside.id).expect("trash inside note");
-        let inside_ts = (Utc::now() - chrono::Duration::days(30) + chrono::Duration::hours(1))
-            .to_rfc3339();
+        let inside_ts =
+            (Utc::now() - chrono::Duration::days(30) + chrono::Duration::hours(1)).to_rfc3339();
         conn.execute(
             "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
             params![inside_ts, inside.id],
@@ -614,8 +669,8 @@ mod tests {
         // Just outside the window (30d 1h old) — must be purged.
         let outside = create_note(&conn, "markdown", None).expect("create outside note");
         trash_note(&conn, outside.id).expect("trash outside note");
-        let outside_ts = (Utc::now() - chrono::Duration::days(30) - chrono::Duration::hours(1))
-            .to_rfc3339();
+        let outside_ts =
+            (Utc::now() - chrono::Duration::days(30) - chrono::Duration::hours(1)).to_rfc3339();
         conn.execute(
             "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
             params![outside_ts, outside.id],
@@ -623,8 +678,14 @@ mod tests {
         .expect("backdate outside note");
 
         let purged = purge_expired_trash(&conn, 30).expect("purge failed");
-        assert_eq!(purged, 1, "only the note past the boundary should be purged");
-        assert!(get_note(&conn, inside.id).is_ok(), "boundary-inside note must be kept");
+        assert_eq!(
+            purged, 1,
+            "only the note past the boundary should be purged"
+        );
+        assert!(
+            get_note(&conn, inside.id).is_ok(),
+            "boundary-inside note must be kept"
+        );
         assert!(
             matches!(get_note(&conn, outside.id), Err(NoteyError::NotFound)),
             "boundary-outside note must be purged"
@@ -645,7 +706,10 @@ mod tests {
 
         let purged = purge_expired_trash(&conn, 30).expect("purge failed");
         assert_eq!(purged, 0, "active notes must never be purged");
-        assert!(get_note(&conn, note.id).is_ok(), "active note must still exist");
+        assert!(
+            get_note(&conn, note.id).is_ok(),
+            "active note must still exist"
+        );
     }
 
     #[test]
@@ -664,7 +728,10 @@ mod tests {
 
         // retention_days = 0 → cutoff is now; the just-trashed note is older.
         let purged = purge_expired_trash(&conn, 0).expect("purge failed");
-        assert_eq!(purged, 1, "zero retention should purge currently-trashed notes");
+        assert_eq!(
+            purged, 1,
+            "zero retention should purge currently-trashed notes"
+        );
         assert!(
             matches!(get_note(&conn, note.id), Err(NoteyError::NotFound)),
             "note should be purged under zero retention"
@@ -674,7 +741,8 @@ mod tests {
     #[test]
     fn test_purge_expired_trash_rejects_out_of_range_retention() {
         let conn = setup_test_db();
-        let err = purge_expired_trash(&conn, u32::MAX).expect_err("overflowing retention must error");
+        let err =
+            purge_expired_trash(&conn, u32::MAX).expect_err("overflowing retention must error");
         assert!(
             matches!(err, NoteyError::Config(_)),
             "overflowing retention must surface as a config error"
@@ -733,7 +801,8 @@ mod tests {
     #[test]
     fn test_create_note_with_nonexistent_workspace_id() {
         let conn = setup_test_db();
-        let note = create_note(&conn, "markdown", Some(99999)).expect("create_note should succeed even with non-existent workspace_id");
+        let note = create_note(&conn, "markdown", Some(99999))
+            .expect("create_note should succeed even with non-existent workspace_id");
         assert_eq!(note.workspace_id, Some(99999));
     }
 
@@ -780,7 +849,10 @@ mod tests {
         trash_note(&conn, note.id).expect("trash note");
 
         let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
-        assert!(result.is_empty(), "trashed notes should be excluded from filtered results");
+        assert!(
+            result.is_empty(),
+            "trashed notes should be excluded from filtered results"
+        );
     }
 
     // UNIT-2.5-005: list_notes with workspace_id that has no notes returns empty vec
@@ -795,7 +867,10 @@ mod tests {
         let ws_id = conn.last_insert_rowid();
 
         let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
-        assert!(result.is_empty(), "empty workspace should return empty vec, not error");
+        assert!(
+            result.is_empty(),
+            "empty workspace should return empty vec, not error"
+        );
     }
 
     // UNIT-2.5-002: list_notes with None workspace_id returns all non-trashed notes
@@ -813,7 +888,11 @@ mod tests {
         let _note2 = create_note(&conn, "markdown", None).expect("create note 2 (no workspace)");
 
         let result = list_notes(&conn, None).expect("list_notes unfiltered");
-        assert_eq!(result.len(), 2, "unfiltered should return all non-trashed notes");
+        assert_eq!(
+            result.len(),
+            2,
+            "unfiltered should return all non-trashed notes"
+        );
     }
 
     // UNIT-2.5-003: list_notes results are ordered by updated_at DESC
@@ -842,7 +921,10 @@ mod tests {
 
         let result = list_notes(&conn, Some(ws_id)).expect("list_notes filtered");
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0].id, note2.id, "more recently updated note should come first");
+        assert_eq!(
+            result[0].id, note2.id,
+            "more recently updated note should come first"
+        );
         assert_eq!(result[1].id, note1.id);
     }
 
@@ -871,7 +953,10 @@ mod tests {
         let reassigned = reassign_note_workspace(&conn, note.id, Some(ws_b_id))
             .expect("reassign should succeed");
         assert_eq!(reassigned.workspace_id, Some(ws_b_id));
-        assert_ne!(reassigned.updated_at, old_updated_at, "updated_at should be refreshed");
+        assert_ne!(
+            reassigned.updated_at, old_updated_at,
+            "updated_at should be refreshed"
+        );
     }
 
     // UNIT-2.6-002: reassign_note_workspace with None sets workspace_id to NULL
@@ -888,9 +973,12 @@ mod tests {
         let note = create_note(&conn, "markdown", Some(ws_id)).expect("create note");
         assert_eq!(note.workspace_id, Some(ws_id));
 
-        let reassigned = reassign_note_workspace(&conn, note.id, None)
-            .expect("reassign to null should succeed");
-        assert!(reassigned.workspace_id.is_none(), "workspace_id should be None after unscopying");
+        let reassigned =
+            reassign_note_workspace(&conn, note.id, None).expect("reassign to null should succeed");
+        assert!(
+            reassigned.workspace_id.is_none(),
+            "workspace_id should be None after unscopying"
+        );
     }
 
     // UNIT-2.6-003: reassign_note_workspace for nonexistent note returns NotFound
@@ -936,8 +1024,8 @@ mod tests {
         let note = create_note(&conn, "markdown", None).expect("create note");
         assert!(note.workspace_id.is_none());
 
-        let reassigned = reassign_note_workspace(&conn, note.id, Some(ws_id))
-            .expect("reassign should succeed");
+        let reassigned =
+            reassign_note_workspace(&conn, note.id, Some(ws_id)).expect("reassign should succeed");
         assert_eq!(reassigned.id, note.id);
         assert_eq!(reassigned.workspace_id, Some(ws_id));
         assert_eq!(reassigned.title, note.title);
@@ -990,17 +1078,29 @@ mod tests {
 
         // Before reassignment: note in ws-old, not in ws-new
         let old_list = list_notes(&conn, Some(ws_old)).expect("list ws-old");
-        assert!(old_list.iter().any(|n| n.id == note.id), "note should be in ws-old before reassign");
+        assert!(
+            old_list.iter().any(|n| n.id == note.id),
+            "note should be in ws-old before reassign"
+        );
         let new_list = list_notes(&conn, Some(ws_new)).expect("list ws-new");
-        assert!(!new_list.iter().any(|n| n.id == note.id), "note should not be in ws-new before reassign");
+        assert!(
+            !new_list.iter().any(|n| n.id == note.id),
+            "note should not be in ws-new before reassign"
+        );
 
         reassign_note_workspace(&conn, note.id, Some(ws_new)).expect("reassign");
 
         // After reassignment: note NOT in ws-old, IS in ws-new
         let old_list = list_notes(&conn, Some(ws_old)).expect("list ws-old after");
-        assert!(!old_list.iter().any(|n| n.id == note.id), "note should NOT be in ws-old after reassign");
+        assert!(
+            !old_list.iter().any(|n| n.id == note.id),
+            "note should NOT be in ws-old after reassign"
+        );
         let new_list = list_notes(&conn, Some(ws_new)).expect("list ws-new after");
-        assert!(new_list.iter().any(|n| n.id == note.id), "note should be in ws-new after reassign");
+        assert!(
+            new_list.iter().any(|n| n.id == note.id),
+            "note should be in ws-new after reassign"
+        );
     }
 
     // GAP AC#3: Unscoped note no longer in workspace view, but appears in all-workspaces view
@@ -1041,9 +1141,8 @@ mod tests {
         let note = create_note(&conn, "markdown", None).expect("create_note failed");
         assert_eq!(note.format, "markdown");
 
-        let toggled =
-            update_note(&conn, note.id, None, None, Some("plaintext".to_string()))
-                .expect("toggle to plaintext failed");
+        let toggled = update_note(&conn, note.id, None, None, Some("plaintext".to_string()))
+            .expect("toggle to plaintext failed");
         assert_eq!(toggled.format, "plaintext");
 
         // Reload from DB to verify persistence
@@ -1051,9 +1150,8 @@ mod tests {
         assert_eq!(reloaded.format, "plaintext");
 
         // Toggle back
-        let toggled_back =
-            update_note(&conn, note.id, None, None, Some("markdown".to_string()))
-                .expect("toggle back to markdown failed");
+        let toggled_back = update_note(&conn, note.id, None, None, Some("markdown".to_string()))
+            .expect("toggle back to markdown failed");
         assert_eq!(toggled_back.format, "markdown");
     }
 }

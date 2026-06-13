@@ -103,7 +103,10 @@ fn test_list_workspaces_note_count_excludes_trashed() {
         .expect("create_workspace failed");
 
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
-    NoteBuilder::new().workspace_id(ws.id).trashed().insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws.id)
+        .trashed()
+        .insert(&conn);
 
     let list = workspace_service::list_workspaces(&conn).expect("list_workspaces failed");
     assert_eq!(list.len(), 1);
@@ -180,7 +183,10 @@ fn test_get_workspace_with_zero_notes() {
         .expect("create_workspace failed");
 
     let info = workspace_service::get_workspace(&conn, ws.id).expect("get_workspace failed");
-    assert_eq!(info.note_count, 0, "workspace with no notes should have count 0");
+    assert_eq!(
+        info.note_count, 0,
+        "workspace with no notes should have count 0"
+    );
 }
 
 // Additional: list_workspaces returns empty vec when no workspaces exist
@@ -188,7 +194,10 @@ fn test_get_workspace_with_zero_notes() {
 fn test_list_workspaces_empty() {
     let conn = setup_test_db();
     let list = workspace_service::list_workspaces(&conn).expect("list_workspaces failed");
-    assert!(list.is_empty(), "should return empty list when no workspaces exist");
+    assert!(
+        list.is_empty(),
+        "should return empty list when no workspaces exist"
+    );
 }
 
 // Gap: get_workspace note count excludes trashed notes (mirrors UNIT-2.1-006 for get_workspace)
@@ -201,10 +210,16 @@ fn test_get_workspace_note_count_excludes_trashed() {
 
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
     NoteBuilder::new().workspace_id(ws.id).insert(&conn);
-    NoteBuilder::new().workspace_id(ws.id).trashed().insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws.id)
+        .trashed()
+        .insert(&conn);
 
     let info = workspace_service::get_workspace(&conn, ws.id).expect("get_workspace failed");
-    assert_eq!(info.note_count, 2, "get_workspace should exclude trashed notes from count");
+    assert_eq!(
+        info.note_count, 2,
+        "get_workspace should exclude trashed notes from count"
+    );
 }
 
 // Gap: list_workspaces with multiple workspaces each having mixed trashed/non-trashed notes
@@ -221,12 +236,21 @@ fn test_list_workspaces_per_workspace_trashed_isolation() {
     // Alpha: 2 active, 1 trashed
     NoteBuilder::new().workspace_id(ws_a.id).insert(&conn);
     NoteBuilder::new().workspace_id(ws_a.id).insert(&conn);
-    NoteBuilder::new().workspace_id(ws_a.id).trashed().insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws_a.id)
+        .trashed()
+        .insert(&conn);
 
     // Bravo: 1 active, 2 trashed
     NoteBuilder::new().workspace_id(ws_b.id).insert(&conn);
-    NoteBuilder::new().workspace_id(ws_b.id).trashed().insert(&conn);
-    NoteBuilder::new().workspace_id(ws_b.id).trashed().insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws_b.id)
+        .trashed()
+        .insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws_b.id)
+        .trashed()
+        .insert(&conn);
 
     let list = workspace_service::list_workspaces(&conn).expect("list_workspaces failed");
     assert_eq!(list.len(), 2);
@@ -242,15 +266,18 @@ fn test_create_workspace_upsert_preserves_created_at() {
     let conn = setup_test_db();
     let dir = TempDir::new().unwrap();
     let path = dir.path().to_str().unwrap();
-    let ws1 = workspace_service::create_workspace(&conn, "Original", path)
-        .expect("first create failed");
+    let ws1 =
+        workspace_service::create_workspace(&conn, "Original", path).expect("first create failed");
     let original_created_at = ws1.created_at.clone();
 
     // Second create with same path should return original, preserving created_at
-    let ws2 = workspace_service::create_workspace(&conn, "Different Name", path)
-        .expect("upsert failed");
+    let ws2 =
+        workspace_service::create_workspace(&conn, "Different Name", path).expect("upsert failed");
 
-    assert_eq!(ws2.created_at, original_created_at, "upsert should preserve original created_at");
+    assert_eq!(
+        ws2.created_at, original_created_at,
+        "upsert should preserve original created_at"
+    );
 }
 
 // UNIT-2.1-010: tauri-specta generates TypeScript bindings for all 3 workspace commands
@@ -301,7 +328,10 @@ fn test_unassigned_notes_not_counted_in_workspaces() {
     assert_eq!(info.note_count, 1, "unassigned notes should not be counted");
 
     let list = workspace_service::list_workspaces(&conn).expect("list_workspaces failed");
-    assert_eq!(list[0].note_count, 1, "unassigned notes should not appear in list counts");
+    assert_eq!(
+        list[0].note_count, 1,
+        "unassigned notes should not appear in list counts"
+    );
 }
 
 // ============================================================================
@@ -336,7 +366,11 @@ fn test_detect_workspace_finds_git_root_from_nested_path() {
     assert_eq!(result.path, expected_path.to_string_lossy().to_string());
     assert_eq!(
         result.name,
-        expected_path.file_name().unwrap().to_string_lossy().to_string()
+        expected_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
     );
 }
 
@@ -353,7 +387,11 @@ fn test_detect_workspace_fallback_no_git() {
     assert_eq!(result.path, expected_path.to_string_lossy().to_string());
     assert_eq!(
         result.name,
-        expected_path.file_name().unwrap().to_string_lossy().to_string()
+        expected_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
     );
 }
 
@@ -366,7 +404,11 @@ fn test_detect_workspace_returns_correct_basename() {
         .expect("detect_workspace failed");
 
     let expected_path = std::fs::canonicalize(dir.path()).unwrap();
-    let expected_name = expected_path.file_name().unwrap().to_string_lossy().to_string();
+    let expected_name = expected_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     assert_eq!(result.name, expected_name);
 }
 
@@ -511,7 +553,10 @@ fn test_detect_workspace_fallback_deeply_nested_returns_input_path() {
         expected_path.to_string_lossy().to_string(),
         "fallback should return the input directory, not any parent"
     );
-    assert_eq!(result.name, "d", "fallback name should be the input directory basename");
+    assert_eq!(
+        result.name, "d",
+        "fallback name should be the input directory basename"
+    );
 }
 
 // UNIT-2.2-009: tauri-specta generates detectWorkspace function and DetectedWorkspace type
@@ -560,7 +605,10 @@ fn test_resolve_workspace_returns_existing_for_known_path() {
     let ws2 = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
         .expect("second resolve_workspace failed");
 
-    assert_eq!(ws1.id, ws2.id, "should return same workspace on repeated calls");
+    assert_eq!(
+        ws1.id, ws2.id,
+        "should return same workspace on repeated calls"
+    );
     assert_eq!(ws1.path, ws2.path);
 }
 
@@ -608,7 +656,8 @@ fn test_typescript_bindings_create_note_has_workspace_id() {
 #[test]
 fn test_resolve_workspace_error_invalid_path() {
     let conn = setup_test_db();
-    let result = workspace_service::resolve_workspace(&conn, "/tmp/definitely-does-not-exist-xyz123");
+    let result =
+        workspace_service::resolve_workspace(&conn, "/tmp/definitely-does-not-exist-xyz123");
     assert!(
         matches!(result, Err(NoteyError::Validation(_))),
         "resolve_workspace should propagate Validation error for non-existent path, got: {:?}",
@@ -628,12 +677,20 @@ fn test_resolve_workspace_then_create_note_with_workspace_id() {
     let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
         .expect("create_note failed");
 
-    assert_eq!(note.workspace_id, Some(ws.id), "note should be assigned to the resolved workspace");
+    assert_eq!(
+        note.workspace_id,
+        Some(ws.id),
+        "note should be assigned to the resolved workspace"
+    );
 
     // Verify via independent get_note
-    let fetched = tauri_app_lib::services::notes::get_note(&conn, note.id)
-        .expect("get_note failed");
-    assert_eq!(fetched.workspace_id, Some(ws.id), "workspace_id should persist in DB");
+    let fetched =
+        tauri_app_lib::services::notes::get_note(&conn, note.id).expect("get_note failed");
+    assert_eq!(
+        fetched.workspace_id,
+        Some(ws.id),
+        "workspace_id should persist in DB"
+    );
 }
 
 // ============================================================================
@@ -651,9 +708,18 @@ fn test_list_notes_filtered_by_workspace_integration() {
     let ws_b = workspace_service::create_workspace(&conn, "Bravo", dir_b.path().to_str().unwrap())
         .expect("create bravo");
 
-    let note_a1 = NoteBuilder::new().title("A1").workspace_id(ws_a.id).insert(&conn);
-    let _note_a2 = NoteBuilder::new().title("A2").workspace_id(ws_a.id).insert(&conn);
-    let _note_b1 = NoteBuilder::new().title("B1").workspace_id(ws_b.id).insert(&conn);
+    let note_a1 = NoteBuilder::new()
+        .title("A1")
+        .workspace_id(ws_a.id)
+        .insert(&conn);
+    let _note_a2 = NoteBuilder::new()
+        .title("A2")
+        .workspace_id(ws_a.id)
+        .insert(&conn);
+    let _note_b1 = NoteBuilder::new()
+        .title("B1")
+        .workspace_id(ws_b.id)
+        .insert(&conn);
     let _note_null = NoteBuilder::new().title("Unscoped").insert(&conn); // workspace_id = NULL
 
     let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws_a.id))
@@ -682,8 +748,15 @@ fn test_list_notes_filtered_excludes_trashed_integration() {
     let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create workspace");
 
-    NoteBuilder::new().title("Active").workspace_id(ws.id).insert(&conn);
-    NoteBuilder::new().title("Trashed").workspace_id(ws.id).trashed().insert(&conn);
+    NoteBuilder::new()
+        .title("Active")
+        .workspace_id(ws.id)
+        .insert(&conn);
+    NoteBuilder::new()
+        .title("Trashed")
+        .workspace_id(ws.id)
+        .trashed()
+        .insert(&conn);
 
     let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws.id))
         .expect("list_notes filtered");
@@ -700,17 +773,33 @@ fn test_list_notes_preserves_workspace_id() {
         .expect("create_workspace failed");
 
     // One note with workspace, one without
-    NoteBuilder::new().workspace_id(ws.id).title("Scoped").insert(&conn);
+    NoteBuilder::new()
+        .workspace_id(ws.id)
+        .title("Scoped")
+        .insert(&conn);
     NoteBuilder::new().title("Unscoped").insert(&conn);
 
     let notes = tauri_app_lib::services::notes::list_notes(&conn, None).expect("list_notes failed");
     assert_eq!(notes.len(), 2);
 
-    let scoped = notes.iter().find(|n| n.title == "Scoped").expect("scoped note missing");
-    let unscoped = notes.iter().find(|n| n.title == "Unscoped").expect("unscoped note missing");
+    let scoped = notes
+        .iter()
+        .find(|n| n.title == "Scoped")
+        .expect("scoped note missing");
+    let unscoped = notes
+        .iter()
+        .find(|n| n.title == "Unscoped")
+        .expect("unscoped note missing");
 
-    assert_eq!(scoped.workspace_id, Some(ws.id), "scoped note should have workspace_id");
-    assert!(unscoped.workspace_id.is_none(), "unscoped note should have NULL workspace_id");
+    assert_eq!(
+        scoped.workspace_id,
+        Some(ws.id),
+        "scoped note should have workspace_id"
+    );
+    assert!(
+        unscoped.workspace_id.is_none(),
+        "unscoped note should have NULL workspace_id"
+    );
 }
 
 // Gap: update_note does not clobber workspace_id
@@ -735,7 +824,11 @@ fn test_update_note_preserves_workspace_id() {
     )
     .expect("update_note failed");
 
-    assert_eq!(updated.workspace_id, Some(ws.id), "update_note should not clobber workspace_id");
+    assert_eq!(
+        updated.workspace_id,
+        Some(ws.id),
+        "update_note should not clobber workspace_id"
+    );
 }
 
 // RETRO-2-003: create_workspace rejects empty name
@@ -821,11 +914,7 @@ fn test_create_workspace_rejects_file_path() {
     std::fs::write(&file_path, "hello").expect("create temp file");
 
     let conn = setup_test_db();
-    let result = workspace_service::create_workspace(
-        &conn,
-        "test",
-        file_path.to_str().unwrap(),
-    );
+    let result = workspace_service::create_workspace(&conn, "test", file_path.to_str().unwrap());
     assert!(
         matches!(&result, Err(NoteyError::Validation(msg)) if msg.contains("not a directory")),
         "expected Validation error for file path, got: {:?}",
@@ -843,12 +932,8 @@ fn test_create_workspace_canonicalizes_symlink() {
     std::os::unix::fs::symlink(target_dir.path(), &link_path).expect("create symlink");
 
     let conn = setup_test_db();
-    let ws = workspace_service::create_workspace(
-        &conn,
-        "symlinked",
-        link_path.to_str().unwrap(),
-    )
-    .expect("create_workspace with symlink should succeed");
+    let ws = workspace_service::create_workspace(&conn, "symlinked", link_path.to_str().unwrap())
+        .expect("create_workspace with symlink should succeed");
 
     let canonical_target = std::fs::canonicalize(target_dir.path())
         .expect("canonicalize target")
@@ -907,7 +992,6 @@ fn test_typescript_bindings_contain_resolve_workspace() {
     );
 }
 
-
 // Review-3.1-pass3: resolve_workspace rejects deleted directory.
 // Note: the upsert_workspace TOCTOU is_dir guard is defense-in-depth and cannot be
 // reliably unit-tested without thread coordination. This test validates the overall
@@ -952,7 +1036,10 @@ fn test_detect_workspace_respects_depth_limit() {
 
     // .git is 25 levels up — beyond the 20-level limit, so it should NOT be found.
     // Should fall back to the leaf directory name instead.
-    assert_eq!(result.name, "d24", "should use leaf directory name, not find .git 25 levels up");
+    assert_eq!(
+        result.name, "d24",
+        "should use leaf directory name, not find .git 25 levels up"
+    );
     assert!(
         result.path.contains("d24"),
         "fallback path should be the deep directory itself"
@@ -977,5 +1064,8 @@ fn test_detect_workspace_finds_git_within_depth_limit() {
 
     // .git is 15 levels up — within the 20-level limit, so it SHOULD be found
     let base_name = base.path().file_name().unwrap().to_str().unwrap();
-    assert_eq!(result.name, base_name, "should find .git within depth limit");
+    assert_eq!(
+        result.name, base_name,
+        "should find .git within depth limit"
+    );
 }

@@ -120,7 +120,10 @@ fn test_update_note_only_updates_provided_fields() {
     )
     .expect("update_note failed");
 
-    assert_eq!(updated.content, "updated content", "content should be updated");
+    assert_eq!(
+        updated.content, "updated content",
+        "content should be updated"
+    );
     assert_eq!(updated.title, note.title, "title should not change");
     assert_eq!(updated.format, note.format, "format should not change");
 }
@@ -226,5 +229,8 @@ fn test_migration_idempotent_on_existing_db() {
         )
         .expect("schema query 2");
 
-    assert_eq!(schema1, schema2, "schema should be identical after re-migration");
+    assert_eq!(
+        schema1, schema2,
+        "schema should be identical after re-migration"
+    );
 }

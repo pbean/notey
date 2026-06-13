@@ -19,9 +19,8 @@ pub fn insert_workspace(
 
 /// Find a workspace by its filesystem path.
 pub fn find_by_path(conn: &Connection, path: &str) -> Result<Option<Workspace>, NoteyError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, path, created_at FROM workspaces WHERE path = ?1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, name, path, created_at FROM workspaces WHERE path = ?1")?;
 
     let mut rows = stmt.query_map(params![path], |row| {
         Ok(Workspace {
@@ -39,10 +38,7 @@ pub fn find_by_path(conn: &Connection, path: &str) -> Result<Option<Workspace>, 
 }
 
 /// Get a workspace by id, including its non-trashed note count.
-pub fn get_by_id_with_note_count(
-    conn: &Connection,
-    id: i64,
-) -> Result<WorkspaceInfo, NoteyError> {
+pub fn get_by_id_with_note_count(conn: &Connection, id: i64) -> Result<WorkspaceInfo, NoteyError> {
     let result = conn.query_row(
         "SELECT w.id, w.name, w.path, w.created_at,
                 COUNT(n.id) AS note_count
@@ -70,9 +66,7 @@ pub fn get_by_id_with_note_count(
 }
 
 /// List all workspaces with their non-trashed note counts, ordered by name ASC.
-pub fn list_all_with_note_counts(
-    conn: &Connection,
-) -> Result<Vec<WorkspaceInfo>, NoteyError> {
+pub fn list_all_with_note_counts(conn: &Connection) -> Result<Vec<WorkspaceInfo>, NoteyError> {
     let mut stmt = conn.prepare(
         "SELECT w.id, w.name, w.path, w.created_at,
                 COUNT(n.id) AS note_count

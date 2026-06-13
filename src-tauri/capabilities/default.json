@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "dialog:allow-open",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered",
@@ -28,6 +29,7 @@
     "allow-get-current-dir",
     "allow-reassign-note-workspace",
     "allow-rebuild-fts-index",
-    "allow-search-notes"
+    "allow-search-notes",
+    "allow-export-markdown"
   ]
 }

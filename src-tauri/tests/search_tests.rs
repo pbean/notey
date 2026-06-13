@@ -51,7 +51,11 @@ fn test_fts5_insert_trigger_indexes_new_note() {
         )
         .expect("FTS query failed");
 
-    assert_eq!(count, 1, "inserted note should be findable via FTS5 MATCH; note id={}", note.id);
+    assert_eq!(
+        count, 1,
+        "inserted note should be findable via FTS5 MATCH; note id={}",
+        note.id
+    );
 }
 
 // P0-INT-004b: FTS5 index reflects updated note title/content (UPDATE trigger)
@@ -80,7 +84,10 @@ fn test_fts5_update_trigger_reindexes_note() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(old_count, 0, "old title should no longer be in FTS index after update");
+    assert_eq!(
+        old_count, 0,
+        "old title should no longer be in FTS index after update"
+    );
 
     let new_count: i64 = conn
         .query_row(
@@ -89,7 +96,10 @@ fn test_fts5_update_trigger_reindexes_note() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(new_count, 1, "new title should be findable via FTS5 MATCH after update");
+    assert_eq!(
+        new_count, 1,
+        "new title should be findable via FTS5 MATCH after update"
+    );
 }
 
 // P0-INT-004c: FTS5 index removes hard-deleted note (DELETE trigger)
@@ -113,7 +123,10 @@ fn test_fts5_delete_trigger_removes_from_index() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(count, 0, "hard-deleted note should be removed from FTS5 index");
+    assert_eq!(
+        count, 0,
+        "hard-deleted note should be removed from FTS5 index"
+    );
 }
 
 // P0-INT-004d: FTS5 index reflects trashed note (still searchable — trigger fires on is_trashed update)
@@ -135,14 +148,17 @@ fn test_fts5_trashed_note_still_searchable() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(count, 1, "trashed note should remain in FTS5 index (soft delete only)");
+    assert_eq!(
+        count, 1,
+        "trashed note should remain in FTS5 index (soft delete only)"
+    );
 }
 
 // P0-INT-005a: FTS5 backfill — existing notes appear in FTS index after migration
 #[test]
 fn test_fts5_backfill_existing_notes() {
-    use tempfile::TempDir;
     use rusqlite::Connection;
+    use tempfile::TempDir;
 
     let dir = TempDir::new().expect("failed to create temp dir");
     let db_path = dir.path().join("notey.db");
@@ -218,7 +234,10 @@ fn test_fts5_backfill_existing_notes() {
             |row| row.get(0),
         )
         .expect("FTS query alpha failed");
-    assert_eq!(count_alpha, 1, "pre-existing note alpha should be backfilled into FTS5 index");
+    assert_eq!(
+        count_alpha, 1,
+        "pre-existing note alpha should be backfilled into FTS5 index"
+    );
 
     let count_beta: i64 = conn
         .query_row(
@@ -227,7 +246,10 @@ fn test_fts5_backfill_existing_notes() {
             |row| row.get(0),
         )
         .expect("FTS query beta failed");
-    assert_eq!(count_beta, 1, "pre-existing note beta should be backfilled into FTS5 index");
+    assert_eq!(
+        count_beta, 1,
+        "pre-existing note beta should be backfilled into FTS5 index"
+    );
 }
 
 // P1-INT-002: FTS5 index handles empty title/content gracefully (no phantom matches)
@@ -236,11 +258,11 @@ fn test_fts5_empty_content_no_phantom_matches() {
     let (conn, _dir) = create_temp_db();
 
     // Verify inserting a note with empty title and content succeeds without error
-    let empty_note = NoteBuilder::new()
-        .title("")
-        .content("")
-        .insert(&conn);
-    assert!(empty_note.id > 0, "empty note should be inserted successfully");
+    let empty_note = NoteBuilder::new().title("").content("").insert(&conn);
+    assert!(
+        empty_note.id > 0,
+        "empty note should be inserted successfully"
+    );
 
     // Create a real note to search against
     NoteBuilder::new()
@@ -256,7 +278,10 @@ fn test_fts5_empty_content_no_phantom_matches() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(match_count, 1, "only the real note should match; empty note should not phantom-match");
+    assert_eq!(
+        match_count, 1,
+        "only the real note should match; empty note should not phantom-match"
+    );
 
     // Verify searching for arbitrary terms returns 0 (empty note doesn't match random terms)
     let phantom_count: i64 = conn
@@ -266,7 +291,10 @@ fn test_fts5_empty_content_no_phantom_matches() {
             |row| row.get(0),
         )
         .expect("FTS query failed");
-    assert_eq!(phantom_count, 0, "FTS5 should return 0 matches for a term not in any note");
+    assert_eq!(
+        phantom_count, 0,
+        "FTS5 should return 0 matches for a term not in any note"
+    );
 }
 
 // P1-INT-001: FTS5 MATCH query returns correct results with BM25 ranking
@@ -289,9 +317,7 @@ fn test_fts5_match_returns_ranked_results() {
         .insert(&conn);
 
     let mut stmt = conn
-        .prepare(
-            "SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?1 ORDER BY rank",
-        )
+        .prepare("SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?1 ORDER BY rank")
         .expect("prepare failed");
     let ids: Vec<i64> = stmt
         .query_map(params!["searchterm"], |row| row.get(0))
@@ -311,7 +337,10 @@ fn test_fts5_match_returns_ranked_results() {
             |row| row.get(0),
         )
         .expect("find title note");
-    assert_eq!(ids[0], title_note_id, "title match should rank above content-only match (verifies BM25 10:1 weighting)");
+    assert_eq!(
+        ids[0], title_note_id,
+        "title match should rank above content-only match (verifies BM25 10:1 weighting)"
+    );
 }
 
 // FTS5 rebuild restores index from content table
@@ -340,7 +369,8 @@ fn test_fts5_rebuild_restores_index() {
 
     // Simulate FTS drift: drop the insert trigger, add a note bypassing FTS,
     // then restore the trigger. The new note will be in `notes` but not in `notes_fts`.
-    conn.execute_batch("DROP TRIGGER notes_fts_ai").expect("drop trigger failed");
+    conn.execute_batch("DROP TRIGGER notes_fts_ai")
+        .expect("drop trigger failed");
     conn.execute(
         "INSERT INTO notes (title, content, format, created_at, updated_at)
          VALUES ('drift_note_unique', 'drifted content', 'markdown', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
@@ -350,8 +380,9 @@ fn test_fts5_rebuild_restores_index() {
         "CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
             INSERT INTO notes_fts(rowid, title, content)
             VALUES (NEW.id, NEW.title, NEW.content);
-        END"
-    ).expect("recreate trigger failed");
+        END",
+    )
+    .expect("recreate trigger failed");
 
     // Verify drift: the bypassed note should NOT be in FTS
     let drift_count: i64 = conn
@@ -361,7 +392,10 @@ fn test_fts5_rebuild_restores_index() {
             |row| row.get(0),
         )
         .expect("drift check query failed");
-    assert_eq!(drift_count, 0, "note inserted while trigger was dropped should NOT be in FTS");
+    assert_eq!(
+        drift_count, 0,
+        "note inserted while trigger was dropped should NOT be in FTS"
+    );
 
     // Rebuild the FTS index — should recover the drifted note
     notes::rebuild_fts_index(&conn).expect("rebuild_fts_index failed");
@@ -374,7 +408,10 @@ fn test_fts5_rebuild_restores_index() {
             |row| row.get(0),
         )
         .expect("drift recovery query failed");
-    assert_eq!(drift_recovered, 1, "drifted note should be recoverable via FTS rebuild");
+    assert_eq!(
+        drift_recovered, 1,
+        "drifted note should be recoverable via FTS rebuild"
+    );
     let alpha_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM notes_fts WHERE notes_fts MATCH ?1",
@@ -382,7 +419,10 @@ fn test_fts5_rebuild_restores_index() {
             |row| row.get(0),
         )
         .expect("FTS query alpha failed");
-    assert_eq!(alpha_count, 1, "note alpha should be findable after FTS rebuild");
+    assert_eq!(
+        alpha_count, 1,
+        "note alpha should be findable after FTS rebuild"
+    );
 
     let beta_count: i64 = conn
         .query_row(
@@ -391,11 +431,20 @@ fn test_fts5_rebuild_restores_index() {
             |row| row.get(0),
         )
         .expect("FTS query beta failed");
-    assert_eq!(beta_count, 1, "note beta should be findable after FTS rebuild");
+    assert_eq!(
+        beta_count, 1,
+        "note beta should be findable after FTS rebuild"
+    );
 
     // Update a note and rebuild again to verify triggers + rebuild coexist
-    notes::update_note(&conn, note1.id, Some("rebuild_gamma_unique".to_string()), None, None)
-        .expect("update note failed");
+    notes::update_note(
+        &conn,
+        note1.id,
+        Some("rebuild_gamma_unique".to_string()),
+        None,
+        None,
+    )
+    .expect("update note failed");
     notes::rebuild_fts_index(&conn).expect("second rebuild failed");
 
     let gamma_count: i64 = conn
@@ -405,7 +454,10 @@ fn test_fts5_rebuild_restores_index() {
             |row| row.get(0),
         )
         .expect("FTS query gamma failed");
-    assert_eq!(gamma_count, 1, "updated note should be findable after second FTS rebuild");
+    assert_eq!(
+        gamma_count, 1,
+        "updated note should be findable after second FTS rebuild"
+    );
 }
 
 // P1-INT-003: FTS5 index stays consistent after multiple rapid create/update/delete cycles
@@ -414,13 +466,28 @@ fn test_fts5_rapid_crud_consistency() {
     let (conn, _dir) = create_temp_db();
 
     // Create several notes
-    let note_a = NoteBuilder::new().title("rapid_alpha_term").content("a").insert(&conn);
-    let note_b = NoteBuilder::new().title("rapid_beta_term").content("b").insert(&conn);
-    let note_c = NoteBuilder::new().title("rapid_gamma_term").content("c").insert(&conn);
+    let note_a = NoteBuilder::new()
+        .title("rapid_alpha_term")
+        .content("a")
+        .insert(&conn);
+    let note_b = NoteBuilder::new()
+        .title("rapid_beta_term")
+        .content("b")
+        .insert(&conn);
+    let note_c = NoteBuilder::new()
+        .title("rapid_gamma_term")
+        .content("c")
+        .insert(&conn);
 
     // Update note_a title
-    notes::update_note(&conn, note_a.id, Some("rapid_alpha_updated".to_string()), None, None)
-        .expect("update note_a");
+    notes::update_note(
+        &conn,
+        note_a.id,
+        Some("rapid_alpha_updated".to_string()),
+        None,
+        None,
+    )
+    .expect("update note_a");
 
     // Trash note_b (soft delete — stays in FTS)
     notes::trash_note(&conn, note_b.id).expect("trash note_b");
@@ -438,7 +505,10 @@ fn test_fts5_rapid_crud_consistency() {
             |row| row.get(0),
         )
         .expect("query");
-    assert_eq!(old_a, 0, "old title of note_a should not be in FTS after update");
+    assert_eq!(
+        old_a, 0,
+        "old title of note_a should not be in FTS after update"
+    );
 
     let new_a: i64 = conn
         .query_row(
@@ -491,11 +561,13 @@ fn test_search_notes_ranked_results() {
         .content("a completely different topic here")
         .insert(&conn);
 
-    let results = search_service::search_notes(&conn, "inttest_rank", None)
-        .expect("search failed");
+    let results = search_service::search_notes(&conn, "inttest_rank", None).expect("search failed");
 
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0].title, "inttest_rank", "title match should rank first due to bm25(10.0, 1.0)");
+    assert_eq!(
+        results[0].title, "inttest_rank",
+        "title match should rank first due to bm25(10.0, 1.0)"
+    );
 }
 
 // P1-INT: Workspace filter — only notes from specified workspace returned
@@ -552,8 +624,8 @@ fn test_search_notes_excludes_trashed() {
 
     notes::trash_note(&conn, note.id).expect("trash note");
 
-    let results = search_service::search_notes(&conn, "trashtest_unique_xyz", None)
-        .expect("search failed");
+    let results =
+        search_service::search_notes(&conn, "trashtest_unique_xyz", None).expect("search failed");
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "visible note");
@@ -615,15 +687,21 @@ fn test_search_notes_workspace_name_left_join() {
         .content("leftjoin_unique_xyz")
         .insert(&conn);
 
-    let results = search_service::search_notes(&conn, "leftjoin_unique_xyz", None)
-        .expect("search failed");
+    let results =
+        search_service::search_notes(&conn, "leftjoin_unique_xyz", None).expect("search failed");
 
     assert_eq!(results.len(), 2);
 
-    let scoped = results.iter().find(|r| r.title == "scoped note").expect("scoped not found");
+    let scoped = results
+        .iter()
+        .find(|r| r.title == "scoped note")
+        .expect("scoped not found");
     assert_eq!(scoped.workspace_name, Some("named-workspace".to_string()));
 
-    let unscoped = results.iter().find(|r| r.title == "unscoped note").expect("unscoped not found");
+    let unscoped = results
+        .iter()
+        .find(|r| r.title == "unscoped note")
+        .expect("unscoped not found");
     assert!(unscoped.workspace_name.is_none());
 }
 
@@ -638,16 +716,41 @@ fn test_search_notes_fts5_special_chars() {
         .insert(&conn);
 
     let special = vec![
-        "hello\"world", "hello*", "NOT", "OR", "AND", "NEAR",
-        "hello:world", "(hello)", "^hello", "\"", "*", "NOT OR AND",
-        "to-do", "foo-bar", "C++", "C#", "hello/world", "NEAR/5",
-        "file.txt", "foo@bar.com", "#tag", "a & b", "a | b",
-        "[bracket]", "hello\\world",
+        "hello\"world",
+        "hello*",
+        "NOT",
+        "OR",
+        "AND",
+        "NEAR",
+        "hello:world",
+        "(hello)",
+        "^hello",
+        "\"",
+        "*",
+        "NOT OR AND",
+        "to-do",
+        "foo-bar",
+        "C++",
+        "C#",
+        "hello/world",
+        "NEAR/5",
+        "file.txt",
+        "foo@bar.com",
+        "#tag",
+        "a & b",
+        "a | b",
+        "[bracket]",
+        "hello\\world",
     ];
 
     for q in special {
         let result = search_service::search_notes(&conn, q, None);
-        assert!(result.is_ok(), "query '{}' should not error: {:?}", q, result.err());
+        assert!(
+            result.is_ok(),
+            "query '{}' should not error: {:?}",
+            q,
+            result.err()
+        );
     }
 }
 
@@ -683,5 +786,8 @@ fn test_search_notes_result_serialization() {
 
     // Verify snippet contains <mark> tags
     let snippet = json["snippet"].as_str().unwrap();
-    assert!(snippet.contains("<mark>"), "snippet should contain <mark> highlight tags");
+    assert!(
+        snippet.contains("<mark>"),
+        "snippet should contain <mark> highlight tags"
+    );
 }

@@ -42,6 +42,17 @@ export const commands = {
 	getCurrentDir: () => typedError<string, NoteyError>(__TAURI_INVOKE("get_current_dir")),
 	// Full-text search across notes, optionally filtered by workspace.
 	searchNotes: (query: string, workspaceId: number | null) => typedError<SearchResult[], NoteyError>(__TAURI_INVOKE("search_notes", { query, workspaceId })),
+	/**
+	 *  Export every active (non-trashed) note as an individual Markdown file into
+	 *  the user-selected `directory` (chosen via the frontend's native directory
+	 *  picker). Returns the number of files written.
+	 * 
+	 *  The directory is canonicalized and validated to exist before any write; all
+	 *  file writing is delegated to the testable export service. Progress is
+	 *  emitted on `export-markdown-progress` throttled to every
+	 *  [`PROGRESS_EMIT_INTERVAL`] notes (and once at completion).
+	 */
+	exportMarkdown: (directory: string) => typedError<number, NoteyError>(__TAURI_INVOKE("export_markdown", { directory })),
 };
 
 /* Types */

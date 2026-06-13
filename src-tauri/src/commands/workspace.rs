@@ -40,9 +40,7 @@ pub fn get_workspace(
 
 #[tauri::command]
 #[specta::specta]
-pub fn detect_workspace(
-    path: String,
-) -> Result<DetectedWorkspace, NoteyError> {
+pub fn detect_workspace(path: String) -> Result<DetectedWorkspace, NoteyError> {
     services::workspace_service::detect_workspace(&path)
 }
 

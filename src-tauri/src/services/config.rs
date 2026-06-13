@@ -34,7 +34,10 @@ pub fn load_or_create(config_dir: &Path) -> Result<AppConfig, NoteyError> {
         match toml::from_str::<AppConfig>(&contents) {
             Ok(config) => Ok(config),
             Err(e) => {
-                eprintln!("Warning: config.toml is corrupt ({}), falling back to defaults", e);
+                eprintln!(
+                    "Warning: config.toml is corrupt ({}), falling back to defaults",
+                    e
+                );
                 let config = AppConfig::default();
                 save(config_dir, &config)?;
                 Ok(config)

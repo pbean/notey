@@ -24,6 +24,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-reassign-note-workspace",
     "allow-rebuild-fts-index",
     "allow-search-notes",
+    "allow-export-markdown",
 ];
 
 // P0-INT-006: Tauri ACL rejects unauthorized commands
@@ -34,7 +35,9 @@ const EXPECTED_COMMANDS: &[&str] = &[
 #[test]
 fn test_capability_has_no_wildcard_permissions() {
     let cap: Value = serde_json::from_str(CAPABILITY_JSON).expect("invalid capability JSON");
-    let permissions = cap["permissions"].as_array().expect("permissions should be an array");
+    let permissions = cap["permissions"]
+        .as_array()
+        .expect("permissions should be an array");
 
     for perm in permissions {
         let perm_str = perm.as_str().expect("permission should be a string");
@@ -48,10 +51,15 @@ fn test_capability_has_no_wildcard_permissions() {
 #[test]
 fn test_capability_scoped_to_main_window_only() {
     let cap: Value = serde_json::from_str(CAPABILITY_JSON).expect("invalid capability JSON");
-    let windows = cap["windows"].as_array().expect("windows should be an array");
+    let windows = cap["windows"]
+        .as_array()
+        .expect("windows should be an array");
 
     assert_eq!(windows.len(), 1, "should have exactly one window scope");
-    assert_eq!(windows[0], "main", "capability should be scoped to 'main' window");
+    assert_eq!(
+        windows[0], "main",
+        "capability should be scoped to 'main' window"
+    );
 }
 
 #[test]

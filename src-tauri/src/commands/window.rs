@@ -4,6 +4,8 @@ use crate::errors::NoteyError;
 #[tauri::command]
 #[specta::specta]
 pub fn dismiss_window(window: tauri::WebviewWindow) -> Result<(), NoteyError> {
-    window.hide().map_err(|e| NoteyError::Config(format!("Failed to hide window: {}", e)))?;
+    window
+        .hide()
+        .map_err(|e| NoteyError::Config(format!("Failed to hide window: {}", e)))?;
     Ok(())
 }

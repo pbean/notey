@@ -101,9 +101,7 @@ pub fn reassign_note_workspace(
 /// Rebuild the FTS5 index from the content table. Use for recovery if the index drifts.
 #[tauri::command]
 #[specta::specta]
-pub fn rebuild_fts_index(
-    state: State<'_, Mutex<rusqlite::Connection>>,
-) -> Result<(), NoteyError> {
+pub fn rebuild_fts_index(state: State<'_, Mutex<rusqlite::Connection>>) -> Result<(), NoteyError> {
     let conn = state.lock().unwrap_or_else(recover_poisoned_db);
     services::notes::rebuild_fts_index(&conn)
 }

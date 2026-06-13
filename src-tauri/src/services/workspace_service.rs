@@ -12,12 +12,9 @@ const MAX_DETECT_DEPTH: usize = 20;
 
 /// Convert a Path to a UTF-8 string, returning a Validation error for non-UTF-8 paths.
 fn path_to_str(path: &Path) -> Result<String, NoteyError> {
-    path.to_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| NoteyError::Validation(format!(
-            "Path contains invalid UTF-8: {}",
-            path.display()
-        )))
+    path.to_str().map(|s| s.to_string()).ok_or_else(|| {
+        NoteyError::Validation(format!("Path contains invalid UTF-8: {}", path.display()))
+    })
 }
 
 /// Create a workspace or return the existing one if a workspace with the same path already exists.
@@ -39,9 +36,10 @@ pub fn create_workspace(
         ));
     }
     if !std::path::Path::new(path).is_absolute() {
-        return Err(NoteyError::Validation(
-            format!("Workspace path must be absolute: {}", path),
-        ));
+        return Err(NoteyError::Validation(format!(
+            "Workspace path must be absolute: {}",
+            path
+        )));
     }
     let canonical = dunce::canonicalize(path)
         .map_err(|e| NoteyError::Validation(format!("Cannot resolve path '{}': {}", path, e)))?;
@@ -94,8 +92,7 @@ fn upsert_workspace(
             if err.code == rusqlite::ErrorCode::ConstraintViolation =>
         {
             // UNIQUE constraint on path — return existing workspace
-            workspace_repo::find_by_path(conn, canonical_path)?
-                .ok_or(NoteyError::NotFound)
+            workspace_repo::find_by_path(conn, canonical_path)?.ok_or(NoteyError::NotFound)
         }
         Err(e) => Err(e),
     }

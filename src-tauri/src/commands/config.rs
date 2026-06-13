@@ -15,9 +15,7 @@ pub struct ConfigDir(pub std::path::PathBuf);
 /// Returns the full application config.
 #[tauri::command]
 #[specta::specta]
-pub fn get_config(
-    state: State<'_, Mutex<AppConfig>>,
-) -> Result<AppConfig, NoteyError> {
+pub fn get_config(state: State<'_, Mutex<AppConfig>>) -> Result<AppConfig, NoteyError> {
     let config = state.lock().unwrap_or_else(recover_poisoned_config);
     Ok(config.clone())
 }
@@ -41,10 +39,7 @@ pub fn update_config(
 
     let parsed_new_shortcut = if let Some(shortcut_str) = new_shortcut {
         let parsed = crate::parse_shortcut(shortcut_str).ok_or_else(|| {
-            NoteyError::Validation(format!(
-                "Invalid shortcut string: '{}'",
-                shortcut_str
-            ))
+            NoteyError::Validation(format!("Invalid shortcut string: '{}'", shortcut_str))
         })?;
         Some(parsed)
     } else {

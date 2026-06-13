@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::errors::NoteyError;
 use crate::models::SearchResult;
@@ -12,7 +12,13 @@ use crate::models::SearchResult;
 fn sanitize_fts_query(query: &str) -> String {
     let cleaned: String = query
         .chars()
-        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect();
 
     let fts_keywords = ["AND", "OR", "NOT", "NEAR"];
@@ -177,7 +183,11 @@ mod tests {
         let conn = setup_test_db();
 
         // Note with term only in content (many times)
-        insert_note(&conn, "generic note", "findme findme findme findme findme findme findme findme findme findme");
+        insert_note(
+            &conn,
+            "generic note",
+            "findme findme findme findme findme findme findme findme findme findme",
+        );
         // Note with term in title (10x weight)
         insert_note(&conn, "findme", "a completely different topic");
 
@@ -253,10 +263,16 @@ mod tests {
         let results = search_notes(&conn, "workspace_term_abc", None).expect("search failed");
         assert_eq!(results.len(), 2);
 
-        let ws_result = results.iter().find(|r| r.title == "ws note").expect("ws note not found");
+        let ws_result = results
+            .iter()
+            .find(|r| r.title == "ws note")
+            .expect("ws note not found");
         assert_eq!(ws_result.workspace_name, Some("my-workspace".to_string()));
 
-        let unscoped = results.iter().find(|r| r.title == "unscoped note").expect("unscoped not found");
+        let unscoped = results
+            .iter()
+            .find(|r| r.title == "unscoped note")
+            .expect("unscoped not found");
         assert!(unscoped.workspace_name.is_none());
     }
 
@@ -297,7 +313,12 @@ mod tests {
 
         for q in special_queries {
             let result = search_notes(&conn, q, None);
-            assert!(result.is_ok(), "query '{}' should not error: {:?}", q, result.err());
+            assert!(
+                result.is_ok(),
+                "query '{}' should not error: {:?}",
+                q,
+                result.err()
+            );
         }
     }
 
@@ -314,10 +335,22 @@ mod tests {
         };
 
         let json = serde_json::to_value(&result).expect("serialize failed");
-        assert!(json.get("workspaceName").is_some(), "should have camelCase workspaceName");
-        assert!(json.get("updatedAt").is_some(), "should have camelCase updatedAt");
-        assert!(json.get("workspace_name").is_none(), "should not have snake_case");
-        assert!(json.get("updated_at").is_none(), "should not have snake_case");
+        assert!(
+            json.get("workspaceName").is_some(),
+            "should have camelCase workspaceName"
+        );
+        assert!(
+            json.get("updatedAt").is_some(),
+            "should have camelCase updatedAt"
+        );
+        assert!(
+            json.get("workspace_name").is_none(),
+            "should not have snake_case"
+        );
+        assert!(
+            json.get("updated_at").is_none(),
+            "should not have snake_case"
+        );
     }
 
     #[test]
@@ -342,7 +375,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_fts_query_preserves_normal_text() {
-        assert_eq!(sanitize_fts_query("meeting notes project"), "meeting notes project");
+        assert_eq!(
+            sanitize_fts_query("meeting notes project"),
+            "meeting notes project"
+        );
         assert_eq!(sanitize_fts_query("rust programming"), "rust programming");
     }
 }
