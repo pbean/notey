@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-12 # story 5.6 → done
+last_updated: 2026-06-12 # epic-5 retrospective → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -99,14 +99,14 @@ development_status:
   epic-4-retrospective: done
 
   # Epic 5: Note Lifecycle & Data Export
-  epic-5: in-progress
+  epic-5: done
   5-1-soft-delete-note-to-trash-with-toast: done
   5-2-trash-view-note-restoration: done
   5-3-permanent-delete-with-confirmation-dialog: done
   5-4-trash-auto-purge: done
   5-5-markdown-export-with-native-file-picker: done
   5-6-json-export: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done # epic-5-retro-2026-06-12.md
 
   # Epic 6: CLI Integration
   epic-6: backlog
@@ -177,9 +177,15 @@ development_status:
   epic-3-retro-item-4-shadcn-command-spike: done # resolved by Story 4.5 (cmdk + shadcn command)
   epic-3-retro-item-5-trim-consistency-fix: done # commit 2ae2553
 
-  # Epic 4 Retro Items (2026-06-12):
-  epic-4-retro-item-1-startup-config-apply-layoutmode-theme: backlog # HIGH — main.tsx applies .dark only; layoutMode/theme not applied at boot
-  epic-4-retro-item-2-toggle-concurrency-guard: backlog # HIGH — toggleLayoutMode/toggleTheme lost-update on rapid double-call
-  epic-4-retro-item-3-investigate-frontend-test-growth: backlog # MEDIUM — confirm jsdom limits vs coverage gaps (~+7 tests/9 stories)
-  epic-4-retro-item-4-wire-palette-stubs-epic5-acs: backlog # MEDIUM — View Trash / Export-MD / Export-JSON as Epic 5 acceptance criteria
-  # Deferred (logged, not committed): first E2E smoke test — 4-epic zero-E2E streak, revisit at Epic 5 retro
+  # Epic 4 Retro Items (2026-06-12); statuses reconciled at Epic 5 retro 2026-06-12:
+  epic-4-retro-item-1-startup-config-apply-layoutmode-theme: done # DW-80, applyStartupConfig() committed 2026-04-13 (tracking flipped at epic-5 retro)
+  epic-4-retro-item-2-toggle-concurrency-guard: done # DW-81, isTogglingTheme/isTogglingLayoutMode committed 2026-04-13 (tracking flipped at epic-5 retro)
+  epic-4-retro-item-3-investigate-frontend-test-growth: done # MOOT/self-resolved — FE tests +91 in Epic 5 confirmed jsdom-limit hypothesis; superseded by epic-5-retro-item-1
+  epic-4-retro-item-4-wire-palette-stubs-epic5-acs: done # delivered across all of Epic 5 (View Trash + Export-MD + Export-JSON live)
+  # Deferred item (first E2E smoke test) resolved at Epic 5 retro → folded into epic-5-retro-item-1
+
+  # Epic 5 Retro Items (2026-06-12):
+  epic-5-retro-item-1-test-design-and-backfill-prior-epics: backlog # CRITICAL — TEA test-design + build missing tests for Epics 3-5 incl. first feature E2E (trash lifecycle + export file-write) + dedup→toast regression tests; gates Epic 6
+  epic-5-retro-item-2-singleflight-inflight-guard-helper: backlog # HIGH — replace 6 hand-rolled guards with shared singleflight-style helper (dedupe by key, share in-flight result, no ambiguous null); kills false-failure-toast bug
+  epic-5-retro-item-3-fix-retro-tracking-drift: done # MEDIUM — Epic 4 items 1/2/4 flipped to done above
+  epic-5-retro-item-4-permission-toml-auto-gen-check: backlog # LOW — recurs per new command (Tauri v2); consider scripted check/generator during Epic 6
