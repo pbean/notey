@@ -9,5 +9,6 @@
 //! The protocol structs are deliberately self-contained here and duplicated on
 //! the CLI side (no shared crate) per Story 6.1's AC6.
 
+pub mod events;
 pub mod protocol;
 pub mod socket_server;

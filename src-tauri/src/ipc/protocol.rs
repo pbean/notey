@@ -119,6 +119,25 @@ pub fn handle_request(conn: &Connection, raw: &[u8]) -> IpcResponse {
     }
 }
 
+/// If `raw` was a *successful* `create_note` request, return the new note's id
+/// so the caller (which holds the `AppHandle`) can emit the `note-created`
+/// real-time-sync event (Story 6.6). Returns `None` for a failed response, any
+/// other action, an unparseable request, or a success response whose `data`
+/// lacks an integer `id`.
+///
+/// This is the pure, socket- and runtime-agnostic seam: [`handle_request`] stays
+/// `AppHandle`-free, and only `lib.rs` performs the actual emit.
+pub fn created_note_id(raw: &[u8], response: &IpcResponse) -> Option<i64> {
+    if !response.success {
+        return None;
+    }
+    let request: IpcRequest = serde_json::from_slice(raw).ok()?;
+    if request.action != "create_note" {
+        return None;
+    }
+    response.data.as_ref()?.get("id")?.as_i64()
+}
+
 fn ok_value<T: Serialize>(value: T) -> IpcResponse {
     match serde_json::to_value(value) {
         Ok(data) => IpcResponse::ok(data),
@@ -447,6 +466,40 @@ mod tests {
         let resp = handle_request(&conn, &request("delete_everything", Value::Null));
         assert!(!resp.success);
         assert!(resp.error.unwrap().contains("unknown action"));
+    }
+
+    #[test]
+    fn created_note_id_returns_id_for_successful_create() {
+        let conn = setup_test_db();
+        let raw = request("create_note", serde_json::json!({ "content": "sync me" }));
+        let resp = handle_request(&conn, &raw);
+        assert!(resp.success);
+        let expected = resp.data.as_ref().unwrap()["id"].as_i64().unwrap();
+        assert_eq!(created_note_id(&raw, &resp), Some(expected));
+    }
+
+    #[test]
+    fn created_note_id_none_for_failed_create() {
+        let raw = request("create_note", serde_json::json!({ "content": "nope" }));
+        let resp = IpcResponse::err("boom");
+        assert_eq!(created_note_id(&raw, &resp), None);
+    }
+
+    #[test]
+    fn created_note_id_none_for_other_action() {
+        // A successful list response must not trigger a note-created emit.
+        let raw = request("list_notes", serde_json::json!({}));
+        let resp = IpcResponse::ok(serde_json::json!([{ "id": 5 }]));
+        assert_eq!(created_note_id(&raw, &resp), None);
+    }
+
+    #[test]
+    fn created_note_id_none_when_data_missing_id() {
+        let raw = request("create_note", serde_json::json!({ "content": "x" }));
+        let resp = IpcResponse::ok(serde_json::json!({ "title": "x" }));
+        assert_eq!(created_note_id(&raw, &resp), None);
+        // Unparseable request bytes never panic.
+        assert_eq!(created_note_id(b"{not json", &IpcResponse::ok(Value::Null)), None);
     }
 
     #[test]

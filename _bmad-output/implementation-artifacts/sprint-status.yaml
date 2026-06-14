@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-13 # story 6.5 → done
+last_updated: 2026-06-13 # story 6.6 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -115,7 +115,7 @@ development_status:
   6-3-cli-add-command: done
   6-4-cli-list-command: done
   6-5-cli-search-command: done
-  6-6-real-time-desktop-sync-on-cli-changes: backlog
+  6-6-real-time-desktop-sync-on-cli-changes: done
   6-7-cli-error-handling-user-isolation: backlog
   epic-6-retrospective: optional
 

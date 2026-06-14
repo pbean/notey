@@ -11,12 +11,14 @@ use specta_typescript::Typescript;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
-use tauri_specta::collect_commands;
+use tauri_specta::{collect_commands, collect_events, Event};
 
 use crate::commands::config::ConfigDir;
 
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
-    tauri_specta::Builder::<tauri::Wry>::new().commands(collect_commands![
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .events(collect_events![ipc::events::NoteCreated])
+        .commands(collect_commands![
         commands::notes::create_note,
         commands::notes::get_note,
         commands::notes::update_note,
@@ -146,7 +148,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            // Register typed tauri-specta events (e.g. `note-created`) into the
+            // app's EventRegistry so emits resolve and the frontend can listen.
+            builder.mount_events(app);
+
             // --- Database ---
             let data_dir = app
                 .path()
@@ -264,9 +271,23 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 let handler: ipc::socket_server::Handler =
                     std::sync::Arc::new(move |raw: &[u8]| {
-                        let state = app_handle.state::<Mutex<rusqlite::Connection>>();
-                        let conn = state.lock().unwrap_or_else(commands::recover_poisoned_db);
-                        ipc::protocol::handle_request(&conn, raw)
+                        let response = {
+                            let state = app_handle.state::<Mutex<rusqlite::Connection>>();
+                            let conn =
+                                state.lock().unwrap_or_else(commands::recover_poisoned_db);
+                            ipc::protocol::handle_request(&conn, raw)
+                            // conn guard dropped here, before emitting.
+                        };
+
+                        // Real-time desktop sync (Story 6.6): a CLI-created note
+                        // notifies the running app so its list refreshes. The
+                        // emit is best-effort — a failure must never alter the
+                        // IPC response returned to the client.
+                        if let Some(note_id) = ipc::protocol::created_note_id(raw, &response) {
+                            let _ = ipc::events::NoteCreated::now(note_id).emit(&app_handle);
+                        }
+
+                        response
                     });
                 let socket = ipc::socket_server::socket_path();
                 match ipc::socket_server::IpcServer::start(&socket, handler) {
@@ -279,7 +300,6 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(builder.invoke_handler())
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
