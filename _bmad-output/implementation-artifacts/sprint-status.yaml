@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-14 # story 7.4 → done
+last_updated: 2026-06-14 # story 7.5 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -125,7 +125,7 @@ development_status:
   7-2-theme-switching: done
   7-3-font-configuration: done
   7-4-global-hotkey-reconfiguration-conflict-detection: done
-  7-5-layout-mode-switching: backlog
+  7-5-layout-mode-switching: done
   7-6-keyboard-shortcut-configuration: backlog
   7-7-comprehensive-keyboard-navigation: backlog
   7-8-accessibility-compliance-audit: backlog

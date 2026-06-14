@@ -15,6 +15,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-get-config",
     "allow-update-config",
     "allow-dismiss-window",
+    "allow-apply-layout-mode",
     "allow-create-workspace",
     "allow-list-workspaces",
     "allow-get-workspace",

@@ -3,6 +3,7 @@ import type { AppConfig } from '../../generated/bindings';
 import { commands } from '../../generated/bindings';
 import { useToastStore } from '../toast/store';
 import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
+import { normalizeLayoutMode } from './layoutMode';
 import {
   clampFontSize,
   setFontFamily as applyFontFamily,
@@ -77,7 +78,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       set({
         config: {
           ...config,
-          general: { ...config.general, theme, layoutMode: config.general?.layoutMode ?? 'comfortable' },
+          general: { ...config.general, theme, layoutMode: normalizeLayoutMode(config.general?.layoutMode) },
         },
       });
     }
@@ -89,7 +90,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       set({
         config: {
           ...config,
-          general: { ...config.general, theme: config.general?.theme ?? 'dark', layoutMode },
+          general: { ...config.general, theme: config.general?.theme ?? 'dark', layoutMode: normalizeLayoutMode(layoutMode) },
         },
       });
     }

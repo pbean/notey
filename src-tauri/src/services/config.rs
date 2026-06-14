@@ -143,7 +143,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let config = load_or_create(tmp.path()).unwrap();
         assert_eq!(config.general.theme, "system");
-        assert_eq!(config.general.layout_mode, "comfortable");
+        assert_eq!(config.general.layout_mode, "floating");
         assert_eq!(config.editor.font_size, 14);
         assert_eq!(
             config.hotkey.global_shortcut,
@@ -158,7 +158,7 @@ mod tests {
         let toml_content = r#"
 [general]
 theme = "light"
-layoutMode = "comfortable"
+layoutMode = "half-screen"
 
 [editor]
 fontSize = 18
@@ -171,6 +171,7 @@ globalShortcut = "Ctrl+Shift+M"
 
         let config = load_or_create(tmp.path()).unwrap();
         assert_eq!(config.general.theme, "light");
+        assert_eq!(config.general.layout_mode, "half-screen");
         assert_eq!(config.editor.font_size, 18);
         assert_eq!(config.hotkey.global_shortcut, "Ctrl+Shift+M");
     }

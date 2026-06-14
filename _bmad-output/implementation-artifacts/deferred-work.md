@@ -673,7 +673,8 @@ decision: 2026-06-13 Defer until cross-platform design agreed — Keep tracking 
 origin: code review of spec-7-1-settings-view-panel.md, 2026-06-13
 location: src/features/settings/components/SettingsPanel.tsx:119
 reason: Story 7.1 reuses `general.layoutMode` for future window-mode values, so existing `comfortable` / `compact` configs currently render as `floating` in Settings. Fixing that cleanly needs a product/schema decision that lines up with Story 7.5 rather than another ad hoc mapping in 7.1.
-status: open
+status: done 2026-06-14 (Story 7.5)
+resolution: Story 7.5 makes `layoutMode` mean window mode (`floating`/`half-screen`/`full-screen`) and centralizes legacy-value handling in a shared `src/features/settings/layoutMode.ts` (`normalizeLayoutMode` maps `compact`/`comfortable`/unknown → `floating`), reused by the store, command-palette actions/startup, and `SettingsPanel`. The density `.compact` class and its CSS were removed; the backend default flipped to `floating` (re-introducing the value DW-84 had retired, now meaningful). DW-75's "no visible effect" window-mode follow-up is also resolved (toggle now applies real window geometry via the new `apply_layout_mode` command).
 
 ### DW-87: Hotkey runtime can drift from saved config when OS re-registration fails
 

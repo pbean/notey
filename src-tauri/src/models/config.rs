@@ -87,7 +87,9 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             theme: "system".to_string(),
-            layout_mode: "comfortable".to_string(),
+            // The default window mode (Story 7.5). `floating` is the always-on-top
+            // 600×400 capture overlay — the app's primary form factor.
+            layout_mode: "floating".to_string(),
         }
     }
 }

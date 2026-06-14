@@ -272,72 +272,65 @@ describe('toggleFormat', () => {
 });
 
 describe('toggleLayoutMode', () => {
-  beforeEach(() => {
-    document.documentElement.classList.remove('compact');
-  });
-
-  afterEach(() => {
-    document.documentElement.classList.remove('compact');
-  });
-
-  it('toggles from comfortable to compact', async () => {
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
-    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
-
-    mockInvoke.mockImplementation((cmd: string) => {
+  /** Mock get_config (current mode), update_config (echo), and apply_layout_mode (ok). */
+  function mockCycle(current: string) {
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: current } });
+    mockInvoke.mockImplementation((cmd: string, args?: { partial?: { general?: { layoutMode?: string } } }) => {
       if (cmd === 'get_config') return Promise.resolve(config);
-      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      if (cmd === 'update_config') {
+        const next = args?.partial?.general?.layoutMode ?? current;
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: next } }));
+      }
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
+  }
+
+  it('cycles floating to half-screen', async () => {
+    mockCycle('floating');
 
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'compact' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
     });
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
   });
 
-  it('treats a legacy "floating" value like comfortable when toggling', async () => {
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
-    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
-
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_config') return Promise.resolve(config);
-      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
-      return Promise.reject(new Error(`unmocked: ${cmd}`));
-    });
+  it('cycles half-screen to full-screen', async () => {
+    mockCycle('half-screen');
 
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'compact' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'full-screen' }, editor: null, hotkey: null },
     });
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'full-screen' });
   });
 
-  it('toggles from compact to comfortable', async () => {
-    document.documentElement.classList.add('compact');
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
-    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
-
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_config') return Promise.resolve(config);
-      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
-      return Promise.reject(new Error(`unmocked: ${cmd}`));
-    });
+  it('cycles full-screen back to floating', async () => {
+    mockCycle('full-screen');
 
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'comfortable' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null },
     });
-    expect(document.documentElement.classList.contains('compact')).toBe(false);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
   });
 
-  it('does not mutate DOM when updateConfig fails', async () => {
+  it('treats a legacy density value as floating when cycling', async () => {
+    mockCycle('comfortable');
+
+    await toggleLayoutMode();
+
+    // normalize('comfortable') === 'floating', so the next step is 'half-screen'.
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
+  });
+
+  it('does not apply the window mode when updateConfig fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_config') return Promise.resolve(config);
       if (cmd === 'update_config') return Promise.reject({ type: 'Database', message: 'boom' });
@@ -346,7 +339,8 @@ describe('toggleLayoutMode', () => {
 
     await toggleLayoutMode();
 
-    expect(document.documentElement.classList.contains('compact')).toBe(false);
+    const applyCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'apply_layout_mode');
+    expect(applyCalls).toHaveLength(0);
     consoleSpy.mockRestore();
   });
 
@@ -355,12 +349,12 @@ describe('toggleLayoutMode', () => {
     const pendingGetConfig = new Promise((resolve) => {
       resolveGetConfig = resolve;
     });
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
-    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
 
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_config') return pendingGetConfig;
-      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      if (cmd === 'update_config') return Promise.resolve(config);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
@@ -374,20 +368,20 @@ describe('toggleLayoutMode', () => {
     const updateCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'update_config');
     expect(getConfigCalls).toHaveLength(1);
     expect(updateCalls).toHaveLength(1);
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
   });
 });
 
 describe('applyStartupConfig', () => {
   afterEach(() => {
-    document.documentElement.classList.remove('dark', 'light', 'compact');
+    document.documentElement.classList.remove('dark', 'light');
   });
 
-  it('applies dark and compact from persisted config', async () => {
-    document.documentElement.classList.remove('dark', 'light', 'compact');
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+  it('applies the dark theme and persisted window mode', async () => {
+    document.documentElement.classList.remove('dark', 'light');
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'half-screen' } });
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
@@ -395,14 +389,15 @@ describe('applyStartupConfig', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.classList.contains('light')).toBe(false);
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
   });
 
-  it('applies light (and clears dark + compact) for a saved light + comfortable config', async () => {
-    document.documentElement.classList.add('dark', 'compact');
+  it('applies light theme and a legacy density value as the floating window mode', async () => {
+    document.documentElement.classList.add('dark');
     const config = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
@@ -410,23 +405,8 @@ describe('applyStartupConfig', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(false);
     expect(document.documentElement.classList.contains('light')).toBe(true);
-    expect(document.documentElement.classList.contains('compact')).toBe(false);
-  });
-
-  // Backward-compat: 'floating' was the old backend default before it was
-  // aligned to 'comfortable'. Configs persisted by older builds still hold it,
-  // and any non-'compact' value must render as non-compact.
-  it('treats a legacy "floating" layout value as non-compact', async () => {
-    document.documentElement.classList.add('compact');
-    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
-    mockInvoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_config') return Promise.resolve(config);
-      return Promise.reject(new Error(`unmocked: ${cmd}`));
-    });
-
-    await applyStartupConfig();
-
-    expect(document.documentElement.classList.contains('compact')).toBe(false);
+    // Legacy 'comfortable' normalizes to the 'floating' window mode.
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
   });
 
   it('leaves the DOM untouched when getConfig fails', async () => {
@@ -471,6 +451,7 @@ describe('startup-vs-toggle race', () => {
         return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
       }
       if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
@@ -493,9 +474,9 @@ describe('startup-vs-toggle race', () => {
     const pendingStartupGet = new Promise((resolve) => {
       resolveStartupGet = resolve;
     });
-    const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
-    const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
-    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
+    const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'full-screen' } });
+    const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } });
+    const updatedConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'half-screen' } });
 
     let getCallCount = 0;
     mockInvoke.mockImplementation((cmd: string) => {
@@ -504,21 +485,22 @@ describe('startup-vs-toggle race', () => {
         return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
       }
       if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
     const startup = applyStartupConfig();
-    await toggleLayoutMode(); // applies compact, marks layout as user-toggled
+    await toggleLayoutMode(); // cycles floating → half-screen, marks layout user-toggled
 
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
-    expect(document.documentElement.classList.contains('light')).toBe(true);
-
-    resolveStartupGet(startupConfig); // stale comfortable snapshot
+    resolveStartupGet(startupConfig); // stale full-screen snapshot resolves now
     await startup;
 
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.classList.contains('light')).toBe(false);
+    // Startup must skip the toggled layout dimension: only the toggle's
+    // half-screen was applied, never the stale full-screen snapshot.
+    const applyCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'apply_layout_mode');
+    expect(applyCalls).toHaveLength(1);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
+    expect(mockInvoke).not.toHaveBeenCalledWith('apply_layout_mode', { mode: 'full-screen' });
   });
 
   it('still applies persisted layout when only theme was toggled (dimensions independent)', async () => {
@@ -527,7 +509,7 @@ describe('startup-vs-toggle race', () => {
     const pendingStartupGet = new Promise((resolve) => {
       resolveStartupGet = resolve;
     });
-    // Startup snapshot has compact layout; user only toggles theme in the window.
+    // Startup snapshot has a legacy density layout; user only toggles theme.
     const startupConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
     const toggleConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'compact' } });
     const updatedConfig = buildConfig({ general: { theme: 'light', layoutMode: 'compact' } });
@@ -539,6 +521,7 @@ describe('startup-vs-toggle race', () => {
         return getCallCount === 1 ? pendingStartupGet : Promise.resolve(toggleConfig);
       }
       if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
 
@@ -549,9 +532,9 @@ describe('startup-vs-toggle race', () => {
     await startup;
 
     // Theme stays as toggled (light), but layout was NOT toggled, so startup
-    // applies the persisted compact.
+    // applies the persisted layout, normalized from 'compact' to 'floating'.
     expect(document.documentElement.classList.contains('light')).toBe(true);
-    expect(document.documentElement.classList.contains('compact')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
   });
 
   it('does not revert a font size changed during the boot window', async () => {
@@ -824,6 +807,7 @@ describe('settings setters', () => {
   function mockUpdateOk() {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'update_config') return Promise.resolve(buildConfig());
+      if (cmd === 'apply_layout_mode') return Promise.resolve(null);
       return Promise.reject(new Error(`unmocked: ${cmd}`));
     });
   }
@@ -859,15 +843,91 @@ describe('settings setters', () => {
   });
 
   describe('setLayoutMode', () => {
-    it('persists the chosen window mode without applying compact density', async () => {
+    it('persists the chosen window mode before applying it to the window', async () => {
       mockUpdateOk();
 
       await setLayoutMode('half-screen');
 
-      expect(document.documentElement.classList.contains('compact')).toBe(false);
+      const updateOrder = mockInvoke.mock.invocationCallOrder.find(
+        (_callOrder, index) => mockInvoke.mock.calls[index]?.[0] === 'update_config',
+      );
+      const applyOrder = mockInvoke.mock.invocationCallOrder.find(
+        (_callOrder, index) => mockInvoke.mock.calls[index]?.[0] === 'apply_layout_mode',
+      );
+
+      expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
         partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
       });
+      expect(updateOrder).toBeLessThan(applyOrder ?? Number.MAX_SAFE_INTEGER);
+    });
+
+    it('normalizes a legacy density value to floating before persisting', async () => {
+      mockUpdateOk();
+
+      await setLayoutMode('comfortable');
+
+      expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null },
+      });
+    });
+
+    it('does not apply the window mode when persistence fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'update_config') return Promise.reject({ type: 'Database', message: 'boom' });
+        if (cmd === 'apply_layout_mode') return Promise.resolve(null);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      await setLayoutMode('half-screen');
+
+      const applyCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'apply_layout_mode');
+      expect(applyCalls).toHaveLength(0);
+      consoleSpy.mockRestore();
+    });
+
+    it('serializes rapid layout selections in issue order', async () => {
+      let resolveFirstUpdate!: (value: unknown) => void;
+      const pendingFirstUpdate = new Promise((resolve) => {
+        resolveFirstUpdate = resolve;
+      });
+      let updateCount = 0;
+
+      mockInvoke.mockImplementation((cmd: string, args?: { partial?: { general?: { layoutMode?: string } } }) => {
+        if (cmd === 'update_config') {
+          updateCount += 1;
+          if (updateCount === 1) return pendingFirstUpdate;
+          const next = args?.partial?.general?.layoutMode ?? 'floating';
+          return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: next } }));
+        }
+        if (cmd === 'apply_layout_mode') return Promise.resolve(null);
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      const first = setLayoutMode('half-screen');
+      const second = setLayoutMode('full-screen');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const updateCallsBeforeResolve = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'update_config');
+      const applyCallsBeforeResolve = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'apply_layout_mode');
+      expect(updateCallsBeforeResolve).toHaveLength(1);
+      expect(applyCallsBeforeResolve).toHaveLength(0);
+
+      resolveFirstUpdate(buildConfig({ general: { theme: 'dark', layoutMode: 'half-screen' } }));
+      await Promise.all([first, second]);
+
+      const updateModes = mockInvoke.mock.calls
+        .filter(([cmd]) => cmd === 'update_config')
+        .map(([, args]) => (args as { partial: { general?: { layoutMode?: string } } }).partial.general?.layoutMode);
+      const applyModes = mockInvoke.mock.calls
+        .filter(([cmd]) => cmd === 'apply_layout_mode')
+        .map(([, args]) => (args as { mode: string }).mode);
+
+      expect(updateModes).toEqual(['half-screen', 'full-screen']);
+      expect(applyModes).toEqual(['half-screen', 'full-screen']);
     });
   });
 

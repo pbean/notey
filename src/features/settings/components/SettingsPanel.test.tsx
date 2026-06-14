@@ -13,6 +13,7 @@ async function openWith(config: AppConfig) {
   mockInvoke.mockImplementation((cmd: string) => {
     if (cmd === 'get_config') return Promise.resolve(config);
     if (cmd === 'update_config') return Promise.resolve(config);
+    if (cmd === 'apply_layout_mode') return Promise.resolve(null);
     return Promise.reject(new Error(`unmocked: ${cmd}`));
   });
   await useSettingsStore.getState().open();
@@ -105,6 +106,27 @@ describe('SettingsPanel', () => {
     await openWith(buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } }));
 
     expect(screen.getByTestId('layout-mode-select')).toHaveValue('floating');
+  });
+
+  it('applies and persists a window-mode selection (Story 7.5)', async () => {
+    await openWith(buildConfig({ general: { theme: 'dark', layoutMode: 'floating' } }));
+
+    fireEvent.change(screen.getByTestId('layout-mode-select'), { target: { value: 'half-screen' } });
+
+    await waitFor(() => {
+      const updateOrder = mockInvoke.mock.invocationCallOrder.find(
+        (_callOrder, index) => mockInvoke.mock.calls[index]?.[0] === 'update_config',
+      );
+      const applyOrder = mockInvoke.mock.invocationCallOrder.find(
+        (_callOrder, index) => mockInvoke.mock.calls[index]?.[0] === 'apply_layout_mode',
+      );
+
+      expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
+      });
+      expect(updateOrder).toBeLessThan(applyOrder ?? Number.MAX_SAFE_INTEGER);
+    });
   });
 
   it('captures a new shortcut and persists it on Save (Story 7.4)', async () => {

@@ -1,10 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../store';
 import { clampFontSize } from '../../command-palette/actions';
+import { WINDOW_LAYOUT_MODES, normalizeLayoutMode } from '../layoutMode';
 import { HotkeyCaptureField } from './HotkeyCaptureField';
-
-/** Window layout modes offered by the General section (behavior lands in Story 7.5). */
-const LAYOUT_MODES = ['floating', 'half-screen', 'full-screen'] as const;
 
 /** Restore focus to the editor when the overlay closes. */
 function focusEditor(): void {
@@ -128,10 +126,8 @@ export function SettingsPanel() {
   };
 
   const theme = config?.general?.theme ?? 'dark';
-  const rawLayoutMode = config?.general?.layoutMode ?? 'floating';
-  // The stored value may still be a legacy density ('comfortable'/'compact');
-  // show 'floating' until the user picks a window mode (reconciled in 7.5).
-  const layoutMode = (LAYOUT_MODES as readonly string[]).includes(rawLayoutMode) ? rawLayoutMode : 'floating';
+  // Legacy density values ('comfortable'/'compact') normalize to 'floating'.
+  const layoutMode = normalizeLayoutMode(config?.general?.layoutMode);
   const fontSize = clampFontSize(config?.editor?.fontSize ?? 14);
   const fontFamily = config?.editor?.fontFamily === 'sans' ? 'sans' : 'mono';
   const globalShortcut = config?.hotkey?.globalShortcut ?? 'Ctrl+Shift+N';
@@ -219,7 +215,7 @@ export function SettingsPanel() {
               onChange={(e) => setLayoutMode(e.target.value)}
               {...withFocusRing(controlBase)}
             >
-              {LAYOUT_MODES.map((m) => (
+              {WINDOW_LAYOUT_MODES.map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>

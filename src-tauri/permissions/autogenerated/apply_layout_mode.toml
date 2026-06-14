@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apply-layout-mode"
+description = "Enables the apply_layout_mode command without any pre-configured scope."
+commands.allow = ["apply_layout_mode"]
+
+[[permission]]
+identifier = "deny-apply-layout-mode"
+description = "Denies the apply_layout_mode command without any pre-configured scope."
+commands.deny = ["apply_layout_mode"]

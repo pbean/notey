@@ -199,17 +199,6 @@
   --space-8: 32px;
 }
 
-.compact {
-  --space-1: 2px;
-  --space-2: 4px;
-  --space-3: 6px;
-  --space-4: 10px;
-  --space-5: 14px;
-  --space-6: 18px;
-  --space-7: 22px;
-  --space-8: 26px;
-}
-
 .dark {
 
     --background: oklch(0.145 0 0);

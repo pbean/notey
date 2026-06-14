@@ -35,6 +35,18 @@ export const commands = {
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
+	/**
+	 *  Apply a window layout mode (`floating` / `half-screen` / `full-screen`) to the
+	 *  calling window (Story 7.5).
+	 * 
+	 *  Geometry is derived from the active monitor's usable work area (current monitor,
+	 *  falling back to the primary) so the taskbar/dock is respected. All branching
+	 *  lives in [`compute_layout`]; this command only applies the resulting plan. An
+	 *  unknown mode returns [`NoteyError::Validation`] and leaves the window untouched;
+	 *  individual window-property failures are logged best-effort so a partial platform
+	 *  capability still yields the right size and always-on-top state.
+	 */
+	applyLayoutMode: (mode: string) => typedError<null, NoteyError>(__TAURI_INVOKE("apply_layout_mode", { mode })),
 	createWorkspace: (name: string, path: string) => typedError<Workspace, NoteyError>(__TAURI_INVOKE("create_workspace", { name, path })),
 	listWorkspaces: () => typedError<WorkspaceInfo[], NoteyError>(__TAURI_INVOKE("list_workspaces")),
 	getWorkspace: (id: number) => typedError<WorkspaceInfo, NoteyError>(__TAURI_INVOKE("get_workspace", { id })),

@@ -5,6 +5,7 @@ import { useTabStore } from '../tabs/store';
 import { useToastStore } from '../toast/store';
 import { useWorkspaceStore } from '../workspace/store';
 import { flushSave } from '../editor/hooks/useAutoSave';
+import { normalizeLayoutMode, nextLayoutMode } from '../settings/layoutMode';
 
 let isCreatingNote = false;
 let isTrashingNote = false;
@@ -113,6 +114,7 @@ let isTogglingLayoutMode = false;
  */
 const userToggled = { theme: false, layoutMode: false, fontSize: false, fontFamily: false };
 let settingsSaveChain = Promise.resolve();
+let layoutModeChangeChain = Promise.resolve();
 
 /**
  * True while the active theme is the OS-tracking `system` value. Consulted by
@@ -171,6 +173,7 @@ export function resetToggleTracking(): void {
   userToggled.fontSize = false;
   userToggled.fontFamily = false;
   settingsSaveChain = Promise.resolve();
+  layoutModeChangeChain = Promise.resolve();
   systemThemeActive = false;
   systemThemeQuery = null;
   systemThemeListenerBound = false;
@@ -257,13 +260,27 @@ function bindSystemThemeListener(): void {
 }
 
 /**
- * Apply the compact layout class to `<html>`. Single source of truth for the
- * layout class rule, shared by startup application and the toggle.
- * Compact is applied iff `layoutMode === 'compact'`; any other value
- * (such as `comfortable`) clears it.
+ * Apply a window layout mode (`floating`/`half-screen`/`full-screen`) to the main
+ * window via the backend `apply_layout_mode` command. Single source of truth for
+ * the window-mode apply rule, shared by startup application, the toggle, and the
+ * settings setter. The raw value is normalized first, so a legacy density value
+ * (`compact`/`comfortable`) resolves to `floating`. Best-effort: a transport or
+ * command error is logged and reported back to the caller as `false` so the
+ * caller can decide how to handle a persisted-but-not-applied outcome.
  */
-function applyLayoutModeClass(layoutMode: string): void {
-  document.documentElement.classList.toggle('compact', layoutMode === 'compact');
+async function applyLayoutModeToWindow(layoutMode: string): Promise<boolean> {
+  const mode = normalizeLayoutMode(layoutMode);
+  try {
+    const result = await commands.applyLayoutMode(mode);
+    if (result.status === 'error') {
+      console.error('applyLayoutMode failed:', result.error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('applyLayoutMode threw:', error);
+    return false;
+  }
 }
 
 /** Inclusive bounds for the configurable editor font size, in pixels. */
@@ -302,21 +319,24 @@ function applyFontFamily(family: string): void {
  * Each save logs transport/result failures and still resolves, allowing later
  * settings updates to continue through the queue.
  */
-async function persistSettingsUpdate(partial: PartialAppConfig, context: string): Promise<void> {
+async function persistSettingsUpdate(partial: PartialAppConfig, context: string): Promise<boolean> {
   const save = async () => {
     try {
       const result = await commands.updateConfig(partial);
       if (result.status === 'error') {
         console.error(`updateConfig failed in ${context}:`, result.error);
+        return false;
       }
+      return true;
     } catch (error) {
       console.error(`Unexpected error updating settings in ${context}:`, error);
+      return false;
     }
   };
 
   const pending = settingsSaveChain.then(save, save);
-  settingsSaveChain = pending;
-  await pending;
+  settingsSaveChain = pending.then(() => undefined);
+  return pending;
 }
 
 /**
@@ -340,13 +360,17 @@ export async function applyStartupConfig(): Promise<void> {
   // choice (applied and persisted by the toggle) must not be reverted to this
   // possibly-stale boot-time snapshot. Each dimension is guarded independently.
   if (!userToggled.theme) applyThemeClass(theme);
-  if (!userToggled.layoutMode) applyLayoutModeClass(general?.layoutMode ?? 'comfortable');
 
   // Skip any font dimension the user already changed during the boot window:
   // their explicit live edit wins over this possibly-stale startup snapshot.
   const editor = configResult.data.editor;
   if (!userToggled.fontSize) applyFontSize(editor?.fontSize ?? 14);
   if (!userToggled.fontFamily) applyFontFamily(editor?.fontFamily ?? 'mono');
+
+  // Restore the persisted window layout mode (normalized; legacy density values
+  // resolve to `floating`). The window is hidden until first summon, so applying
+  // it here incurs no visible flicker. Awaited so startup is deterministic.
+  if (!userToggled.layoutMode) await applyLayoutModeToWindow(general?.layoutMode ?? 'floating');
 
   // Track live OS appearance changes for the `system` theme. Bound once; the
   // handler no-ops unless `system` is the active theme.
@@ -405,10 +429,11 @@ export function toggleFormat(): void {
 }
 
 /**
- * Toggle layout mode between compact and comfortable.
- * Reads current config and persists via updateConfig.
- * Guarded against concurrent calls (e.g. key repeat) to avoid a
- * lost-update race on the read-modify-write.
+ * Cycle the window layout mode Floating → Half-screen → Full-screen → Floating.
+ * Reads current config, persists the next mode via updateConfig, and applies it
+ * to the window. A legacy/unknown stored value is treated as `floating` (so the
+ * next step is `half-screen`). Guarded against concurrent calls (e.g. key repeat)
+ * to avoid a lost-update race on the read-modify-write.
  */
 export async function toggleLayoutMode(): Promise<void> {
   if (isTogglingLayoutMode) return;
@@ -421,8 +446,7 @@ export async function toggleLayoutMode(): Promise<void> {
       return;
     }
 
-    const current = configResult.data.general?.layoutMode ?? 'comfortable';
-    const next = current === 'compact' ? 'comfortable' : 'compact';
+    const next = nextLayoutMode(configResult.data.general?.layoutMode);
 
     const updateResult = await commands.updateConfig({
       general: { theme: null, layoutMode: next },
@@ -437,7 +461,7 @@ export async function toggleLayoutMode(): Promise<void> {
     // Mark layout as user-controlled before applying (see toggleTheme). Success
     // path only, so a failed toggle does not suppress startup application.
     userToggled.layoutMode = true;
-    applyLayoutModeClass(next);
+    await applyLayoutModeToWindow(next);
   } finally {
     isTogglingLayoutMode = false;
   }
@@ -460,19 +484,29 @@ export async function setTheme(theme: string): Promise<void> {
 }
 
 /**
- * Set the layout mode to an explicit value (from the settings panel) and
- * persist it. Applies the density class live ({@link applyLayoutModeClass}
- * treats any non-`compact` value as non-compact). Window-mode behavior for
- * floating/half-screen/full-screen is deferred to Story 7.5.
+ * Set the window layout mode to an explicit value (from the settings panel),
+ * persist it, then apply it live to the window. Calls are serialized so rapid
+ * select changes complete in issue order rather than racing each other.
  */
 export async function setLayoutMode(layoutMode: string): Promise<void> {
-  userToggled.layoutMode = true;
-  applyLayoutModeClass(layoutMode);
-  await persistSettingsUpdate({
-    general: { theme: null, layoutMode },
-    editor: null,
-    hotkey: null,
-  }, 'setLayoutMode');
+  const mode = normalizeLayoutMode(layoutMode);
+  const change = async () => {
+    const persisted = await persistSettingsUpdate({
+      general: { theme: null, layoutMode: mode },
+      editor: null,
+      hotkey: null,
+    }, 'setLayoutMode');
+    if (!persisted) return;
+
+    // Mark the dimension user-controlled only after the new value is committed,
+    // so a failed save never suppresses startup restoration later in the session.
+    userToggled.layoutMode = true;
+    await applyLayoutModeToWindow(mode);
+  };
+
+  const pending = layoutModeChangeChain.then(change, change);
+  layoutModeChangeChain = pending.then(() => undefined);
+  await pending;
 }
 
 /**
