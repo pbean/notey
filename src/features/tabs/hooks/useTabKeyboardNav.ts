@@ -3,10 +3,12 @@ import { useTabStore } from '../store';
 import { useSearchStore } from '../../search/store';
 import { useCommandPaletteStore } from '../../command-palette/store';
 import { useSettingsStore } from '../../settings/store';
+import { matchesShortcut } from '../../settings/shortcuts';
 
 /**
  * Registers global keyboard shortcuts for tab navigation.
- * Ctrl+Tab/Ctrl+Shift+Tab cycle tabs, Ctrl+1-9 jump, Ctrl+W closes.
+ * Ctrl+Tab/Ctrl+Shift+Tab cycle tabs and Ctrl+1-9 jump (both reserved); the
+ * "close tab" shortcut is the user-configurable `closeTab` binding.
  * All shortcuts are suppressed when an overlay captures focus, or no tabs exist.
  */
 export function useTabKeyboardNav(): void {
@@ -38,8 +40,8 @@ export function useTabKeyboardNav(): void {
         return;
       }
 
-      // Ctrl/Cmd+W — close active tab
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+      // Configurable "close tab" shortcut — close active tab
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.closeTab)) {
         e.preventDefault();
         if (activeTabIndex !== null) {
           closeTab(activeTabIndex);

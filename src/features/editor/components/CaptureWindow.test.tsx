@@ -54,8 +54,17 @@ vi.mock('../../command-palette/actions', async () => {
   };
 });
 
+/** Derive a physical `code` from a logical key (letters/digits), like a real event. */
+function codeForKey(key: string): string {
+  if (/^[a-zA-Z]$/.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  return key;
+}
+
 function pressKey(key: string, init: Partial<KeyboardEventInit> = {}) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', { key, code: codeForKey(key), bubbles: true, ...init }),
+  );
 }
 
 describe('CaptureWindow', () => {
@@ -98,5 +107,19 @@ describe('CaptureWindow', () => {
 
     expect(paletteActions.createNewNote).toHaveBeenCalledOnce();
     expect(paletteActions.toggleTheme).toHaveBeenCalledOnce();
+  });
+
+  it('honors a custom "new note" binding instead of the default', () => {
+    // Rebind new-note to Ctrl+G; the default Ctrl+N must no longer fire it.
+    useSettingsStore.setState({
+      bindings: { ...useSettingsStore.getState().bindings, newNote: 'Ctrl+G' },
+    });
+    render(<CaptureWindow />);
+
+    pressKey('n', { ctrlKey: true });
+    expect(paletteActions.createNewNote).not.toHaveBeenCalled();
+
+    pressKey('g', { ctrlKey: true });
+    expect(paletteActions.createNewNote).toHaveBeenCalledOnce();
   });
 });

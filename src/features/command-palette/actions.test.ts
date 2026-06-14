@@ -292,7 +292,7 @@ describe('toggleLayoutMode', () => {
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null, shortcuts: null },
     });
     expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
   });
@@ -303,7 +303,7 @@ describe('toggleLayoutMode', () => {
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'full-screen' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'full-screen' }, editor: null, hotkey: null, shortcuts: null },
     });
     expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'full-screen' });
   });
@@ -314,7 +314,7 @@ describe('toggleLayoutMode', () => {
     await toggleLayoutMode();
 
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null },
+      partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null, shortcuts: null },
     });
     expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
   });
@@ -822,7 +822,7 @@ describe('settings setters', () => {
       expect(document.documentElement.classList.contains('light')).toBe(true);
       expect(document.documentElement.classList.contains('dark')).toBe(false);
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: 'light', layoutMode: null }, editor: null, hotkey: null },
+        partial: { general: { theme: 'light', layoutMode: null }, editor: null, hotkey: null, shortcuts: null },
       });
     });
 
@@ -857,7 +857,7 @@ describe('settings setters', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
+        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null, shortcuts: null },
       });
       expect(updateOrder).toBeLessThan(applyOrder ?? Number.MAX_SAFE_INTEGER);
     });
@@ -869,7 +869,7 @@ describe('settings setters', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'floating' });
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null },
+        partial: { general: { theme: null, layoutMode: 'floating' }, editor: null, hotkey: null, shortcuts: null },
       });
     });
 
@@ -939,7 +939,7 @@ describe('settings setters', () => {
 
       expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('24px');
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null },
+        partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null, shortcuts: null },
       });
     });
 
@@ -950,7 +950,7 @@ describe('settings setters', () => {
 
       expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('12px');
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: 12, fontFamily: null }, hotkey: null },
+        partial: { general: null, editor: { fontSize: 12, fontFamily: null }, hotkey: null, shortcuts: null },
       });
     });
 
@@ -990,8 +990,8 @@ describe('settings setters', () => {
       await second;
 
       expect(updateCalls).toEqual([
-        { partial: { general: null, editor: { fontSize: 18, fontFamily: null }, hotkey: null } },
-        { partial: { general: null, editor: { fontSize: 20, fontFamily: null }, hotkey: null } },
+        { partial: { general: null, editor: { fontSize: 18, fontFamily: null }, hotkey: null, shortcuts: null } },
+        { partial: { general: null, editor: { fontSize: 20, fontFamily: null }, hotkey: null, shortcuts: null } },
       ]);
     });
   });
@@ -1004,7 +1004,7 @@ describe('settings setters', () => {
 
       expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-sans)');
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: null, fontFamily: 'sans' }, hotkey: null },
+        partial: { general: null, editor: { fontSize: null, fontFamily: 'sans' }, hotkey: null, shortcuts: null },
       });
     });
 

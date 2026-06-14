@@ -689,3 +689,10 @@ origin: code review of spec-7-2-theme-switching.md, 2026-06-14
 location: src/generated/bindings.ts:114
 reason: Story 7.2 documents `theme` as `system|dark|light`, but the generated frontend types and backend partial-config merge still accept arbitrary strings. The current UI only emits valid values, so shipping Story 7.2 does not require a schema redesign; tighten the Rust model and generated bindings in a follow-up hardening pass.
 status: open
+
+### DW-89: Define recovery for duplicate hand-edited shortcut bindings
+
+origin: code review of spec-7-6-keyboard-shortcut-configuration.md, 2026-06-14
+location: src/features/settings/shortcuts.ts:205, src/features/editor/components/CaptureWindow.tsx:44, src/features/tabs/hooks/useTabKeyboardNav.ts:43
+reason: The Settings UI prevents duplicate configurable bindings, but a hand-edited `[shortcuts]` config can still give multiple actions the same combo. The runtime then has no defined recovery policy and multiple handlers can fire on one keypress. Auto review deferred this because the right fallback (first wins, revert later duplicates to defaults, or surface an error) needs a product decision.
+status: open

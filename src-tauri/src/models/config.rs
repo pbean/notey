@@ -12,6 +12,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub hotkey: HotkeyConfig,
     #[serde(default)]
+    pub shortcuts: ShortcutConfig,
+    #[serde(default)]
     pub trash: TrashConfig,
 }
 
@@ -66,6 +68,65 @@ pub fn default_global_shortcut() -> String {
     }
 }
 
+/// In-app keyboard shortcut bindings (webview-only — never registered with the
+/// OS global-shortcut plugin).
+///
+/// Each field is a canonical shortcut string in the Story 7.4 capture grammar
+/// (`[Ctrl|Cmd]+[Shift]+[Alt]+KEY`, `KEY ∈ A–Z / 0–9`). Strings are stored with
+/// the canonical `Ctrl` primary-modifier token cross-platform; the webview
+/// matcher treats `Ctrl`/`Cmd` interchangeably, and the UI localizes `Ctrl`→`⌘`
+/// on macOS. Serialized in `config.toml` as the `[shortcuts]` section. Every
+/// field carries its own serde default so a missing key (or a missing section)
+/// falls back to the shipped binding.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutConfig {
+    #[serde(default = "default_command_palette_shortcut")]
+    pub command_palette: String,
+    #[serde(default = "default_search_shortcut")]
+    pub search: String,
+    #[serde(default = "default_new_note_shortcut")]
+    pub new_note: String,
+    #[serde(default = "default_toggle_note_list_shortcut")]
+    pub toggle_note_list: String,
+    #[serde(default = "default_toggle_theme_shortcut")]
+    pub toggle_theme: String,
+    #[serde(default = "default_close_tab_shortcut")]
+    pub close_tab: String,
+}
+
+fn default_command_palette_shortcut() -> String {
+    "Ctrl+P".to_string()
+}
+fn default_search_shortcut() -> String {
+    "Ctrl+F".to_string()
+}
+fn default_new_note_shortcut() -> String {
+    "Ctrl+N".to_string()
+}
+fn default_toggle_note_list_shortcut() -> String {
+    "Ctrl+B".to_string()
+}
+fn default_toggle_theme_shortcut() -> String {
+    "Ctrl+Shift+T".to_string()
+}
+fn default_close_tab_shortcut() -> String {
+    "Ctrl+W".to_string()
+}
+
+impl Default for ShortcutConfig {
+    fn default() -> Self {
+        Self {
+            command_palette: default_command_palette_shortcut(),
+            search: default_search_shortcut(),
+            new_note: default_new_note_shortcut(),
+            toggle_note_list: default_toggle_note_list_shortcut(),
+            toggle_theme: default_toggle_theme_shortcut(),
+            close_tab: default_close_tab_shortcut(),
+        }
+    }
+}
+
 /// Trash retention settings.
 ///
 /// `retention_days` controls how long soft-deleted notes remain recoverable
@@ -116,5 +177,28 @@ impl Default for TrashConfig {
         Self {
             retention_days: default_trash_retention_days(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_shortcuts_match_ux_dr27() {
+        let s = ShortcutConfig::default();
+        assert_eq!(s.command_palette, "Ctrl+P");
+        assert_eq!(s.search, "Ctrl+F");
+        assert_eq!(s.new_note, "Ctrl+N");
+        assert_eq!(s.toggle_note_list, "Ctrl+B");
+        assert_eq!(s.toggle_theme, "Ctrl+Shift+T");
+        assert_eq!(s.close_tab, "Ctrl+W");
+    }
+
+    #[test]
+    fn app_config_default_includes_shortcut_defaults() {
+        let config = AppConfig::default();
+        assert_eq!(config.shortcuts.command_palette, "Ctrl+P");
+        assert_eq!(config.shortcuts.close_tab, "Ctrl+W");
     }
 }

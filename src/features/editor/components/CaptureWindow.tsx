@@ -13,6 +13,7 @@ import { TrashPanel } from '../../trash/components/TrashPanel';
 import { useTrashStore } from '../../trash/store';
 import { SettingsPanel } from '../../settings/components/SettingsPanel';
 import { useSettingsStore } from '../../settings/store';
+import { matchesShortcut } from '../../settings/shortcuts';
 import { createNewNote, toggleTheme } from '../../command-palette/actions';
 
 /**
@@ -40,11 +41,11 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Register Ctrl/Cmd+F to open search overlay (closes command palette)
+  // Register the configurable "open search" shortcut (closes command palette)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (useSettingsStore.getState().isOpen) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.search)) {
         e.preventDefault();
         useCommandPaletteStore.getState().close();
         useSearchStore.getState().openSearch();
@@ -54,11 +55,11 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Register Ctrl/Cmd+P to toggle command palette
+  // Register the configurable "toggle command palette" shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (useSettingsStore.getState().isOpen) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.commandPalette)) {
         e.preventDefault();
         useCommandPaletteStore.getState().toggle();
       }
@@ -67,7 +68,7 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Register Ctrl/Cmd+N to create a new note (guarded against overlays and key repeat)
+  // Register the configurable "new note" shortcut (guarded against overlays and key repeat)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -78,7 +79,7 @@ export function CaptureWindow() {
         useTrashStore.getState().isOpen ||
         useSettingsStore.getState().isOpen
       ) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.newNote)) {
         e.preventDefault();
         void createNewNote();
       }
@@ -87,11 +88,11 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Register Ctrl/Cmd+B to toggle note list panel
+  // Register the configurable "toggle note list" shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (useSettingsStore.getState().isOpen) return;
-      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.toggleNoteList)) {
         e.preventDefault();
         const { isOpen } = useNoteListStore.getState();
         if (isOpen) {
@@ -107,7 +108,7 @@ export function CaptureWindow() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Register Ctrl/Cmd+Shift+T to toggle theme (guarded against overlays)
+  // Register the configurable "toggle theme" shortcut (guarded against overlays)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (
@@ -117,7 +118,7 @@ export function CaptureWindow() {
         useTrashStore.getState().isOpen ||
         useSettingsStore.getState().isOpen
       ) return;
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+      if (matchesShortcut(e, useSettingsStore.getState().bindings.toggleTheme)) {
         e.preventDefault();
         void toggleTheme();
       }

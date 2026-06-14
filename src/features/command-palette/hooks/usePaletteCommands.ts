@@ -11,6 +11,7 @@ import {
 import { useNoteListStore } from "../../note-list/store";
 import { useTrashStore } from "../../trash/store";
 import { useSettingsStore } from "../../settings/store";
+import { displayShortcut } from "../../settings/shortcuts";
 import { exportToMarkdown } from "../../export/exportMarkdown";
 import { exportToJson } from "../../export/exportJson";
 
@@ -27,6 +28,11 @@ function getIsMac(): boolean {
 /** Build the full palette command registry with real and stub actions. */
 export function usePaletteCommands(): PaletteCommand[] {
   const mod = getIsMac() ? "⌘" : "Ctrl";
+  // Configurable shortcuts: source hint labels from the live bindings so the
+  // palette reflects any rebinding (localized to ⌘ on macOS). Read non-reactively
+  // — the palette re-renders on each open and is never visible at the same time
+  // as the settings overlay, so a getState() snapshot is always current.
+  const bindings = useSettingsStore.getState().bindings;
 
   return [
     // Actions
@@ -34,14 +40,14 @@ export function usePaletteCommands(): PaletteCommand[] {
       id: "new-note",
       label: "New Note",
       group: "Actions",
-      shortcut: `${mod}+N`,
+      shortcut: displayShortcut(bindings.newNote),
       action: createNewNote,
     },
     {
       id: "search-notes",
       label: "Search Notes",
       group: "Actions",
-      shortcut: `${mod}+F`,
+      shortcut: displayShortcut(bindings.search),
       action: openSearch,
     },
     {
@@ -64,7 +70,7 @@ export function usePaletteCommands(): PaletteCommand[] {
       id: "open-note-list",
       label: "Open Note List",
       group: "Navigation",
-      shortcut: `${mod}+B`,
+      shortcut: displayShortcut(bindings.toggleNoteList),
       action: () => useNoteListStore.getState().open(),
     },
     {
@@ -80,7 +86,7 @@ export function usePaletteCommands(): PaletteCommand[] {
       id: "toggle-theme",
       label: "Toggle Theme",
       group: "Settings",
-      shortcut: `${mod}+Shift+T`,
+      shortcut: displayShortcut(bindings.toggleTheme),
       action: toggleTheme,
     },
     {

@@ -108,7 +108,7 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().config?.editor?.fontSize).toBe(24);
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null },
+        partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null, shortcuts: null },
       });
     });
   });
@@ -127,7 +127,7 @@ describe('useSettingsStore', () => {
     expect(ok).toBe(true);
     expect(useSettingsStore.getState().config?.hotkey?.globalShortcut).toBe('Ctrl+Alt+J');
     expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-      partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' } },
+      partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' }, shortcuts: null },
     });
     expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Global shortcut updated');
   });
@@ -166,5 +166,92 @@ describe('useSettingsStore', () => {
       'Couldn’t change the shortcut — keeping the previous one.',
     );
     consoleSpy.mockRestore();
+  });
+
+  it('hydrateShortcuts layers persisted bindings over defaults', () => {
+    useSettingsStore.getState().hydrateShortcuts(buildConfig({ shortcuts: { search: 'Ctrl+G' } }));
+
+    const { bindings } = useSettingsStore.getState();
+    expect(bindings.search).toBe('Ctrl+G'); // persisted override
+    expect(bindings.commandPalette).toBe('Ctrl+P'); // default fills the rest
+  });
+
+  it('hydrateShortcuts canonicalizes a persisted Cmd binding to Ctrl', () => {
+    useSettingsStore.getState().hydrateShortcuts(buildConfig({ shortcuts: { newNote: 'Cmd+G' } }));
+    expect(useSettingsStore.getState().bindings.newNote).toBe('Ctrl+G');
+  });
+
+  it('setShortcut persists the rebind and updates the live binding', async () => {
+    const updated = buildConfig({ shortcuts: { search: 'Ctrl+G' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig());
+      if (cmd === 'update_config') return Promise.resolve(updated);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setShortcut('search', 'Ctrl+G');
+
+    expect(ok).toBe(true);
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+G');
+    expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+      partial: {
+        general: null,
+        editor: null,
+        hotkey: null,
+        shortcuts: {
+          commandPalette: null,
+          search: 'Ctrl+G',
+          newNote: null,
+          toggleNoteList: null,
+          toggleTheme: null,
+          closeTab: null,
+        },
+      },
+    });
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Shortcut updated');
+  });
+
+  it('setShortcut rejects a combo already bound to another action without persisting', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'update_config') return Promise.resolve(buildConfig());
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    // newNote default Ctrl+N; binding search to Ctrl+N must be rejected.
+    const ok = await useSettingsStore.getState().setShortcut('search', 'Ctrl+N');
+
+    expect(ok).toBe(false);
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+F'); // unchanged
+    expect(mockInvoke).not.toHaveBeenCalledWith('update_config', expect.anything());
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes('already used'))).toBe(true);
+  });
+
+  it('setShortcut rejects a reserved combo (tab-jump range)', async () => {
+    const ok = await useSettingsStore.getState().setShortcut('search', 'Ctrl+5');
+    expect(ok).toBe(false);
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+F');
+  });
+
+  it('setShortcut rejects a combo without the primary modifier', async () => {
+    const ok = await useSettingsStore.getState().setShortcut('search', 'Shift+G');
+    expect(ok).toBe(false);
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+F');
+    expect(mockInvoke).not.toHaveBeenCalledWith('update_config', expect.anything());
+  });
+
+  it('resetShortcut restores the shipped default', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ shortcuts: { search: 'Ctrl+G' } }));
+      if (cmd === 'update_config') return Promise.resolve(buildConfig());
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+G');
+
+    const ok = await useSettingsStore.getState().resetShortcut('search');
+
+    expect(ok).toBe(true);
+    expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+F');
   });
 });

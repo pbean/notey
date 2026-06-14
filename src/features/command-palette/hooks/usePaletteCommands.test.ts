@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { usePaletteCommands } from './usePaletteCommands';
+import { useSettingsStore } from '../../settings/store';
 
 describe('usePaletteCommands', () => {
   it('returns 12 commands total', () => {
@@ -55,4 +56,17 @@ describe('usePaletteCommands', () => {
       expect(typeof cmd.action).toBe('function');
     }
   });
+
+  it('sources configurable shortcut hints from the live bindings', () => {
+    expect(usePaletteCommands().find((c) => c.id === 'search-notes')?.shortcut).toBe('Ctrl+F');
+
+    useSettingsStore.setState({
+      bindings: { ...useSettingsStore.getState().bindings, search: 'Ctrl+G' },
+    });
+    expect(usePaletteCommands().find((c) => c.id === 'search-notes')?.shortcut).toBe('Ctrl+G');
+  });
+});
+
+afterEach(() => {
+  useSettingsStore.getState().resetSettings();
 });

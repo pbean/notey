@@ -6,6 +6,7 @@ import { useToastStore } from '../toast/store';
 import { useWorkspaceStore } from '../workspace/store';
 import { flushSave } from '../editor/hooks/useAutoSave';
 import { normalizeLayoutMode, nextLayoutMode } from '../settings/layoutMode';
+import { useSettingsStore } from '../settings/store';
 
 let isCreatingNote = false;
 let isTrashingNote = false;
@@ -354,6 +355,11 @@ export async function applyStartupConfig(): Promise<void> {
     return;
   }
 
+  // Hydrate the live in-app shortcut bindings so the always-on keyboard handlers
+  // honor persisted custom bindings from the first keypress (defaults fill any
+  // missing key, including a legacy config with no [shortcuts] section).
+  useSettingsStore.getState().hydrateShortcuts(configResult.data);
+
   const general = configResult.data.general;
   const theme = general?.theme ?? 'dark';
   // Skip any dimension the user has already toggled this session: their explicit
@@ -406,6 +412,7 @@ export async function toggleTheme(): Promise<void> {
       general: { theme: next, layoutMode: null },
       editor: null,
       hotkey: null,
+      shortcuts: null,
     });
     if (updateResult.status === 'error') {
       console.error('updateConfig failed:', updateResult.error);
@@ -452,6 +459,7 @@ export async function toggleLayoutMode(): Promise<void> {
       general: { theme: null, layoutMode: next },
       editor: null,
       hotkey: null,
+      shortcuts: null,
     });
     if (updateResult.status === 'error') {
       console.error('updateConfig failed:', updateResult.error);
@@ -480,6 +488,7 @@ export async function setTheme(theme: string): Promise<void> {
     general: { theme, layoutMode: null },
     editor: null,
     hotkey: null,
+    shortcuts: null,
   }, 'setTheme');
 }
 
@@ -495,6 +504,7 @@ export async function setLayoutMode(layoutMode: string): Promise<void> {
       general: { theme: null, layoutMode: mode },
       editor: null,
       hotkey: null,
+      shortcuts: null,
     }, 'setLayoutMode');
     if (!persisted) return;
 
@@ -521,6 +531,7 @@ export async function setFontSize(size: number): Promise<void> {
     general: null,
     editor: { fontSize: clamped, fontFamily: null },
     hotkey: null,
+    shortcuts: null,
   }, 'setFontSize');
 }
 
@@ -535,6 +546,7 @@ export async function setFontFamily(family: string): Promise<void> {
     general: null,
     editor: { fontSize: null, fontFamily: family },
     hotkey: null,
+    shortcuts: null,
   }, 'setFontFamily');
 }
 

@@ -92,6 +92,7 @@ export type AppConfig = {
 	general?: GeneralConfig,
 	editor?: EditorConfig,
 	hotkey?: HotkeyConfig,
+	shortcuts?: ShortcutConfig,
 	trash?: TrashConfig,
 };
 
@@ -170,6 +171,7 @@ export type PartialAppConfig = {
 	general: PartialGeneralConfig | null,
 	editor: PartialEditorConfig | null,
 	hotkey: PartialHotkeyConfig | null,
+	shortcuts: PartialShortcutConfig | null,
 };
 
 // Partial editor settings for selective updates.
@@ -189,6 +191,19 @@ export type PartialHotkeyConfig = {
 	globalShortcut: string | null,
 };
 
+/**
+ *  Partial in-app shortcut settings for selective updates. Each rebindable
+ *  action is independently optional so the UI can persist a single rebind.
+ */
+export type PartialShortcutConfig = {
+	commandPalette: string | null,
+	search: string | null,
+	newNote: string | null,
+	toggleNoteList: string | null,
+	toggleTheme: string | null,
+	closeTab: string | null,
+};
+
 // A single search result with a content snippet and workspace context.
 export type SearchResult = {
 	id: number,
@@ -197,6 +212,27 @@ export type SearchResult = {
 	workspaceName: string | null,
 	updatedAt: string,
 	format: string,
+};
+
+/**
+ *  In-app keyboard shortcut bindings (webview-only — never registered with the
+ *  OS global-shortcut plugin).
+ * 
+ *  Each field is a canonical shortcut string in the Story 7.4 capture grammar
+ *  (`[Ctrl|Cmd]+[Shift]+[Alt]+KEY`, `KEY ∈ A–Z / 0–9`). Strings are stored with
+ *  the canonical `Ctrl` primary-modifier token cross-platform; the webview
+ *  matcher treats `Ctrl`/`Cmd` interchangeably, and the UI localizes `Ctrl`→`⌘`
+ *  on macOS. Serialized in `config.toml` as the `[shortcuts]` section. Every
+ *  field carries its own serde default so a missing key (or a missing section)
+ *  falls back to the shipped binding.
+ */
+export type ShortcutConfig = {
+	commandPalette?: string,
+	search?: string,
+	newNote?: string,
+	toggleNoteList?: string,
+	toggleTheme?: string,
+	closeTab?: string,
 };
 
 /**

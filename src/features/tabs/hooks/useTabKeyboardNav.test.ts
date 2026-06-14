@@ -5,9 +5,18 @@ import { useSearchStore } from '../../search/store';
 import { useSettingsStore } from '../../settings/store';
 import { useTabKeyboardNav } from './useTabKeyboardNav';
 
+/** Derive a physical `code` from a logical key (letters/digits), like a real event. */
+function codeForKey(key: string): string {
+  if (/^[a-zA-Z]$/.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  return key;
+}
+
 /** Fire a keydown event on window with the given properties. */
 function pressKey(key: string, opts: Partial<KeyboardEventInit> = {}) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', { key, code: codeForKey(key), bubbles: true, ...opts }),
+  );
 }
 
 function ctrlKey(key: string, shift = false) {
@@ -95,6 +104,21 @@ describe('useTabKeyboardNav', () => {
     expect(useTabStore.getState().tabs).toHaveLength(2);
     // closeTab neighbor selection: right neighbor (was index 2, now index 1)
     expect(useTabStore.getState().activeTabIndex).toBe(1);
+  });
+
+  it('honors a custom "close tab" binding', () => {
+    useSettingsStore.setState({
+      bindings: { ...useSettingsStore.getState().bindings, closeTab: 'Ctrl+G' },
+    });
+    setupTabs(3, 1);
+
+    ctrlKey('w'); // default no longer closes
+    expect(useTabStore.getState().tabs).toHaveLength(3);
+
+    ctrlKey('g'); // custom binding closes
+    expect(useTabStore.getState().tabs).toHaveLength(2);
+
+    useSettingsStore.getState().resetSettings();
   });
 
   // --- Guards ---

@@ -3,6 +3,8 @@ import { useSettingsStore } from '../store';
 import { clampFontSize } from '../../command-palette/actions';
 import { WINDOW_LAYOUT_MODES, normalizeLayoutMode } from '../layoutMode';
 import { HotkeyCaptureField } from './HotkeyCaptureField';
+import { ShortcutCaptureRow } from './ShortcutCaptureRow';
+import { CONFIGURABLE_ACTIONS, RESERVED_ACTIONS, displayShortcut } from '../shortcuts';
 
 /** Restore focus to the editor when the overlay closes. */
 function focusEditor(): void {
@@ -274,6 +276,28 @@ export function SettingsPanel() {
             <span style={labelStyle}>Global capture shortcut</span>
             <HotkeyCaptureField shortcut={globalShortcut} />
           </div>
+        </section>
+
+        {/* Shortcuts */}
+        <section style={{ marginBottom: 'var(--space-6)' }} aria-label="Keyboard shortcuts">
+          <h3 style={sectionTitleStyle}>Shortcuts</h3>
+          {CONFIGURABLE_ACTIONS.map((action) => (
+            <ShortcutCaptureRow key={action.id} action={action} />
+          ))}
+          {RESERVED_ACTIONS.map((reserved) => (
+            <div key={reserved.id} style={rowStyle}>
+              <span style={labelStyle}>{reserved.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <kbd
+                  data-testid={`reserved-shortcut-${reserved.id}`}
+                  style={{ ...controlBase, cursor: 'default' }}
+                >
+                  {displayShortcut(reserved.binding)}
+                </kbd>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Reserved</span>
+              </div>
+            </div>
+          ))}
         </section>
 
         {/* Advanced note + Done */}

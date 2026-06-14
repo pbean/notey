@@ -54,7 +54,7 @@ describe('SettingsPanel', () => {
     expect(document.documentElement.classList.contains('light')).toBe(true);
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: 'light', layoutMode: null }, editor: null, hotkey: null },
+        partial: { general: { theme: 'light', layoutMode: null }, editor: null, hotkey: null, shortcuts: null },
       });
     });
   });
@@ -72,7 +72,7 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: 'system', layoutMode: null }, editor: null, hotkey: null },
+        partial: { general: { theme: 'system', layoutMode: null }, editor: null, hotkey: null, shortcuts: null },
       });
     });
   });
@@ -84,7 +84,7 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: null, fontFamily: 'sans' }, hotkey: null },
+        partial: { general: null, editor: { fontSize: null, fontFamily: 'sans' }, hotkey: null, shortcuts: null },
       });
     });
   });
@@ -97,7 +97,7 @@ describe('SettingsPanel', () => {
     expect(screen.getByTestId('font-size-value')).toHaveTextContent('20px');
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: { fontSize: 20, fontFamily: null }, hotkey: null },
+        partial: { general: null, editor: { fontSize: 20, fontFamily: null }, hotkey: null, shortcuts: null },
       });
     });
   });
@@ -123,7 +123,7 @@ describe('SettingsPanel', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('apply_layout_mode', { mode: 'half-screen' });
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
+        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null, shortcuts: null },
       });
       expect(updateOrder).toBeLessThan(applyOrder ?? Number.MAX_SAFE_INTEGER);
     });
@@ -151,7 +151,7 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' } },
+        partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' }, shortcuts: null },
       });
     });
     // Back in display mode, showing the backend-confirmed binding.
@@ -223,7 +223,7 @@ describe('SettingsPanel', () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('update_config', {
-        partial: { general: null, editor: null, hotkey: { globalShortcut: platformDefaultShortcut() } },
+        partial: { general: null, editor: null, hotkey: { globalShortcut: platformDefaultShortcut() }, shortcuts: null },
       });
     });
   });
@@ -245,6 +245,67 @@ describe('SettingsPanel', () => {
     });
     expect(screen.getByTestId('global-shortcut-value')).toHaveTextContent('Ctrl+Alt+J');
     consoleSpy.mockRestore();
+  });
+
+  it('renders the Shortcuts section with configurable and reserved rows (Story 7.6)', async () => {
+    await openWith(buildConfig());
+
+    expect(screen.getByRole('heading', { name: 'Shortcuts' })).toBeInTheDocument();
+    // Configurable action: editable, showing its current binding.
+    expect(screen.getByTestId('shortcut-value-search')).toHaveTextContent('Ctrl+F');
+    expect(screen.getByTestId('change-shortcut-search')).toBeInTheDocument();
+    // Reserved action: listed read-only.
+    expect(screen.getByTestId('reserved-shortcut-openSettings')).toHaveTextContent('Ctrl+,');
+    expect(screen.getByTestId('reserved-shortcut-backHide')).toHaveTextContent('Esc');
+  });
+
+  it('captures and persists an in-app shortcut rebind (Story 7.6)', async () => {
+    const updated = buildConfig({ shortcuts: { search: 'Ctrl+G' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig());
+      if (cmd === 'update_config') return Promise.resolve(updated);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByTestId('change-shortcut-search'));
+    fireEvent.keyDown(screen.getByTestId('shortcut-capture-search'), { key: 'G', code: 'KeyG', ctrlKey: true });
+    expect(screen.getByTestId('shortcut-capture-search')).toHaveTextContent('Ctrl+G');
+
+    fireEvent.click(screen.getByTestId('save-shortcut-search'));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: {
+          general: null,
+          editor: null,
+          hotkey: null,
+          shortcuts: {
+            commandPalette: null,
+            search: 'Ctrl+G',
+            newNote: null,
+            toggleNoteList: null,
+            toggleTheme: null,
+            closeTab: null,
+          },
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('shortcut-value-search')).toHaveTextContent('Ctrl+G');
+    });
+  });
+
+  it('blocks Save and warns when a captured combo conflicts (Story 7.6)', async () => {
+    await openWith(buildConfig());
+
+    fireEvent.click(screen.getByTestId('change-shortcut-search'));
+    // Ctrl+N is newNote's binding — capturing it for search is a conflict.
+    fireEvent.keyDown(screen.getByTestId('shortcut-capture-search'), { key: 'N', code: 'KeyN', ctrlKey: true });
+
+    expect(screen.getByTestId('shortcut-warning-search')).toHaveTextContent(/already used by New note/i);
+    expect(screen.getByTestId('save-shortcut-search')).toBeDisabled();
   });
 
   it('does not close when the passive backdrop is clicked', async () => {

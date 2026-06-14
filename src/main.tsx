@@ -9,10 +9,15 @@ import "./index.css";
 // no opposite-theme flash. applyStartupConfig then reconciles to the persisted
 // preference (a saved dark/light choice overrides the OS default).
 applyBootTheme();
-void applyStartupConfig();
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+async function bootstrap(): Promise<void> {
+  await applyStartupConfig();
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+void bootstrap();

@@ -1,9 +1,18 @@
 import { create } from 'zustand';
-import type { AppConfig } from '../../generated/bindings';
+import type { AppConfig, PartialShortcutConfig } from '../../generated/bindings';
 import { commands } from '../../generated/bindings';
 import { useToastStore } from '../toast/store';
 import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
 import { normalizeLayoutMode } from './layoutMode';
+import {
+  bindingsFromConfig,
+  canonicalizeShortcut,
+  DEFAULT_SHORTCUTS,
+  findShortcutConflict,
+  INVALID_SHORTCUT_MESSAGE,
+  isConfigurableShortcut,
+  type ConfigurableShortcutId,
+} from './shortcuts';
 import {
   clampFontSize,
   setFontFamily as applyFontFamily,
@@ -21,6 +30,13 @@ interface SettingsState {
    * the user edits. Drives the form's controlled inputs. `null` until first open.
    */
   config: AppConfig | null;
+  /**
+   * Live in-app shortcut bindings (canonical `Ctrl+…` form), consulted by the
+   * always-on keyboard handlers regardless of whether the overlay is open.
+   * Initialized to the shipped defaults and hydrated from persisted config at
+   * startup via {@link SettingsActions.hydrateShortcuts}.
+   */
+  bindings: Record<string, string>;
 }
 
 /** Actions for managing settings state. */
@@ -47,14 +63,46 @@ interface SettingsActions {
    * conflict/error.
    */
   setGlobalShortcut: (shortcut: string) => Promise<boolean>;
+  /**
+   * Replace the live binding map from a config snapshot (persisted `[shortcuts]`
+   * layered over defaults). Called at startup so custom bindings take effect
+   * from the first keypress, and after the overlay loads a fresh config.
+   */
+  hydrateShortcuts: (config: AppConfig | null) => void;
+  /**
+   * Rebind one in-app action. Canonicalizes the combo, rejects conflicts with
+   * another action or a reserved combo (no double-binding is ever saved), then
+   * persists via `updateConfig` and updates the live bindings + config snapshot.
+   * Resolves `true` on success, `false` on conflict or persistence error.
+   */
+  setShortcut: (actionId: ConfigurableShortcutId, combo: string) => Promise<boolean>;
+  /** Restore one action to its shipped default binding (conflict-checked). */
+  resetShortcut: (actionId: ConfigurableShortcutId) => Promise<boolean>;
   /** Reset all settings state to initial values (test cleanup only). */
   resetSettings: () => void;
+}
+
+/** Build a full `PartialShortcutConfig` with only `actionId` set. */
+function shortcutPartial(
+  actionId: ConfigurableShortcutId,
+  value: string,
+): PartialShortcutConfig {
+  return {
+    commandPalette: null,
+    search: null,
+    newNote: null,
+    toggleNoteList: null,
+    toggleTheme: null,
+    closeTab: null,
+    [actionId]: value,
+  };
 }
 
 /** Per-feature Zustand store for the settings overlay. */
 export const useSettingsStore = create<SettingsState & SettingsActions>((set, get) => ({
   isOpen: false,
   config: null,
+  bindings: { ...DEFAULT_SHORTCUTS },
   open: async () => {
     let result;
     try {
@@ -68,7 +116,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       return false;
     }
     closeOtherOverlays('settings');
-    set({ isOpen: true, config: result.data });
+    set({ isOpen: true, config: result.data, bindings: bindingsFromConfig(result.data) });
     return true;
   },
   close: () => set({ isOpen: false }),
@@ -124,7 +172,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
   setGlobalShortcut: async (shortcut) => {
     let result;
     try {
-      result = await commands.updateConfig({ general: null, editor: null, hotkey: { globalShortcut: shortcut } });
+      result = await commands.updateConfig({ general: null, editor: null, hotkey: { globalShortcut: shortcut }, shortcuts: null });
     } catch (error) {
       console.error('updateConfig threw setting global shortcut:', error);
       useToastStore
@@ -158,7 +206,56 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
     useToastStore.getState().addToast('Global shortcut updated');
     return true;
   },
-  resetSettings: () => set({ isOpen: false, config: null }),
+  hydrateShortcuts: (config) => {
+    set({ bindings: bindingsFromConfig(config) });
+  },
+  setShortcut: async (actionId, combo) => {
+    const canonical = canonicalizeShortcut(combo);
+
+    if (!isConfigurableShortcut(canonical)) {
+      useToastStore.getState().addToast(INVALID_SHORTCUT_MESSAGE, 5000);
+      return false;
+    }
+
+    // Never persist a double-binding: reject a combo already owned by another
+    // action or a reserved combo. The capture UI surfaces the inline warning;
+    // this is the store-level safety net.
+    const conflict = findShortcutConflict(canonical, get().bindings, actionId);
+    if (conflict) {
+      useToastStore.getState().addToast(`Shortcut already used by ${conflict.label}.`, 5000);
+      return false;
+    }
+
+    let result;
+    try {
+      result = await commands.updateConfig({
+        general: null,
+        editor: null,
+        hotkey: null,
+        shortcuts: shortcutPartial(actionId, canonical),
+      });
+    } catch (error) {
+      console.error('updateConfig threw setting shortcut:', error);
+      useToastStore.getState().addToast('Couldn’t change the shortcut — keeping the previous one.', 5000);
+      return false;
+    }
+    if (result.status === 'error') {
+      console.error('updateConfig failed setting shortcut:', result.error);
+      useToastStore.getState().addToast('Couldn’t change the shortcut — keeping the previous one.', 5000);
+      return false;
+    }
+
+    set((state) => ({
+      config: result.data,
+      bindings: { ...state.bindings, [actionId]: canonical },
+    }));
+    useToastStore.getState().addToast('Shortcut updated');
+    return true;
+  },
+  resetShortcut: async (actionId) => {
+    return get().setShortcut(actionId, DEFAULT_SHORTCUTS[actionId]);
+  },
+  resetSettings: () => set({ isOpen: false, config: null, bindings: { ...DEFAULT_SHORTCUTS } }),
 }));
 
 registerOverlay('settings', () => useSettingsStore.getState().close());

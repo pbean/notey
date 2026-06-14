@@ -97,6 +97,27 @@ pub fn merge_update(existing: &AppConfig, partial: &PartialAppConfig) -> AppConf
         }
     }
 
+    if let Some(ref shortcuts) = partial.shortcuts {
+        if let Some(ref v) = shortcuts.command_palette {
+            merged.shortcuts.command_palette = v.clone();
+        }
+        if let Some(ref v) = shortcuts.search {
+            merged.shortcuts.search = v.clone();
+        }
+        if let Some(ref v) = shortcuts.new_note {
+            merged.shortcuts.new_note = v.clone();
+        }
+        if let Some(ref v) = shortcuts.toggle_note_list {
+            merged.shortcuts.toggle_note_list = v.clone();
+        }
+        if let Some(ref v) = shortcuts.toggle_theme {
+            merged.shortcuts.toggle_theme = v.clone();
+        }
+        if let Some(ref v) = shortcuts.close_tab {
+            merged.shortcuts.close_tab = v.clone();
+        }
+    }
+
     merged
 }
 
@@ -107,6 +128,7 @@ pub struct PartialAppConfig {
     pub general: Option<PartialGeneralConfig>,
     pub editor: Option<PartialEditorConfig>,
     pub hotkey: Option<PartialHotkeyConfig>,
+    pub shortcuts: Option<PartialShortcutConfig>,
 }
 
 /// Partial general settings for selective updates.
@@ -130,6 +152,19 @@ pub struct PartialEditorConfig {
 #[serde(rename_all = "camelCase")]
 pub struct PartialHotkeyConfig {
     pub global_shortcut: Option<String>,
+}
+
+/// Partial in-app shortcut settings for selective updates. Each rebindable
+/// action is independently optional so the UI can persist a single rebind.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialShortcutConfig {
+    pub command_palette: Option<String>,
+    pub search: Option<String>,
+    pub new_note: Option<String>,
+    pub toggle_note_list: Option<String>,
+    pub toggle_theme: Option<String>,
+    pub close_tab: Option<String>,
 }
 
 #[cfg(test)]
@@ -249,6 +284,7 @@ fontSize = 18
                 font_family: None,
             }),
             hotkey: None,
+            shortcuts: None,
         };
 
         let merged = merge_update(&existing, &partial);
@@ -277,6 +313,7 @@ fontSize = 18
                 font_family: Some("sans".to_string()),
             }),
             hotkey: None,
+            shortcuts: None,
         };
 
         let merged = merge_update(&existing, &partial);
@@ -310,6 +347,67 @@ fontSize = 18
 
         let loaded = load_or_create(tmp.path()).unwrap();
         assert_eq!(loaded.editor.font_family, "sans");
+    }
+
+    #[test]
+    fn default_shortcuts_when_section_missing() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[editor]
+fontSize = 18
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(
+            config.shortcuts.command_palette, "Ctrl+P",
+            "missing [shortcuts] section must fall back to defaults"
+        );
+        assert_eq!(config.shortcuts.close_tab, "Ctrl+W");
+    }
+
+    #[test]
+    fn shortcuts_round_trip_through_toml() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[shortcuts]
+search = "Ctrl+G"
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        // Overridden key reflects the file…
+        assert_eq!(config.shortcuts.search, "Ctrl+G");
+        // …while keys absent from the section keep their defaults.
+        assert_eq!(config.shortcuts.command_palette, "Ctrl+P");
+    }
+
+    #[test]
+    fn merge_update_applies_partial_shortcut() {
+        let existing = AppConfig::default();
+        let partial = PartialAppConfig {
+            general: None,
+            editor: None,
+            hotkey: None,
+            shortcuts: Some(PartialShortcutConfig {
+                command_palette: None,
+                search: Some("Ctrl+G".to_string()),
+                new_note: None,
+                toggle_note_list: None,
+                toggle_theme: None,
+                close_tab: None,
+            }),
+        };
+
+        let merged = merge_update(&existing, &partial);
+        assert_eq!(merged.shortcuts.search, "Ctrl+G"); // changed
+        assert_eq!(merged.shortcuts.new_note, "Ctrl+N"); // unchanged default
+        assert_eq!(
+            merged.hotkey.global_shortcut,
+            crate::models::config::default_global_shortcut()
+        ); // unchanged
     }
 
     #[test]

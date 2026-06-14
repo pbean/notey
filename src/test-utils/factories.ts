@@ -34,6 +34,14 @@ export function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     general: { theme: 'system', layoutMode: 'floating' },
     editor: { fontSize: 14, fontFamily: 'mono' },
     hotkey: { globalShortcut: 'Ctrl+Shift+N' },
+    shortcuts: {
+      commandPalette: 'Ctrl+P',
+      search: 'Ctrl+F',
+      newNote: 'Ctrl+N',
+      toggleNoteList: 'Ctrl+B',
+      toggleTheme: 'Ctrl+Shift+T',
+      closeTab: 'Ctrl+W',
+    },
     ...overrides,
   };
 }
