@@ -697,4 +697,5 @@ resolution: Replaced `GeneralConfig.theme: String` with a typed `Theme { System,
 origin: code review of spec-7-6-keyboard-shortcut-configuration.md, 2026-06-14
 location: src/features/settings/shortcuts.ts:205, src/features/editor/components/CaptureWindow.tsx:44, src/features/tabs/hooks/useTabKeyboardNav.ts:43
 reason: The Settings UI prevents duplicate configurable bindings, but a hand-edited `[shortcuts]` config can still give multiple actions the same combo. The runtime then has no defined recovery policy and multiple handlers can fire on one keypress. Auto review deferred this because the right fallback (first wins, revert later duplicates to defaults, or surface an error) needs a product decision.
-status: open
+status: done 2026-06-14
+resolution: bindingsFromConfig now applies first-binding-wins dedupe at load (reserved combos pre-claimed), reverting later duplicates to their default (or empty) and emitting a console.warn, so only one handler fires per combo. See spec-dw-decision-dw-89.md.

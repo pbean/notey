@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   bindingsFromConfig,
   canonicalizeShortcut,
@@ -27,9 +27,11 @@ function keyEvent(
 }
 
 describe('canonicalizeShortcut', () => {
-  it('rewrites the primary Cmd/Meta token to Ctrl', () => {
+  it('normalizes modifier aliases, order, and duplicates', () => {
     expect(canonicalizeShortcut('Cmd+Shift+B')).toBe('Ctrl+Shift+B');
     expect(canonicalizeShortcut('Meta+P')).toBe('Ctrl+P');
+    expect(canonicalizeShortcut('Shift+Meta+Alt+J')).toBe('Ctrl+Shift+Alt+J');
+    expect(canonicalizeShortcut('Ctrl+Ctrl+J')).toBe('Ctrl+J');
   });
 
   it('leaves a canonical Ctrl shortcut unchanged (idempotent)', () => {
@@ -57,6 +59,7 @@ describe('matchesShortcut', () => {
   it('requires exact Shift/Alt — Ctrl+P never fires under Ctrl+Shift+P', () => {
     expect(matchesShortcut(keyEvent('KeyP', { ctrl: true, shift: true }), 'Ctrl+P')).toBe(false);
     expect(matchesShortcut(keyEvent('KeyT', { ctrl: true, shift: true }), 'Ctrl+Shift+T')).toBe(true);
+    expect(matchesShortcut(keyEvent('KeyT', { ctrl: true, shift: true }), 'Shift+Ctrl+T')).toBe(true);
     expect(matchesShortcut(keyEvent('KeyT', { ctrl: true }), 'Ctrl+Shift+T')).toBe(false);
   });
 
@@ -110,6 +113,7 @@ describe('findShortcutConflict', () => {
     expect(findShortcutConflict('Ctrl+G', bindings, 'search')).toBeNull();
     // Cmd+N (macOS capture) still collides with newNote's Ctrl+N.
     expect(findShortcutConflict('Cmd+N', bindings, 'search')?.label).toBe('New note');
+    expect(findShortcutConflict('Shift+Ctrl+T', bindings, 'search')?.label).toBe('Toggle theme');
   });
 });
 
@@ -143,5 +147,88 @@ describe('bindingsFromConfig', () => {
     for (const action of CONFIGURABLE_ACTIONS) {
       expect(typeof result[action.id]).toBe('string');
     }
+  });
+
+  describe('duplicate recovery (first-binding-wins)', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('leaves distinct combos untouched and warns for none', () => {
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+J', search: 'Ctrl+K' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+J');
+      expect(result.search).toBe('Ctrl+K');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps the earlier registry action and reverts the later duplicate to its default', () => {
+      // commandPalette precedes search in CONFIGURABLE_ACTIONS.
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+J', search: 'Ctrl+J' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+J');
+      expect(result.search).toBe('Ctrl+F'); // search's shipped default
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('search'));
+    });
+
+    it('canonicalizes Cmd/Meta before detecting a duplicate', () => {
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+J', search: 'Cmd+J' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+J');
+      expect(result.search).toBe('Ctrl+F');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('canonicalizes reordered modifiers before detecting a duplicate', () => {
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+Shift+J', search: 'Shift+Ctrl+J' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+Shift+J');
+      expect(result.search).toBe('Ctrl+F');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('canonicalizes repeated modifiers before detecting a duplicate', () => {
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+J', search: 'Ctrl+Ctrl+J' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+J');
+      expect(result.search).toBe('Ctrl+F');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops to an empty binding when the later duplicate default is also claimed', () => {
+      // commandPalette steals search's own default (Ctrl+F); search then cannot
+      // take its config value (claimed) nor its default (also claimed) → unbound.
+      const result = bindingsFromConfig(
+        buildConfig({ shortcuts: { commandPalette: 'Ctrl+F', search: 'Ctrl+F' } }),
+      );
+      expect(result.commandPalette).toBe('Ctrl+F');
+      expect(result.search).toBe('');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('reverts a configurable action that lands on a reserved combo', () => {
+      const result = bindingsFromConfig(buildConfig({ shortcuts: { search: 'Ctrl+5' } }));
+      expect(result.search).toBe('Ctrl+F'); // reserved Ctrl+1…9 stays tab-jump's
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Ctrl+5'));
+    });
+
+    it('does not warn when an invalid value merely falls back to default', () => {
+      const result = bindingsFromConfig(buildConfig({ shortcuts: { search: 'Shift+G' } }));
+      expect(result.search).toBe('Ctrl+F');
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 });

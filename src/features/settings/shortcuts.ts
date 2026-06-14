@@ -97,14 +97,37 @@ function isMacOS(): boolean {
 }
 
 /**
- * Rewrite a shortcut to its canonical storage form: the primary-modifier token
- * is always `Ctrl` cross-platform (a captured macOS `Cmd`/`Meta` becomes
- * `Ctrl`). Idempotent.
+ * Rewrite a shortcut to its canonical storage form: any `Cmd`/`Meta` token
+ * becomes `Ctrl`, known modifiers are ordered as `Ctrl+Shift+Alt`, and
+ * repeated modifiers collapse. This keeps semantically equivalent hand-edited
+ * shortcuts comparable. Idempotent.
  */
 export function canonicalizeShortcut(shortcut: string): string {
   const parts = shortcut.split('+');
-  if (parts[0] === 'Cmd' || parts[0] === 'Meta') parts[0] = 'Ctrl';
-  return parts.join('+');
+  if (parts.length === 0) return shortcut;
+
+  const mainKey = parts[parts.length - 1];
+  const modifiers = parts.slice(0, -1).map((modifier) => {
+    if (modifier === 'Cmd' || modifier === 'Meta') return 'Ctrl';
+    return modifier;
+  });
+
+  const ordered: string[] = [];
+  for (const modifier of ['Ctrl', 'Shift', 'Alt']) {
+    if (modifiers.includes(modifier)) ordered.push(modifier);
+  }
+  for (const modifier of modifiers) {
+    if (
+      modifier !== 'Ctrl' &&
+      modifier !== 'Shift' &&
+      modifier !== 'Alt' &&
+      !ordered.includes(modifier)
+    ) {
+      ordered.push(modifier);
+    }
+  }
+
+  return [...ordered, mainKey].join('+');
 }
 
 /** True when the main-key token is within the configurable shortcut grammar. */
@@ -199,8 +222,21 @@ export function findShortcutConflict(
 
 /**
  * Build the live binding map by layering the persisted `[shortcuts]` config
- * over the shipped defaults. Any missing or empty key keeps its default, so a
- * legacy config with no `[shortcuts]` section yields the full default set.
+ * over the shipped defaults. Any missing, empty, or invalid key keeps its
+ * default, so a legacy config with no `[shortcuts]` section yields the full
+ * default set.
+ *
+ * Recovery for duplicate hand-edited bindings is **first-binding-wins**: the
+ * Settings UI blocks duplicate configurable bindings, but a hand-edited
+ * `[shortcuts]` config can still give multiple actions the same combo, or a
+ * reserved combo (`Ctrl+1…9`). Without recovery, two handlers would fire on one
+ * keypress. So we walk {@link CONFIGURABLE_ACTIONS} in registry order: the first
+ * action to claim a canonical combo keeps it; a later action whose resolved
+ * combo is already claimed (by an earlier action or a {@link RESERVED_COMBOS}
+ * entry) is ignored and falls back to its shipped default — or, if that default
+ * is also claimed, to an empty (never-matching) binding the user can rebind. Each
+ * dropped binding emits one `console.warn`. The result therefore never assigns
+ * the same combo to two actions, guaranteeing at most one handler per keypress.
  */
 export function bindingsFromConfig(
   config: AppConfig | null,
@@ -208,11 +244,32 @@ export function bindingsFromConfig(
   const stored = config?.shortcuts;
   const result: Record<ConfigurableShortcutId, string> = { ...DEFAULT_SHORTCUTS };
   if (!stored) return result;
+
+  // Reserved combos are owned by hard-coded handlers, so they are pre-claimed:
+  // a configurable action may never shadow them. (Their keys are canonical.)
+  const claimed = new Set<string>(Object.keys(RESERVED_COMBOS));
+
   for (const action of CONFIGURABLE_ACTIONS) {
     const value = stored[action.id];
-    if (typeof value === 'string' && value.length > 0 && isConfigurableShortcut(value)) {
-      result[action.id] = canonicalizeShortcut(value);
+    const candidate =
+      typeof value === 'string' && value.length > 0 && isConfigurableShortcut(value)
+        ? canonicalizeShortcut(value)
+        : canonicalizeShortcut(DEFAULT_SHORTCUTS[action.id]);
+
+    let combo = candidate;
+    if (claimed.has(combo)) {
+      console.warn(
+        `Ignoring duplicate shortcut "${combo}" for "${action.id}"; an earlier action or reserved combo already owns it.`,
+      );
+      const fallback = canonicalizeShortcut(DEFAULT_SHORTCUTS[action.id]);
+      // Fall back to the shipped default unless it too is already claimed, in
+      // which case leave this action unbound rather than fire a second handler.
+      combo = claimed.has(fallback) ? '' : fallback;
     }
+
+    if (combo.length > 0) claimed.add(combo);
+    result[action.id] = combo;
   }
+
   return result;
 }
