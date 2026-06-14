@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::errors::NoteyError;
-use crate::models::config::AppConfig;
+use crate::models::config::{AppConfig, Theme};
 
 /// Returns the platform-standard config directory for Notey.
 /// Linux: `$XDG_CONFIG_HOME/notey/`, macOS: `~/Library/Application Support/com.notey.app/`,
@@ -74,8 +74,8 @@ pub fn merge_update(existing: &AppConfig, partial: &PartialAppConfig) -> AppConf
     let mut merged = existing.clone();
 
     if let Some(ref general) = partial.general {
-        if let Some(ref theme) = general.theme {
-            merged.general.theme = theme.clone();
+        if let Some(theme) = general.theme {
+            merged.general.theme = theme;
         }
         if let Some(ref layout_mode) = general.layout_mode {
             merged.general.layout_mode = layout_mode.clone();
@@ -135,7 +135,7 @@ pub struct PartialAppConfig {
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PartialGeneralConfig {
-    pub theme: Option<String>,
+    pub theme: Option<Theme>,
     pub layout_mode: Option<String>,
 }
 
@@ -177,7 +177,7 @@ mod tests {
     fn load_creates_default_when_missing() {
         let tmp = TempDir::new().unwrap();
         let config = load_or_create(tmp.path()).unwrap();
-        assert_eq!(config.general.theme, "system");
+        assert_eq!(config.general.theme, Theme::System);
         assert_eq!(config.general.layout_mode, "floating");
         assert_eq!(config.editor.font_size, 14);
         assert_eq!(
@@ -205,7 +205,7 @@ globalShortcut = "Ctrl+Shift+M"
         fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
 
         let config = load_or_create(tmp.path()).unwrap();
-        assert_eq!(config.general.theme, "light");
+        assert_eq!(config.general.theme, Theme::Light);
         assert_eq!(config.general.layout_mode, "half-screen");
         assert_eq!(config.editor.font_size, 18);
         assert_eq!(config.hotkey.global_shortcut, "Ctrl+Shift+M");
@@ -271,7 +271,48 @@ fontSize = 18
         fs::write(tmp.path().join("config.toml"), "{{invalid toml}}").unwrap();
 
         let config = load_or_create(tmp.path()).unwrap();
-        assert_eq!(config.general.theme, "system");
+        assert_eq!(config.general.theme, Theme::System);
+    }
+
+    #[test]
+    fn partial_config_rejects_unknown_theme() {
+        // The IPC boundary: an unknown theme value must be refused by serde
+        // before it ever reaches merge_update, so the typed contract holds.
+        let json = r#"{"general":{"theme":"neon","layoutMode":null},"editor":null,"hotkey":null,"shortcuts":null}"#;
+        let result = serde_json::from_str::<PartialAppConfig>(json);
+        assert!(
+            result.is_err(),
+            "an unknown theme value must be rejected at the IPC deserialization boundary"
+        );
+    }
+
+    #[test]
+    fn partial_config_accepts_valid_theme() {
+        let json = r#"{"general":{"theme":"light","layoutMode":null},"editor":null,"hotkey":null,"shortcuts":null}"#;
+        let partial: PartialAppConfig = serde_json::from_str(json).unwrap();
+        let merged = merge_update(&AppConfig::default(), &partial);
+        assert_eq!(merged.general.theme, Theme::Light);
+    }
+
+    #[test]
+    fn load_falls_back_on_invalid_theme() {
+        // A theme value outside the closed enum now fails AppConfig
+        // deserialization, routing into the existing corrupt-config fallback.
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[general]
+theme = "neon"
+layoutMode = "floating"
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(
+            config.general.theme,
+            Theme::System,
+            "an invalid theme on disk must fall back to the default"
+        );
     }
 
     #[test]
@@ -290,7 +331,7 @@ fontSize = 18
         let merged = merge_update(&existing, &partial);
         assert_eq!(merged.editor.font_size, 20);
         assert_eq!(merged.editor.font_family, "mono"); // unchanged
-        assert_eq!(merged.general.theme, "system"); // unchanged
+        assert_eq!(merged.general.theme, Theme::System); // unchanged
         assert_eq!(
             merged.hotkey.global_shortcut,
             crate::models::config::default_global_shortcut()

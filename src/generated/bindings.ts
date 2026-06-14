@@ -120,12 +120,12 @@ export type EditorConfig = {
 /**
  *  General application settings.
  * 
- *  `theme` is one of `"system"` (the default — follow the OS
- *  `prefers-color-scheme` until the user picks a theme), `"dark"`, or `"light"`.
- *  A saved manual `dark`/`light` preference overrides the OS setting on restart.
+ *  `theme` is one of `system` (the default — follow the OS `prefers-color-scheme`
+ *  until the user picks a theme), `dark`, or `light`. A saved manual `dark`/`light`
+ *  preference overrides the OS setting on restart.
  */
 export type GeneralConfig = {
-	theme: string,
+	theme: Theme,
 	layoutMode: string,
 };
 
@@ -182,7 +182,7 @@ export type PartialEditorConfig = {
 
 // Partial general settings for selective updates.
 export type PartialGeneralConfig = {
-	theme: string | null,
+	theme: Theme | null,
 	layoutMode: string | null,
 };
 
@@ -234,6 +234,21 @@ export type ShortcutConfig = {
 	toggleTheme?: string,
 	closeTab?: string,
 };
+
+/**
+ *  Application color theme.
+ * 
+ *  `System` follows the OS `prefers-color-scheme` until the user picks a theme;
+ *  `Dark`/`Light` are explicit overrides that persist across restarts.
+ *  Serialized lowercase (`"system"`, `"dark"`, `"light"`) in both JSON and TOML,
+ *  and emitted by specta as the TypeScript string-literal union
+ *  `"system" | "dark" | "light"`. Because it is a closed enum, serde rejects any
+ *  unknown value at the deserialization boundary — the schema, not documentation,
+ *  is the source of truth.
+ */
+export type Theme = 
+// Follow the OS `prefers-color-scheme`. The default.
+"system" | "dark" | "light";
 
 /**
  *  Trash retention settings.

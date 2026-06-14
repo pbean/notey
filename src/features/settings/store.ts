@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppConfig, PartialShortcutConfig } from '../../generated/bindings';
+import type { AppConfig, PartialShortcutConfig, Theme } from '../../generated/bindings';
 import { commands } from '../../generated/bindings';
 import { useToastStore } from '../toast/store';
 import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
@@ -46,7 +46,7 @@ interface SettingsActions {
   /** Close the overlay. */
   close: () => void;
   /** Set theme (dark/light): updates the snapshot and persists+applies live. */
-  setTheme: (theme: string) => void;
+  setTheme: (theme: Theme) => void;
   /** Set layout mode (floating/half-screen/full-screen): snapshot + persist. */
   setLayoutMode: (layoutMode: string) => void;
   /** Set editor font size (clamped 12–24): snapshot + persist+apply live. */

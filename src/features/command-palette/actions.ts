@@ -1,4 +1,4 @@
-import { commands, type PartialAppConfig } from '../../generated/bindings';
+import { commands, type PartialAppConfig, type Theme } from '../../generated/bindings';
 import { useEditorStore } from '../editor/store';
 import { useSearchStore } from '../search/store';
 import { useTabStore } from '../tabs/store';
@@ -481,7 +481,7 @@ export async function toggleLayoutMode(): Promise<void> {
  * is needed — the value is explicit and `updateConfig` merges server-side.
  * Marks the dimension user-controlled so a concurrent startup apply skips it.
  */
-export async function setTheme(theme: string): Promise<void> {
+export async function setTheme(theme: Theme): Promise<void> {
   userToggled.theme = true;
   applyThemeClass(theme);
   await persistSettingsUpdate({

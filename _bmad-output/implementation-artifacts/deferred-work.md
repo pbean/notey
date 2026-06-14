@@ -689,7 +689,8 @@ resolution: already resolved: src-tauri/src/commands/config.rs:97-172 (commit 40
 origin: code review of spec-7-2-theme-switching.md, 2026-06-14
 location: src/generated/bindings.ts:114
 reason: Story 7.2 documents `theme` as `system|dark|light`, but the generated frontend types and backend partial-config merge still accept arbitrary strings. The current UI only emits valid values, so shipping Story 7.2 does not require a schema redesign; tighten the Rust model and generated bindings in a follow-up hardening pass.
-status: open
+status: done 2026-06-14
+resolution: Replaced `GeneralConfig.theme: String` with a typed `Theme { System, Dark, Light }` enum (serde lowercase) used by both `GeneralConfig` and `PartialGeneralConfig`; specta now emits `theme: "system" | "dark" | "light"` and serde rejects unknown values at the IPC/TOML boundary. Added backend tests for rejection, valid accept, and invalid-toml fallback; narrowed frontend `setTheme` signatures to the `Theme` union.
 
 ### DW-89: Define recovery for duplicate hand-edited shortcut bindings
 

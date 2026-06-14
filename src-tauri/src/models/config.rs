@@ -17,15 +17,34 @@ pub struct AppConfig {
     pub trash: TrashConfig,
 }
 
+/// Application color theme.
+///
+/// `System` follows the OS `prefers-color-scheme` until the user picks a theme;
+/// `Dark`/`Light` are explicit overrides that persist across restarts.
+/// Serialized lowercase (`"system"`, `"dark"`, `"light"`) in both JSON and TOML,
+/// and emitted by specta as the TypeScript string-literal union
+/// `"system" | "dark" | "light"`. Because it is a closed enum, serde rejects any
+/// unknown value at the deserialization boundary — the schema, not documentation,
+/// is the source of truth.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// Follow the OS `prefers-color-scheme`. The default.
+    #[default]
+    System,
+    Dark,
+    Light,
+}
+
 /// General application settings.
 ///
-/// `theme` is one of `"system"` (the default — follow the OS
-/// `prefers-color-scheme` until the user picks a theme), `"dark"`, or `"light"`.
-/// A saved manual `dark`/`light` preference overrides the OS setting on restart.
+/// `theme` is one of `system` (the default — follow the OS `prefers-color-scheme`
+/// until the user picks a theme), `dark`, or `light`. A saved manual `dark`/`light`
+/// preference overrides the OS setting on restart.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
-    pub theme: String,
+    pub theme: Theme,
     pub layout_mode: String,
 }
 
@@ -147,7 +166,7 @@ const fn default_trash_retention_days() -> u32 {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            theme: "system".to_string(),
+            theme: Theme::System,
             // The default window mode (Story 7.5). `floating` is the always-on-top
             // 600×400 capture overlay — the app's primary form factor.
             layout_mode: "floating".to_string(),
