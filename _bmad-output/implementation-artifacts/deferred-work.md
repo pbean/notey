@@ -666,3 +666,4 @@ origin: code review of spec-6-2-ipc-socket-server-in-desktop-app.md, 2026-06-13
 location: src-tauri/src/ipc/socket_server.rs:199, src-tauri/src/ipc/socket_server.rs:284
 reason: The current one-thread-per-connection model satisfies the story's single slow-client acceptance criterion, but a broader timeout / worker-budget policy is still undefined, and Windows named pipes in `interprocess` do not support I/O timeouts. This needs an explicit cross-platform design call before patching.
 status: open
+decision: 2026-06-13 Defer until cross-platform design agreed — Keep tracking until a cross-platform timeout + worker-budget design (covering the Windows named-pipe no-timeout constraint) is decided.
