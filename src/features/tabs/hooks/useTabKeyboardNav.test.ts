@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useTabStore } from '../store';
 import { useSearchStore } from '../../search/store';
+import { useSettingsStore } from '../../settings/store';
 import { useTabKeyboardNav } from './useTabKeyboardNav';
 
 /** Fire a keydown event on window with the given properties. */
@@ -138,5 +139,17 @@ describe('useTabKeyboardNav', () => {
     ctrlKey('3');
     expect(useTabStore.getState().activeTabIndex).toBe(0); // not jumped
     useSearchStore.setState({ isOpen: false });
+  });
+
+  it('all shortcuts are no-ops when settings overlay is open', () => {
+    setupTabs(3, 0);
+    useSettingsStore.setState({ isOpen: true, config: null });
+    ctrlKey('Tab');
+    expect(useTabStore.getState().activeTabIndex).toBe(0);
+    ctrlKey('w');
+    expect(useTabStore.getState().tabs).toHaveLength(3);
+    ctrlKey('3');
+    expect(useTabStore.getState().activeTabIndex).toBe(0);
+    useSettingsStore.setState({ isOpen: false, config: null });
   });
 });

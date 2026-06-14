@@ -29,7 +29,8 @@ export const commands = {
 	/**
 	 *  Applies a partial update to the config, saves to disk, and returns the updated config.
 	 *  Validates shortcut strings before persisting. Re-registers the global hotkey if changed.
-	 *  Releases the mutex before filesystem I/O to avoid blocking concurrent reads.
+	 *  Holds the config mutex through merge + save so overlapping partial updates
+	 *  cannot clobber each other from stale snapshots.
 	 */
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
 	// Hides the calling window (dismiss without destroy).
@@ -91,9 +92,16 @@ export type DetectedWorkspace = {
 	path: string,
 };
 
-// Editor-specific settings.
+/**
+ *  Editor-specific settings.
+ * 
+ *  `font_family` selects the primary font stack: `"mono"` (monospace, the
+ *  default) or `"sans"` (sans-serif). Serialized in `config.toml` as
+ *  `[editor] fontFamily`.
+ */
 export type EditorConfig = {
 	fontSize: number,
+	fontFamily?: string,
 };
 
 // General application settings.
@@ -149,6 +157,7 @@ export type PartialAppConfig = {
 // Partial editor settings for selective updates.
 export type PartialEditorConfig = {
 	fontSize: number | null,
+	fontFamily: string | null,
 };
 
 // Partial general settings for selective updates.

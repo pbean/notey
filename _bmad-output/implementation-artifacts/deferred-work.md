@@ -667,3 +667,17 @@ location: src-tauri/src/ipc/socket_server.rs:199, src-tauri/src/ipc/socket_serve
 reason: The current one-thread-per-connection model satisfies the story's single slow-client acceptance criterion, but a broader timeout / worker-budget policy is still undefined, and Windows named pipes in `interprocess` do not support I/O timeouts. This needs an explicit cross-platform design call before patching.
 status: open
 decision: 2026-06-13 Defer until cross-platform design agreed — Keep tracking until a cross-platform timeout + worker-budget design (covering the Windows named-pipe no-timeout constraint) is decided.
+
+### DW-86: Legacy `layoutMode` values are misrepresented in the Settings selector
+
+origin: code review of spec-7-1-settings-view-panel.md, 2026-06-13
+location: src/features/settings/components/SettingsPanel.tsx:119
+reason: Story 7.1 reuses `general.layoutMode` for future window-mode values, so existing `comfortable` / `compact` configs currently render as `floating` in Settings. Fixing that cleanly needs a product/schema decision that lines up with Story 7.5 rather than another ad hoc mapping in 7.1.
+status: open
+
+### DW-87: Hotkey runtime can drift from saved config when OS re-registration fails
+
+origin: code review of spec-7-1-settings-view-panel.md, 2026-06-13
+location: src-tauri/src/commands/config.rs:52-79
+reason: `update_config` persists the new shortcut before OS re-registration runs. If unregister/register fails, the saved config can diverge from the live registered hotkey. This behavior predates Story 7.1 and needs a broader hotkey rollback design rather than a settings-panel patch.
+status: open

@@ -29,19 +29,27 @@ export function CommandPalette() {
     commands: commands.filter((cmd) => cmd.group === group),
   })).filter((g) => g.commands.length > 0);
 
+  const focusEditor = () => {
+    const editor = document.querySelector<HTMLElement>('.cm-content');
+    editor?.focus();
+  };
+
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       useCommandPaletteStore.getState().close();
-      const editor = document.querySelector<HTMLElement>('.cm-content');
-      editor?.focus();
+      focusEditor();
     }
   };
 
-  const handleSelect = (cmd: PaletteCommand) => {
+  const handleSelect = async (cmd: PaletteCommand) => {
+    if (cmd.id === 'open-settings') {
+      await cmd.action();
+      return;
+    }
+
     useCommandPaletteStore.getState().close();
-    const editor = document.querySelector<HTMLElement>('.cm-content');
-    editor?.focus();
-    void cmd.action();
+    focusEditor();
+    await cmd.action();
   };
 
   return (
@@ -64,7 +72,7 @@ export function CommandPalette() {
             {grouped.map((group) => (
               <CommandGroup key={group.heading} heading={group.heading}>
                 {group.commands.map((cmd) => (
-                  <CommandItem key={cmd.id} onSelect={() => handleSelect(cmd)}>
+                  <CommandItem key={cmd.id} onSelect={() => void handleSelect(cmd)}>
                     <span>{cmd.label}</span>
                     {cmd.shortcut && (
                       <CommandShortcut>{cmd.shortcut}</CommandShortcut>

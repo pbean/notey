@@ -177,6 +177,10 @@
   --error: #f87171;
   --focus-ring: #6b9eff80;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Primary editor font stack and base size — user-configurable via Settings.
+     Swapped live by the settings runtime; persisted in [editor] of config.toml. */
+  --font-primary: var(--font-mono);
+  --editor-font-size: 14px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

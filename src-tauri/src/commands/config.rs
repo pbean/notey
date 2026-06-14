@@ -22,7 +22,8 @@ pub fn get_config(state: State<'_, Mutex<AppConfig>>) -> Result<AppConfig, Notey
 
 /// Applies a partial update to the config, saves to disk, and returns the updated config.
 /// Validates shortcut strings before persisting. Re-registers the global hotkey if changed.
-/// Releases the mutex before filesystem I/O to avoid blocking concurrent reads.
+/// Holds the config mutex through merge + save so overlapping partial updates
+/// cannot clobber each other from stale snapshots.
 #[tauri::command]
 #[specta::specta]
 pub fn update_config(
@@ -46,20 +47,16 @@ pub fn update_config(
         None
     };
 
-    // Read current config under lock, then drop lock before I/O
-    let (existing, old_shortcut_str) = {
-        let config = config_state.lock().unwrap_or_else(recover_poisoned_config);
-        (config.clone(), config.hotkey.global_shortcut.clone())
-    };
-
-    let merged = services::config::merge_update(&existing, &partial);
-    services::config::save(&config_dir_state.0, &merged)?;
-
-    // Re-acquire lock to update in-memory state
-    {
+    // Merge, save, and update in-memory state under one lock so concurrent
+    // partial writes observe the latest committed snapshot.
+    let (merged, old_shortcut_str) = {
         let mut config = config_state.lock().unwrap_or_else(recover_poisoned_config);
+        let old_shortcut_str = config.hotkey.global_shortcut.clone();
+        let merged = services::config::merge_update(&config, &partial);
+        services::config::save(&config_dir_state.0, &merged)?;
         *config = merged.clone();
-    }
+        (merged, old_shortcut_str)
+    };
 
     // Re-register hotkey if it changed
     #[cfg(desktop)]

@@ -10,6 +10,7 @@ import {
 } from "../actions";
 import { useNoteListStore } from "../../note-list/store";
 import { useTrashStore } from "../../trash/store";
+import { useSettingsStore } from "../../settings/store";
 import { exportToMarkdown } from "../../export/exportMarkdown";
 import { exportToJson } from "../../export/exportJson";
 
@@ -101,7 +102,7 @@ export function usePaletteCommands(): PaletteCommand[] {
       label: "Open Settings",
       group: "Settings",
       shortcut: `${mod}+,`,
-      action: () => stubAction("Open Settings"),
+      action: () => useSettingsStore.getState().open(),
     },
     {
       id: "export-markdown",

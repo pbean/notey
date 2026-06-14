@@ -12,5 +12,5 @@ export interface PaletteCommand {
   /** Platform-aware shortcut string for display (e.g. "Ctrl+N" or "⌘N"). */
   shortcut: string;
   /** Action to execute when the command is selected. */
-  action: () => void | Promise<void>;
+  action: () => void | boolean | Promise<void | boolean>;
 }

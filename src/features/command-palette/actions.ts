@@ -1,4 +1,4 @@
-import { commands } from '../../generated/bindings';
+import { commands, type PartialAppConfig } from '../../generated/bindings';
 import { useEditorStore } from '../editor/store';
 import { useSearchStore } from '../search/store';
 import { useTabStore } from '../tabs/store';
@@ -111,7 +111,8 @@ let isTogglingLayoutMode = false;
  * independently so a theme toggle never suppresses layout startup application
  * (or vice versa).
  */
-const userToggled = { theme: false, layoutMode: false };
+const userToggled = { theme: false, layoutMode: false, fontSize: false, fontFamily: false };
+let settingsSaveChain = Promise.resolve();
 
 /**
  * True while the active theme is the OS-tracking `system` value. Consulted by
@@ -167,6 +168,9 @@ export function resetToggleTracking(): void {
   systemThemeListenerCleanup?.();
   userToggled.theme = false;
   userToggled.layoutMode = false;
+  userToggled.fontSize = false;
+  userToggled.fontFamily = false;
+  settingsSaveChain = Promise.resolve();
   systemThemeActive = false;
   systemThemeQuery = null;
   systemThemeListenerBound = false;
@@ -243,6 +247,57 @@ function applyLayoutModeClass(layoutMode: string): void {
   document.documentElement.classList.toggle('compact', layoutMode === 'compact');
 }
 
+/** Inclusive bounds for the configurable editor font size, in pixels. */
+export const FONT_SIZE_MIN = 12;
+export const FONT_SIZE_MAX = 24;
+
+/** Clamp a font size into the supported {@link FONT_SIZE_MIN}–{@link FONT_SIZE_MAX} range. */
+export function clampFontSize(size: number): number {
+  return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size)));
+}
+
+/**
+ * Apply the editor base font size to `<html>` via the `--editor-font-size`
+ * custom property. Single source of truth for the size apply rule, shared by
+ * startup application and the settings setter. Proportional `--text-*` scaling
+ * is deferred to Story 7.3.
+ */
+function applyFontSize(size: number): void {
+  document.documentElement.style.setProperty('--editor-font-size', `${clampFontSize(size)}px`);
+}
+
+/**
+ * Apply the primary font family by pointing `--font-primary` at the chosen
+ * stack: `'sans'` → `var(--font-sans)`, anything else → `var(--font-mono)`.
+ * Single source of truth for the family apply rule.
+ */
+function applyFontFamily(family: string): void {
+  const stack = family === 'sans' ? 'var(--font-sans)' : 'var(--font-mono)';
+  document.documentElement.style.setProperty('--font-primary', stack);
+}
+
+/**
+ * Serialize explicit settings saves so rapid UI changes persist in issue order.
+ * Each save logs transport/result failures and still resolves, allowing later
+ * settings updates to continue through the queue.
+ */
+async function persistSettingsUpdate(partial: PartialAppConfig, context: string): Promise<void> {
+  const save = async () => {
+    try {
+      const result = await commands.updateConfig(partial);
+      if (result.status === 'error') {
+        console.error(`updateConfig failed in ${context}:`, result.error);
+      }
+    } catch (error) {
+      console.error(`Unexpected error updating settings in ${context}:`, error);
+    }
+  };
+
+  const pending = settingsSaveChain.then(save, save);
+  settingsSaveChain = pending;
+  await pending;
+}
+
 /**
  * Read the persisted config once at startup and apply the saved theme and
  * layout mode to the DOM. Called from `main.tsx` after the synchronous dark
@@ -265,6 +320,12 @@ export async function applyStartupConfig(): Promise<void> {
   // possibly-stale boot-time snapshot. Each dimension is guarded independently.
   if (!userToggled.theme) applyThemeClass(theme);
   if (!userToggled.layoutMode) applyLayoutModeClass(general?.layoutMode ?? 'comfortable');
+
+  // Skip any font dimension the user already changed during the boot window:
+  // their explicit live edit wins over this possibly-stale startup snapshot.
+  const editor = configResult.data.editor;
+  if (!userToggled.fontSize) applyFontSize(editor?.fontSize ?? 14);
+  if (!userToggled.fontFamily) applyFontFamily(editor?.fontFamily ?? 'mono');
 
   // Track live OS appearance changes for the `system` theme. Bound once; the
   // handler no-ops unless `system` is the active theme.
@@ -355,6 +416,67 @@ export async function toggleLayoutMode(): Promise<void> {
   } finally {
     isTogglingLayoutMode = false;
   }
+}
+
+/**
+ * Set the theme to an explicit value (from the settings panel). Applies the
+ * class live, then persists. Unlike {@link toggleTheme} no `getConfig` pre-read
+ * is needed — the value is explicit and `updateConfig` merges server-side.
+ * Marks the dimension user-controlled so a concurrent startup apply skips it.
+ */
+export async function setTheme(theme: string): Promise<void> {
+  userToggled.theme = true;
+  applyThemeClass(theme);
+  await persistSettingsUpdate({
+    general: { theme, layoutMode: null },
+    editor: null,
+    hotkey: null,
+  }, 'setTheme');
+}
+
+/**
+ * Set the layout mode to an explicit value (from the settings panel) and
+ * persist it. Applies the density class live ({@link applyLayoutModeClass}
+ * treats any non-`compact` value as non-compact). Window-mode behavior for
+ * floating/half-screen/full-screen is deferred to Story 7.5.
+ */
+export async function setLayoutMode(layoutMode: string): Promise<void> {
+  userToggled.layoutMode = true;
+  applyLayoutModeClass(layoutMode);
+  await persistSettingsUpdate({
+    general: { theme: null, layoutMode },
+    editor: null,
+    hotkey: null,
+  }, 'setLayoutMode');
+}
+
+/**
+ * Set the editor font size (from the settings panel), clamped to the supported
+ * range, applied live, then persisted.
+ */
+export async function setFontSize(size: number): Promise<void> {
+  const clamped = clampFontSize(size);
+  userToggled.fontSize = true;
+  applyFontSize(clamped);
+  await persistSettingsUpdate({
+    general: null,
+    editor: { fontSize: clamped, fontFamily: null },
+    hotkey: null,
+  }, 'setFontSize');
+}
+
+/**
+ * Set the editor font family (from the settings panel), applied live, then
+ * persisted.
+ */
+export async function setFontFamily(family: string): Promise<void> {
+  userToggled.fontFamily = true;
+  applyFontFamily(family);
+  await persistSettingsUpdate({
+    general: null,
+    editor: { fontSize: null, fontFamily: family },
+    hotkey: null,
+  }, 'setFontFamily');
 }
 
 /** Open the search overlay. */

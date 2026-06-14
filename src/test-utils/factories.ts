@@ -32,7 +32,7 @@ export function buildWorkspaceInfo(overrides: Partial<WorkspaceInfo> = {}): Work
 export function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     general: { theme: 'system', layoutMode: 'compact' },
-    editor: { fontSize: 14 },
+    editor: { fontSize: 14, fontFamily: 'mono' },
     hotkey: { globalShortcut: 'Ctrl+Shift+N' },
     ...overrides,
   };

@@ -86,6 +86,9 @@ pub fn merge_update(existing: &AppConfig, partial: &PartialAppConfig) -> AppConf
         if let Some(font_size) = editor.font_size {
             merged.editor.font_size = font_size;
         }
+        if let Some(ref font_family) = editor.font_family {
+            merged.editor.font_family = font_family.clone();
+        }
     }
 
     if let Some(ref hotkey) = partial.hotkey {
@@ -119,6 +122,7 @@ pub struct PartialGeneralConfig {
 #[serde(rename_all = "camelCase")]
 pub struct PartialEditorConfig {
     pub font_size: Option<u32>,
+    pub font_family: Option<String>,
 }
 
 /// Partial hotkey settings for selective updates.
@@ -238,14 +242,67 @@ fontSize = 18
             general: None,
             editor: Some(PartialEditorConfig {
                 font_size: Some(20),
+                font_family: None,
             }),
             hotkey: None,
         };
 
         let merged = merge_update(&existing, &partial);
         assert_eq!(merged.editor.font_size, 20);
+        assert_eq!(merged.editor.font_family, "mono"); // unchanged
         assert_eq!(merged.general.theme, "dark"); // unchanged
         assert_eq!(merged.hotkey.global_shortcut, "Ctrl+Shift+N"); // unchanged
+    }
+
+    #[test]
+    fn default_font_family_is_mono() {
+        let config = AppConfig::default();
+        assert_eq!(config.editor.font_family, "mono");
+    }
+
+    #[test]
+    fn merge_update_applies_font_family() {
+        let existing = AppConfig::default();
+        let partial = PartialAppConfig {
+            general: None,
+            editor: Some(PartialEditorConfig {
+                font_size: None,
+                font_family: Some("sans".to_string()),
+            }),
+            hotkey: None,
+        };
+
+        let merged = merge_update(&existing, &partial);
+        assert_eq!(merged.editor.font_family, "sans");
+        assert_eq!(merged.editor.font_size, 14); // unchanged
+    }
+
+    #[test]
+    fn load_defaults_font_family_when_key_missing() {
+        let tmp = TempDir::new().unwrap();
+        let toml_content = r#"
+[editor]
+fontSize = 18
+"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(tmp.path().join("config.toml"), toml_content).unwrap();
+
+        let config = load_or_create(tmp.path()).unwrap();
+        assert_eq!(
+            config.editor.font_family, "mono",
+            "missing fontFamily key must fall back to the default"
+        );
+    }
+
+    #[test]
+    fn font_family_round_trips_through_toml() {
+        let tmp = TempDir::new().unwrap();
+        let mut config = AppConfig::default();
+        config.editor.font_family = "sans".to_string();
+        save(tmp.path(), &config).unwrap();
+
+        let loaded = load_or_create(tmp.path()).unwrap();
+        assert_eq!(loaded.editor.font_family, "sans");
     }
 
     #[test]

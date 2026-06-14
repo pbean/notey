@@ -24,10 +24,20 @@ pub struct GeneralConfig {
 }
 
 /// Editor-specific settings.
+///
+/// `font_family` selects the primary font stack: `"mono"` (monospace, the
+/// default) or `"sans"` (sans-serif). Serialized in `config.toml` as
+/// `[editor] fontFamily`.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorConfig {
     pub font_size: u32,
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
+}
+
+fn default_font_family() -> String {
+    "mono".to_string()
 }
 
 /// Hotkey bindings.
@@ -65,7 +75,10 @@ impl Default for GeneralConfig {
 
 impl Default for EditorConfig {
     fn default() -> Self {
-        Self { font_size: 14 }
+        Self {
+            font_size: 14,
+            font_family: "mono".to_string(),
+        }
     }
 }
 

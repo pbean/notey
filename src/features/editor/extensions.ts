@@ -55,7 +55,8 @@ export function buildExtensions(
     }),
     EditorView.theme({
       '&': {
-        fontFamily: 'var(--font-mono)',
+        fontFamily: 'var(--font-primary)',
+        fontSize: 'var(--editor-font-size)',
         color: 'var(--text-primary)',
         background: 'var(--bg-primary)',
         height: '100%',

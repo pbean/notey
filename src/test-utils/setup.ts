@@ -8,6 +8,7 @@ import { useCommandPaletteStore } from '../features/command-palette/store';
 import { useNoteListStore } from '../features/note-list/store';
 import { useToastStore } from '../features/toast/store';
 import { useTrashStore } from '../features/trash/store';
+import { useSettingsStore } from '../features/settings/store';
 import { resetActionGuards, resetToggleTracking } from '../features/command-palette/actions';
 
 /**
@@ -40,6 +41,7 @@ afterEach(() => {
   useNoteListStore.getState().resetNoteList();
   useToastStore.getState().reset();
   useTrashStore.getState().resetTrash();
+  useSettingsStore.getState().resetSettings();
 
   // Clear the sticky per-session theme/layout toggle markers (module-level, not a store)
   resetActionGuards();

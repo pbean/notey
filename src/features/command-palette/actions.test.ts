@@ -16,6 +16,11 @@ import {
   openSearch,
   stubAction,
   applyStartupConfig,
+  setTheme,
+  setLayoutMode,
+  setFontSize,
+  setFontFamily,
+  clampFontSize,
 } from './actions';
 
 describe('createNewNote', () => {
@@ -516,6 +521,56 @@ describe('startup-vs-toggle race', () => {
     expect(document.documentElement.classList.contains('compact')).toBe(true);
   });
 
+  it('does not revert a font size changed during the boot window', async () => {
+    let resolveStartupGet!: (value: unknown) => void;
+    const pendingStartupGet = new Promise((resolve) => {
+      resolveStartupGet = resolve;
+    });
+    const startupConfig = buildConfig({ editor: { fontSize: 14, fontFamily: 'mono' } });
+    const updatedConfig = buildConfig({ editor: { fontSize: 20, fontFamily: 'mono' } });
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return pendingStartupGet;
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const startup = applyStartupConfig();
+    await setFontSize(20);
+
+    expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('20px');
+
+    resolveStartupGet(startupConfig);
+    await startup;
+
+    expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('20px');
+  });
+
+  it('does not revert a font family changed during the boot window', async () => {
+    let resolveStartupGet!: (value: unknown) => void;
+    const pendingStartupGet = new Promise((resolve) => {
+      resolveStartupGet = resolve;
+    });
+    const startupConfig = buildConfig({ editor: { fontSize: 14, fontFamily: 'mono' } });
+    const updatedConfig = buildConfig({ editor: { fontSize: 14, fontFamily: 'sans' } });
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return pendingStartupGet;
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const startup = applyStartupConfig();
+    await setFontFamily('sans');
+
+    expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-sans)');
+
+    resolveStartupGet(startupConfig);
+    await startup;
+
+    expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-sans)');
+  });
+
   it('lets startup apply the persisted value when a toggle failed before applying', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -723,6 +778,192 @@ describe('system theme resolution', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+});
+
+describe('settings setters', () => {
+  afterEach(() => {
+    document.documentElement.classList.remove('dark', 'light', 'compact');
+    document.documentElement.style.removeProperty('--editor-font-size');
+    document.documentElement.style.removeProperty('--font-primary');
+  });
+
+  function mockUpdateOk() {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'update_config') return Promise.resolve(buildConfig());
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+  }
+
+  describe('setTheme', () => {
+    it('applies the theme live and persists only the theme field', async () => {
+      document.documentElement.classList.add('dark');
+      mockUpdateOk();
+
+      await setTheme('light');
+
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+      expect(document.documentElement.classList.contains('dark')).toBe(false);
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: { theme: 'light', layoutMode: null }, editor: null, hotkey: null },
+      });
+    });
+
+    it('keeps the applied theme even when persistence fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      document.documentElement.classList.add('dark');
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'update_config') return Promise.reject({ type: 'Database', message: 'boom' });
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      await setTheme('light');
+
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('setLayoutMode', () => {
+    it('persists the chosen window mode without applying compact density', async () => {
+      mockUpdateOk();
+
+      await setLayoutMode('half-screen');
+
+      expect(document.documentElement.classList.contains('compact')).toBe(false);
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: { theme: null, layoutMode: 'half-screen' }, editor: null, hotkey: null },
+      });
+    });
+  });
+
+  describe('setFontSize', () => {
+    it('clamps above the max, applies the size var, and persists', async () => {
+      mockUpdateOk();
+
+      await setFontSize(40);
+
+      expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('24px');
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null },
+      });
+    });
+
+    it('clamps below the min', async () => {
+      mockUpdateOk();
+
+      await setFontSize(2);
+
+      expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('12px');
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: null, editor: { fontSize: 12, fontFamily: null }, hotkey: null },
+      });
+    });
+
+    it('serializes rapid saves so later font sizes persist last', async () => {
+      const updateCalls: unknown[] = [];
+      let resolveFirst!: (value: unknown) => void;
+      let resolveSecond!: (value: unknown) => void;
+
+      mockInvoke.mockImplementation((cmd: string, payload?: unknown) => {
+        if (cmd === 'update_config') {
+          updateCalls.push(payload);
+          if (updateCalls.length === 1) {
+            return new Promise((resolve) => {
+              resolveFirst = resolve;
+            });
+          }
+          return new Promise((resolve) => {
+            resolveSecond = resolve;
+          });
+        }
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      const first = setFontSize(18);
+      const second = setFontSize(20);
+      await Promise.resolve();
+
+      expect(updateCalls).toHaveLength(1);
+
+      resolveFirst(buildConfig({ editor: { fontSize: 18, fontFamily: 'mono' } }));
+      await first;
+      await Promise.resolve();
+
+      expect(updateCalls).toHaveLength(2);
+
+      resolveSecond(buildConfig({ editor: { fontSize: 20, fontFamily: 'mono' } }));
+      await second;
+
+      expect(updateCalls).toEqual([
+        { partial: { general: null, editor: { fontSize: 18, fontFamily: null }, hotkey: null } },
+        { partial: { general: null, editor: { fontSize: 20, fontFamily: null }, hotkey: null } },
+      ]);
+    });
+  });
+
+  describe('setFontFamily', () => {
+    it('swaps the primary font var to sans and persists', async () => {
+      mockUpdateOk();
+
+      await setFontFamily('sans');
+
+      expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-sans)');
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: null, editor: { fontSize: null, fontFamily: 'sans' }, hotkey: null },
+      });
+    });
+
+    it('falls back to mono for any non-sans value', async () => {
+      mockUpdateOk();
+
+      await setFontFamily('mono');
+
+      expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-mono)');
+    });
+
+    it('logs and resolves when updateConfig throws an Error', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === 'update_config') return Promise.reject(new Error('boom'));
+        return Promise.reject(new Error(`unmocked: ${cmd}`));
+      });
+
+      await expect(setFontFamily('sans')).resolves.toBeUndefined();
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('clampFontSize', () => {
+    it('rounds and clamps into the 12–24 range', () => {
+      expect(clampFontSize(13.6)).toBe(14);
+      expect(clampFontSize(100)).toBe(24);
+      expect(clampFontSize(0)).toBe(12);
+    });
+  });
+});
+
+describe('applyStartupConfig font', () => {
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--editor-font-size');
+    document.documentElement.style.removeProperty('--font-primary');
+    document.documentElement.classList.remove('dark', 'light', 'compact');
+  });
+
+  it('applies persisted font size and family at startup', async () => {
+    const config = buildConfig({ editor: { fontSize: 20, fontFamily: 'sans' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('20px');
+    expect(document.documentElement.style.getPropertyValue('--font-primary')).toBe('var(--font-sans)');
   });
 });
 

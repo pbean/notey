@@ -6,7 +6,7 @@
  * The manager imports nothing from the stores, so there is no cycle.
  */
 
-export type OverlayId = 'search' | 'commandPalette' | 'noteList' | 'trash';
+export type OverlayId = 'search' | 'commandPalette' | 'noteList' | 'trash' | 'settings';
 
 const closers = new Map<OverlayId, () => void>();
 

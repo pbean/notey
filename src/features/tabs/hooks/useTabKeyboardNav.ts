@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import { useTabStore } from '../store';
 import { useSearchStore } from '../../search/store';
 import { useCommandPaletteStore } from '../../command-palette/store';
+import { useSettingsStore } from '../../settings/store';
 
 /**
  * Registers global keyboard shortcuts for tab navigation.
  * Ctrl+Tab/Ctrl+Shift+Tab cycle tabs, Ctrl+1-9 jump, Ctrl+W closes.
- * All shortcuts are suppressed when search overlay or command palette is open, or no tabs exist.
+ * All shortcuts are suppressed when an overlay captures focus, or no tabs exist.
  */
 export function useTabKeyboardNav(): void {
   useEffect(() => {
@@ -14,6 +15,7 @@ export function useTabKeyboardNav(): void {
       // Guard: no-op when an overlay is open
       if (useSearchStore.getState().isOpen) return;
       if (useCommandPaletteStore.getState().isOpen) return;
+      if (useSettingsStore.getState().isOpen) return;
 
       const { tabs, activeTabIndex, switchTab, closeTab } = useTabStore.getState();
 

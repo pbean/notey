@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { mockInvoke } from '../../../test-utils/setup';
+import { buildConfig } from '../../../test-utils/factories';
 import { useCommandPaletteStore } from '../store';
 import { CommandPalette } from './CommandPalette';
 import { useNoteListStore } from '../../note-list/store';
 import { useTrashStore } from '../../trash/store';
+import { useSettingsStore } from '../../settings/store';
 
 // cmdk uses ResizeObserver internally, which jsdom does not provide
 class MockResizeObserver {
@@ -108,17 +111,60 @@ describe('CommandPalette', () => {
     render(<CommandPalette />);
 
     await waitFor(() => {
-      expect(screen.getByText('Open Settings')).toBeDefined();
+      expect(screen.getByText('Switch Workspace')).toBeDefined();
     });
 
     // cmdk handles selection via click on the item
+    fireEvent.click(screen.getByText('Switch Workspace'));
+
+    await waitFor(() => {
+      expect(useCommandPaletteStore.getState().isOpen).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: Switch Workspace');
+    });
+
+    warnSpy.mockRestore();
+  });
+
+  it('opens the settings panel and closes the palette when Open Settings is selected', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig());
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    act(() => useCommandPaletteStore.getState().open());
+    render(<CommandPalette />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Open Settings')).toBeDefined();
+    });
+
     fireEvent.click(screen.getByText('Open Settings'));
 
     await waitFor(() => {
       expect(useCommandPaletteStore.getState().isOpen).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: Open Settings');
+      expect(useSettingsStore.getState().isOpen).toBe(true);
+    });
+  });
+
+  it('keeps the palette open when Open Settings fails to load config', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.reject(new Error('boom'));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    act(() => useCommandPaletteStore.getState().open());
+    render(<CommandPalette />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Open Settings')).toBeDefined();
     });
 
-    warnSpy.mockRestore();
+    fireEvent.click(screen.getByText('Open Settings'));
+
+    await waitFor(() => {
+      expect(useCommandPaletteStore.getState().isOpen).toBe(true);
+      expect(useSettingsStore.getState().isOpen).toBe(false);
+    });
+
+    consoleSpy.mockRestore();
   });
 });
