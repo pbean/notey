@@ -183,7 +183,7 @@ export function SettingsPanel() {
           <div style={rowStyle}>
             <span style={labelStyle}>Theme</span>
             <div role="group" aria-label="Theme" style={{ display: 'flex', gap: 'var(--space-1)' }}>
-              {(['dark', 'light'] as const).map((t, i) => {
+              {(['system', 'dark', 'light'] as const).map((t, i) => {
                 const active = theme === t;
                 return (
                   <button

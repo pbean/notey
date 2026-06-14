@@ -142,7 +142,7 @@ mod tests {
     fn load_creates_default_when_missing() {
         let tmp = TempDir::new().unwrap();
         let config = load_or_create(tmp.path()).unwrap();
-        assert_eq!(config.general.theme, "dark");
+        assert_eq!(config.general.theme, "system");
         assert_eq!(config.general.layout_mode, "comfortable");
         assert_eq!(config.editor.font_size, 14);
         assert_eq!(config.hotkey.global_shortcut, "Ctrl+Shift+N");
@@ -232,7 +232,7 @@ fontSize = 18
         fs::write(tmp.path().join("config.toml"), "{{invalid toml}}").unwrap();
 
         let config = load_or_create(tmp.path()).unwrap();
-        assert_eq!(config.general.theme, "dark");
+        assert_eq!(config.general.theme, "system");
     }
 
     #[test]
@@ -250,7 +250,7 @@ fontSize = 18
         let merged = merge_update(&existing, &partial);
         assert_eq!(merged.editor.font_size, 20);
         assert_eq!(merged.editor.font_family, "mono"); // unchanged
-        assert_eq!(merged.general.theme, "dark"); // unchanged
+        assert_eq!(merged.general.theme, "system"); // unchanged
         assert_eq!(merged.hotkey.global_shortcut, "Ctrl+Shift+N"); // unchanged
     }
 

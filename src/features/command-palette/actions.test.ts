@@ -16,6 +16,7 @@ import {
   openSearch,
   stubAction,
   applyStartupConfig,
+  applyBootTheme,
   setTheme,
   setLayoutMode,
   setFontSize,
@@ -60,9 +61,23 @@ describe('createNewNote', () => {
 });
 
 describe('toggleTheme', () => {
+  const originalMatchMedia = window.matchMedia;
+
   afterEach(() => {
+    window.matchMedia = originalMatchMedia;
     document.documentElement.classList.remove('dark', 'light');
   });
+
+  function mockMatchMedia(matches: boolean) {
+    const mql = {
+      matches,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+  }
 
   it('toggles from dark to light', async () => {
     document.documentElement.classList.add('dark');
@@ -98,6 +113,24 @@ describe('toggleTheme', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.classList.contains('light')).toBe(false);
+  });
+
+  it('toggles from system to light when the OS currently resolves dark', async () => {
+    document.documentElement.classList.add('dark');
+    mockMatchMedia(true);
+    const config = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    const updatedConfig = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
+
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'update_config') return Promise.resolve(updatedConfig);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleTheme();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
   });
 
   it('does not change DOM when getConfig fails', async () => {
@@ -733,7 +766,7 @@ describe('system theme resolution', () => {
     document.documentElement.classList.add('light');
     const mql = mockMatchMedia(true);
     const systemConfig = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
-    const toggledConfig = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const toggledConfig = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
 
     let getCallCount = 0;
     mockInvoke.mockImplementation((cmd: string) => {
@@ -747,13 +780,13 @@ describe('system theme resolution', () => {
     });
 
     await applyStartupConfig(); // system + OS dark → .dark, listener bound
-    await toggleTheme(); // system → dark, opts out of system tracking
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    await toggleTheme(); // system(dark) → light, opts out of system tracking
+    expect(document.documentElement.classList.contains('light')).toBe(true);
 
     mql.dispatchChange(false); // OS flips to light — must be ignored
 
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.classList.contains('light')).toBe(false);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
   it('falls back to light and does not throw when matchMedia is unavailable', async () => {
@@ -984,5 +1017,144 @@ describe('stubAction', () => {
     stubAction('View Trash');
     expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: View Trash');
     warnSpy.mockRestore();
+  });
+});
+
+describe('data-theme attribute (Story 7.2 switch contract)', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  function mockMatchMedia(matches: boolean) {
+    const mql = {
+      matches,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+  }
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    document.documentElement.classList.remove('dark', 'light', 'compact');
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('sets data-theme="light" when toggling to light', async () => {
+    document.documentElement.classList.add('dark');
+    const config = buildConfig({ general: { theme: 'dark', layoutMode: 'comfortable' } });
+    const updated = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      if (cmd === 'update_config') return Promise.resolve(updated);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleTheme();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('mirrors the persisted dark/light theme on startup', async () => {
+    const config = buildConfig({ general: { theme: 'light', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('resolves system to the OS scheme (dark) in data-theme', async () => {
+    mockMatchMedia(true);
+    const config = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('resolves system to the OS scheme (light) in data-theme', async () => {
+    mockMatchMedia(false);
+    const config = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('falls back to data-theme="light" when matchMedia is unavailable', async () => {
+    window.matchMedia = undefined as unknown as typeof window.matchMedia;
+    const config = buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(config);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await applyStartupConfig();
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+});
+
+describe('applyBootTheme', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  function mockMatchMedia(matches: boolean) {
+    const mql = {
+      matches,
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+  }
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    document.documentElement.classList.remove('dark', 'light');
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('applies dark (class + data-theme) when the OS prefers dark', () => {
+    document.documentElement.classList.add('light');
+    mockMatchMedia(true);
+
+    applyBootTheme();
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('applies light (class + data-theme) when the OS prefers light', () => {
+    document.documentElement.classList.add('dark');
+    mockMatchMedia(false);
+
+    applyBootTheme();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('falls back to light when matchMedia is unavailable', () => {
+    window.matchMedia = undefined as unknown as typeof window.matchMedia;
+
+    applyBootTheme();
+
+    expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 });

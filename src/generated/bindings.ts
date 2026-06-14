@@ -104,7 +104,13 @@ export type EditorConfig = {
 	fontFamily?: string,
 };
 
-// General application settings.
+/**
+ *  General application settings.
+ * 
+ *  `theme` is one of `"system"` (the default — follow the OS
+ *  `prefers-color-scheme` until the user picks a theme), `"dark"`, or `"light"`.
+ *  A saved manual `dark`/`light` preference overrides the OS setting on restart.
+ */
 export type GeneralConfig = {
 	theme: string,
 	layoutMode: string,

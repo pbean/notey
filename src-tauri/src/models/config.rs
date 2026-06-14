@@ -16,6 +16,10 @@ pub struct AppConfig {
 }
 
 /// General application settings.
+///
+/// `theme` is one of `"system"` (the default — follow the OS
+/// `prefers-color-scheme` until the user picks a theme), `"dark"`, or `"light"`.
+/// A saved manual `dark`/`light` preference overrides the OS setting on restart.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -67,7 +71,7 @@ const fn default_trash_retention_days() -> u32 {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            theme: "dark".to_string(),
+            theme: "system".to_string(),
             layout_mode: "comfortable".to_string(),
         }
     }

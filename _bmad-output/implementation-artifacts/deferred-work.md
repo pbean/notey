@@ -681,3 +681,10 @@ origin: code review of spec-7-1-settings-view-panel.md, 2026-06-13
 location: src-tauri/src/commands/config.rs:52-79
 reason: `update_config` persists the new shortcut before OS re-registration runs. If unregister/register fails, the saved config can diverge from the live registered hotkey. This behavior predates Story 7.1 and needs a broader hotkey rollback design rather than a settings-panel patch.
 status: open
+
+### DW-88: Theme contract is documented but not schema-enforced
+
+origin: code review of spec-7-2-theme-switching.md, 2026-06-14
+location: src/generated/bindings.ts:114
+reason: Story 7.2 documents `theme` as `system|dark|light`, but the generated frontend types and backend partial-config merge still accept arbitrary strings. The current UI only emits valid values, so shipping Story 7.2 does not require a schema redesign; tighten the Rust model and generated bindings in a follow-up hardening pass.
+status: open

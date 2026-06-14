@@ -191,6 +191,11 @@ export function resetToggleTracking(): void {
  * Resolution: `dark` → dark; `system` → dark iff the OS prefers a dark scheme
  * (`prefers-color-scheme`); any other value (`light`, unknown, or `system` when
  * `matchMedia` is unavailable) → light.
+ *
+ * Sets BOTH the `.dark`/`.light` classes — the token-cascade driver — and the
+ * `data-theme` attribute (the PRD/AC switch contract; Story 7.2). `data-theme`
+ * always reflects the *resolved* theme (`dark`/`light`), never the `system`
+ * mode name, so it describes what is actually shown.
  */
 function applyThemeClass(theme: string): void {
   systemThemeActive = theme === 'system';
@@ -198,6 +203,20 @@ function applyThemeClass(theme: string): void {
   const root = document.documentElement;
   root.classList.toggle('dark', isDark);
   root.classList.toggle('light', !isDark);
+  root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+}
+
+/**
+ * Apply the OS-resolved theme synchronously as the pre-config boot default.
+ * Called from `main.tsx` before {@link applyStartupConfig} reconciles to the
+ * persisted preference. Delegates to {@link applyThemeClass} so the class +
+ * `data-theme` rule stays single-source; resolving `'system'` honors
+ * `prefers-color-scheme` (falling back to light when `matchMedia` is absent),
+ * so a fresh/light-OS user no longer flashes the opposite theme. A saved
+ * manual preference still overrides this once `applyStartupConfig` resolves.
+ */
+export function applyBootTheme(): void {
+  applyThemeClass('system');
 }
 
 /**
@@ -335,7 +354,10 @@ export async function applyStartupConfig(): Promise<void> {
 
 /**
  * Toggle theme between dark and light. Reads current config,
- * persists the change via updateConfig, and toggles the DOM class.
+ * persists the change via updateConfig, and toggles the DOM class. A persisted
+ * `system` preference toggles away from the currently resolved OS theme to the
+ * opposite explicit choice (`dark` or `light`) — it does not cycle through
+ * `system`.
  * Guarded against concurrent calls (e.g. key repeat) to avoid a
  * lost-update race on the read-modify-write.
  */
@@ -351,7 +373,8 @@ export async function toggleTheme(): Promise<void> {
     }
 
     const current = configResult.data.general?.theme ?? 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
+    const currentIsDark = current === 'dark' || (current === 'system' && systemPrefersDark());
+    const next = currentIsDark ? 'light' : 'dark';
 
     const updateResult = await commands.updateConfig({
       general: { theme: next, layoutMode: null },

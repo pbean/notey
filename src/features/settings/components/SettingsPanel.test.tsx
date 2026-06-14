@@ -56,6 +56,24 @@ describe('SettingsPanel', () => {
     });
   });
 
+  it('offers a system theme option that persists (Story 7.2)', async () => {
+    await openWith(buildConfig({ general: { theme: 'system', layoutMode: 'comfortable' } }));
+
+    const systemBtn = screen.getByTestId('theme-system');
+    expect(systemBtn).toBeInTheDocument();
+    expect(systemBtn).toHaveAttribute('aria-pressed', 'true');
+
+    // Switch to light, then back to system, to exercise the persist path.
+    fireEvent.click(screen.getByTestId('theme-light'));
+    fireEvent.click(systemBtn);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: { theme: 'system', layoutMode: null }, editor: null, hotkey: null },
+      });
+    });
+  });
+
   it('persists a font family change', async () => {
     await openWith(buildConfig({ editor: { fontSize: 14, fontFamily: 'mono' } }));
 
