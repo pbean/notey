@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTrashStore } from '../store';
 import { useToastStore } from '../../toast/store';
 import { formatRelativeDate } from '../../../lib/format-relative-date';
+import { useFocusTrap } from '../../../lib/useFocusTrap';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 
 /**
@@ -18,6 +19,11 @@ export function TrashPanel() {
   const restoringNoteIds = useTrashStore((s) => s.restoringNoteIds);
   const isLoading = useTrashStore((s) => s.isLoading);
   const error = useTrashStore((s) => s.error);
+  const pendingDeleteNote = useTrashStore((s) => s.pendingDeleteNote);
+
+  // Trap Tab within the panel — but yield to the confirm-delete dialog, which
+  // is portaled outside the panel and runs its own Base UI focus trap.
+  useFocusTrap(panelRef, !pendingDeleteNote);
 
   // Clamp selectedIndex if the list shrinks (e.g. after a restore) while open.
   const clampedIndex =
@@ -81,10 +87,8 @@ export function TrashPanel() {
       if (noteCount === 0) return;
       const note = trashedNotes[clampedIndex];
       if (note) void restoreNote(note.id);
-    } else if (e.key === 'Tab') {
-      // Focus trap: keep focus within the panel.
-      e.preventDefault();
     }
+    // Tab is trapped within the panel by useFocusTrap.
   };
 
   return (
@@ -121,7 +125,6 @@ export function TrashPanel() {
           borderRight: '1px solid var(--border-default)',
           display: 'flex',
           flexDirection: 'column',
-          outline: 'none',
         }}
       >
         {/* Header */}

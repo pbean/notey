@@ -210,4 +210,34 @@ describe('TrashPanel', () => {
     // The confirm dialog owns the keyboard; the panel must stay open.
     expect(useTrashStore.getState().isOpen).toBe(true);
   });
+
+  it('traps Tab within the panel — wrapping the last action back to the first (Story 7.7)', () => {
+    render(<TrashPanel />);
+    const last = screen.getByTestId('trash-delete-2');
+    last.focus();
+    const notPrevented = fireEvent.keyDown(last, { key: 'Tab' });
+    expect(notPrevented).toBe(false); // preventDefault — focus is wrapped, not freed
+    expect(screen.getByTestId('trash-panel').contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId('trash-restore-1'));
+  });
+
+  it('wraps Shift+Tab from the initially focused row to the last action (Story 7.7)', () => {
+    render(<TrashPanel />);
+    const firstRow = screen.getByTestId('trash-item-1');
+    expect(document.activeElement).toBe(firstRow);
+    const notPrevented = fireEvent.keyDown(firstRow, { key: 'Tab', shiftKey: true });
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(screen.getByTestId('trash-delete-2'));
+  });
+
+  it('yields the Tab trap to the confirm-delete dialog while it is open (Story 7.7)', async () => {
+    useTrashStore.setState({ pendingDeleteNote: TRASHED[0] });
+    render(<TrashPanel />);
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-delete-dialog').contains(document.activeElement)).toBe(true);
+    });
+    // The panel-level trap is disabled (the portaled Base UI dialog runs its own).
+    const notPrevented = fireEvent.keyDown(screen.getByTestId('trash-panel'), { key: 'Tab' });
+    expect(notPrevented).toBe(true);
+  });
 });

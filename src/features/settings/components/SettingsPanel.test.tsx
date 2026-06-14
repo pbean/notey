@@ -340,4 +340,23 @@ describe('SettingsPanel', () => {
 
     expect(useSettingsStore.getState().isOpen).toBe(false);
   });
+
+  it('traps Tab within the dialog — wrapping the last control back to the first (Story 7.7)', async () => {
+    await openWith(buildConfig());
+
+    const done = screen.getByTestId('settings-done');
+    done.focus();
+    const notPrevented = fireEvent.keyDown(done, { key: 'Tab' });
+    expect(notPrevented).toBe(false); // preventDefault — focus wraps, never escapes
+    expect(document.activeElement).toBe(screen.getByTestId('theme-system'));
+  });
+
+  it('wraps Shift+Tab from the first control back to the last (Story 7.7)', async () => {
+    await openWith(buildConfig());
+
+    const first = screen.getByTestId('theme-system');
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByTestId('settings-done'));
+  });
 });

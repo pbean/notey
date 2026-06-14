@@ -3,6 +3,7 @@ import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../../editor/store';
 import { useWorkspaceStore } from '../../workspace/store';
 import { useSearchStore } from '../store';
+import { useFocusTrap } from '../../../lib/useFocusTrap';
 import { SearchResultItem } from './SearchResultItem';
 
 /**
@@ -10,8 +11,10 @@ import { SearchResultItem } from './SearchResultItem';
  * Displays search input, result count, and result list with keyboard navigation.
  */
 export function SearchOverlay() {
+  const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(overlayRef, true);
   const requestIdRef = useRef(0);
   const openingRef = useRef(false);
   const query = useSearchStore((s) => s.query);
@@ -90,25 +93,6 @@ export function SearchOverlay() {
     selected?.scrollIntoView?.({ block: 'nearest' });
   }, [selectedIndex, results.length]);
 
-  /** Trap focus within the overlay — Tab cycles, Esc is the only way out. */
-  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab') return;
-    const overlay = e.currentTarget;
-    const focusable = overlay.querySelectorAll<HTMLElement>(
-      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
-
   /** Handle input changes — search immediately, no debounce. */
   const handleInput = useCallback(async (value?: string) => {
     const currentQuery = value ?? useSearchStore.getState().query;
@@ -151,9 +135,9 @@ export function SearchOverlay() {
 
   return (
     <div
+      ref={overlayRef}
       data-testid="search-overlay"
       role="search"
-      onKeyDown={handleOverlayKeyDown}
       style={{
         position: 'absolute',
         inset: 0,
@@ -203,15 +187,7 @@ export function SearchOverlay() {
               border: '1px solid var(--border-default)',
               borderRadius: '4px',
               color: 'var(--text-primary)',
-              outline: '2px solid transparent',
-              outlineOffset: '2px',
               flex: 1,
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = '2px solid transparent';
             }}
           />
           <button
@@ -229,8 +205,6 @@ export function SearchOverlay() {
               color: isEffectivelyAll ? 'var(--text-muted)' : 'var(--text-primary)',
               cursor: canToggleScope ? 'pointer' : 'not-allowed',
               whiteSpace: 'nowrap',
-              outline: '2px solid transparent',
-              outlineOffset: '2px',
               opacity: canToggleScope ? 1 : 0.5,
             }}
             onMouseEnter={(e) => {
@@ -238,12 +212,6 @@ export function SearchOverlay() {
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'var(--bg-surface)';
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.outline = '2px solid transparent';
             }}
           >
             {scopeText}

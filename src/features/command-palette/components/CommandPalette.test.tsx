@@ -85,6 +85,31 @@ describe('CommandPalette', () => {
     });
   });
 
+  it('traps focus inside the modal dialog so Tab never reaches the editor (Story 7.7)', async () => {
+    // A stand-in for the editor behind the overlay. If the dialog were not
+    // modal, focus could land here.
+    const editor = document.createElement('div');
+    editor.className = 'cm-content';
+    editor.tabIndex = 0;
+    document.body.appendChild(editor);
+    try {
+      act(() => useCommandPaletteStore.getState().open());
+      render(<CommandPalette />);
+
+      const input = await screen.findByTestId('command-input');
+      // Base UI Dialog is modal by default (`modal=true` → FloatingFocusManager),
+      // which moves focus into the popup on open and confines Tab to it.
+      await waitFor(() => {
+        expect(screen.getByTestId('command-palette').contains(document.activeElement)).toBe(true);
+      });
+      fireEvent.keyDown(input, { key: 'Tab' });
+      expect(screen.getByTestId('command-palette').contains(document.activeElement)).toBe(true);
+      expect(document.activeElement).not.toBe(editor);
+    } finally {
+      editor.remove();
+    }
+  });
+
   it('opens trash and closes the palette when View Trash is selected', async () => {
     act(() => {
       useNoteListStore.getState().open();

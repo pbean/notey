@@ -29,8 +29,6 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: '4px',
   color: 'var(--text-primary)',
   cursor: 'pointer',
-  outline: '2px solid transparent',
-  outlineOffset: '2px',
 };
 
 const kbdStyle: React.CSSProperties = {
@@ -41,16 +39,6 @@ const kbdStyle: React.CSSProperties = {
   border: '1px solid var(--border-default)',
   borderRadius: '4px',
   color: 'var(--text-primary)',
-};
-
-/** Show the focus ring on focus, hide it on blur. */
-const focusRing = {
-  onFocus: (e: React.FocusEvent<HTMLElement>) => {
-    e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-  },
-  onBlur: (e: React.FocusEvent<HTMLElement>) => {
-    e.currentTarget.style.outline = '2px solid transparent';
-  },
 };
 
 /**
@@ -175,18 +163,14 @@ export function HotkeyCaptureField({ shortcut }: { shortcut: string }) {
             aria-label="Save shortcut"
             disabled={captured === null}
             onClick={() => void handleSave()}
-            style={{ ...buttonStyle, opacity: captured === null ? 0.5 : 1, cursor: captured === null ? 'default' : 'pointer' }}
-            {...focusRing}
-          >
+            style={{ ...buttonStyle, opacity: captured === null ? 0.5 : 1, cursor: captured === null ? 'default' : 'pointer' }}          >
             Save
           </button>
           <button
             data-testid="cancel-capture"
             aria-label="Cancel"
             onClick={() => exitCapture()}
-            style={buttonStyle}
-            {...focusRing}
-          >
+            style={buttonStyle}          >
             Cancel
           </button>
         </div>
@@ -210,18 +194,14 @@ export function HotkeyCaptureField({ shortcut }: { shortcut: string }) {
           data-testid="change-shortcut"
           aria-label="Change global shortcut"
           onClick={startCapture}
-          style={buttonStyle}
-          {...focusRing}
-        >
+          style={buttonStyle}        >
           Change
         </button>
         <button
           data-testid="reset-shortcut"
           aria-label="Reset global shortcut to default"
           onClick={() => void handleReset()}
-          style={buttonStyle}
-          {...focusRing}
-        >
+          style={buttonStyle}        >
           Reset to default
         </button>
       </div>

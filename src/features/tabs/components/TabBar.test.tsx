@@ -415,4 +415,123 @@ describe('TabBar', () => {
 
     globalThis.ResizeObserver = originalRO;
   });
+
+  describe('keyboard navigation (Story 7.7)', () => {
+    const threeTabs = () =>
+      useTabStore.setState({
+        tabs: [
+          { noteId: 1, title: 'A' },
+          { noteId: 2, title: 'B' },
+          { noteId: 3, title: 'C' },
+        ],
+        activeTabIndex: 1,
+      });
+
+    it('roving tabindex: only the active tab is in the Tab sequence', () => {
+      threeTabs();
+      render(<TabBar />);
+      expect(screen.getByTestId('tab-1').getAttribute('tabindex')).toBe('-1');
+      expect(screen.getByTestId('tab-2').getAttribute('tabindex')).toBe('0');
+      expect(screen.getByTestId('tab-3').getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('ArrowRight moves focus to the next tab without activating it', () => {
+      threeTabs();
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'ArrowRight' });
+      expect(document.activeElement).toBe(screen.getByTestId('tab-3'));
+      expect(useTabStore.getState().activeTabIndex).toBe(1);
+      expect(screen.getByTestId('tab-3').getAttribute('tabindex')).toBe('0');
+    });
+
+    it('ArrowLeft moves focus to the previous tab without activating it', () => {
+      threeTabs();
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(screen.getByTestId('tab-1'));
+      expect(useTabStore.getState().activeTabIndex).toBe(1);
+    });
+
+    it('ArrowRight wraps from the last tab to the first', () => {
+      useTabStore.setState({
+        tabs: [
+          { noteId: 1, title: 'A' },
+          { noteId: 2, title: 'B' },
+        ],
+        activeTabIndex: 1,
+      });
+      render(<TabBar />);
+      const last = screen.getByTestId('tab-2');
+      last.focus();
+      fireEvent.keyDown(last, { key: 'ArrowRight' });
+      expect(document.activeElement).toBe(screen.getByTestId('tab-1'));
+      expect(useTabStore.getState().activeTabIndex).toBe(1);
+    });
+
+    it('Home and End jump to the first and last tab', () => {
+      threeTabs();
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'End' });
+      expect(document.activeElement).toBe(screen.getByTestId('tab-3'));
+      expect(useTabStore.getState().activeTabIndex).toBe(1);
+      fireEvent.keyDown(screen.getByTestId('tab-3'), { key: 'Home' });
+      expect(document.activeElement).toBe(screen.getByTestId('tab-1'));
+      expect(useTabStore.getState().activeTabIndex).toBe(1);
+    });
+
+    it('Enter activates the focused tab', () => {
+      threeTabs();
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'ArrowRight' });
+      fireEvent.keyDown(screen.getByTestId('tab-3'), { key: 'Enter' });
+      expect(useTabStore.getState().activeTabIndex).toBe(2);
+    });
+
+    it('Delete closes the focused tab and keeps focus in the tablist', () => {
+      threeTabs();
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'ArrowRight' });
+      fireEvent.keyDown(screen.getByTestId('tab-3'), { key: 'Delete' });
+      expect(useTabStore.getState().tabs.map((t) => t.noteId)).toEqual([1, 2]);
+      expect(document.activeElement).toBe(screen.getByTestId('tab-2'));
+    });
+
+    it('the close button is excluded from the Tab sequence', () => {
+      threeTabs();
+      render(<TabBar />);
+      const closeBtn = screen.getByLabelText('Close B');
+      expect(closeBtn.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('the active tab exposes its close button without hovering', () => {
+      threeTabs();
+      render(<TabBar />);
+      const closeBtn = screen.getByLabelText('Close B') as HTMLButtonElement;
+      expect(closeBtn.style.visibility).toBe('visible');
+    });
+
+    it('scrolls the newly focused tab into view during roving navigation', () => {
+      threeTabs();
+      const scrollSpy = vi.fn();
+      Object.defineProperty(Element.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: scrollSpy,
+      });
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-2');
+      active.focus();
+      fireEvent.keyDown(active, { key: 'ArrowRight' });
+      expect(scrollSpy).toHaveBeenCalled();
+    });
+  });
 });

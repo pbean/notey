@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../../workspace/store';
 import { useTabStore } from '../../tabs/store';
 import { useEditorStore } from '../../editor/store';
 import { formatRelativeDate } from '../../../lib/format-relative-date';
+import { useFocusTrap } from '../../../lib/useFocusTrap';
 
 /**
  * Slide-from-left overlay panel showing workspace notes.
@@ -12,6 +13,7 @@ import { formatRelativeDate } from '../../../lib/format-relative-date';
 export function NoteListPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, true);
   const selectedIndex = useNoteListStore((s) => s.selectedIndex);
   const filteredNotes = useWorkspaceStore((s) => s.filteredNotes);
   const activeWorkspaceName = useWorkspaceStore((s) => s.activeWorkspaceName);
@@ -44,15 +46,11 @@ export function NoteListPanel() {
     editor?.focus();
   };
 
-  // Focus panel on mount
+  // Keep initial focus on the panel itself. The list is arrow-navigated and has
+  // no tabbable descendants, so the container is the stable focus anchor.
   useEffect(() => {
-    if (filteredNotes.length > 0) {
-      const firstItem = listRef.current?.children[0] as HTMLElement | undefined;
-      firstItem?.focus();
-    } else {
-      panelRef.current?.focus();
-    }
-  }, [filteredNotes.length]);
+    panelRef.current?.focus();
+  }, []);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -82,10 +80,8 @@ export function NoteListPanel() {
       if (noteCount === 0) return;
       const note = filteredNotes[useNoteListStore.getState().selectedIndex];
       if (note) void selectNote(note.id, note.title || 'New note');
-    } else if (e.key === 'Tab') {
-      // Focus trap: keep focus within the panel
-      e.preventDefault();
     }
+    // Tab is trapped within the panel by useFocusTrap.
   };
 
   /** Close when clicking the backdrop. */
@@ -133,7 +129,6 @@ export function NoteListPanel() {
           borderRight: '1px solid var(--border-default)',
           display: 'flex',
           flexDirection: 'column',
-          outline: 'none',
         }}
       >
         {/* Header */}

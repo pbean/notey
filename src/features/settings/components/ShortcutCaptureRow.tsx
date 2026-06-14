@@ -50,8 +50,6 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: '4px',
   color: 'var(--text-primary)',
   cursor: 'pointer',
-  outline: '2px solid transparent',
-  outlineOffset: '2px',
 };
 
 const kbdStyle: React.CSSProperties = {
@@ -62,16 +60,6 @@ const kbdStyle: React.CSSProperties = {
   border: '1px solid var(--border-default)',
   borderRadius: '4px',
   color: 'var(--text-primary)',
-};
-
-/** Show the focus ring on focus, hide it on blur. */
-const focusRing = {
-  onFocus: (e: React.FocusEvent<HTMLElement>) => {
-    e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-  },
-  onBlur: (e: React.FocusEvent<HTMLElement>) => {
-    e.currentTarget.style.outline = '2px solid transparent';
-  },
 };
 
 /**
@@ -204,18 +192,14 @@ export function ShortcutCaptureRow({ action }: { action: ConfigurableAction }) {
               aria-label={`Save shortcut for ${action.label}`}
               disabled={!canSave}
               onClick={() => void handleSave()}
-              style={{ ...buttonStyle, opacity: canSave ? 1 : 0.5, cursor: canSave ? 'pointer' : 'default' }}
-              {...focusRing}
-            >
+              style={{ ...buttonStyle, opacity: canSave ? 1 : 0.5, cursor: canSave ? 'pointer' : 'default' }}            >
               Save
             </button>
             <button
               data-testid={`cancel-capture-${action.id}`}
               aria-label="Cancel"
               onClick={() => exitCapture()}
-              style={buttonStyle}
-              {...focusRing}
-            >
+              style={buttonStyle}            >
               Cancel
             </button>
           </div>
@@ -242,18 +226,14 @@ export function ShortcutCaptureRow({ action }: { action: ConfigurableAction }) {
             data-testid={`change-shortcut-${action.id}`}
             aria-label={`Change shortcut for ${action.label}`}
             onClick={startCapture}
-            style={buttonStyle}
-            {...focusRing}
-          >
+            style={buttonStyle}          >
             Change
           </button>
           <button
             data-testid={`reset-shortcut-${action.id}`}
             aria-label={`Reset ${action.label} shortcut to default`}
             onClick={() => void resetShortcut(action.id)}
-            style={buttonStyle}
-            {...focusRing}
-          >
+            style={buttonStyle}          >
             Reset
           </button>
         </div>

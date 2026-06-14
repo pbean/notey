@@ -5,27 +5,11 @@ import { WINDOW_LAYOUT_MODES, normalizeLayoutMode } from '../layoutMode';
 import { HotkeyCaptureField } from './HotkeyCaptureField';
 import { ShortcutCaptureRow } from './ShortcutCaptureRow';
 import { CONFIGURABLE_ACTIONS, RESERVED_ACTIONS, displayShortcut } from '../shortcuts';
+import { useFocusTrap } from '../../../lib/useFocusTrap';
 
 /** Restore focus to the editor when the overlay closes. */
 function focusEditor(): void {
   document.querySelector<HTMLElement>('.cm-content')?.focus();
-}
-
-/** Shared style for a focusable control's focus-ring behavior. */
-function withFocusRing(base: React.CSSProperties): {
-  style: React.CSSProperties;
-  onFocus: (e: React.FocusEvent<HTMLElement>) => void;
-  onBlur: (e: React.FocusEvent<HTMLElement>) => void;
-} {
-  return {
-    style: { outline: '2px solid transparent', outlineOffset: '2px', ...base },
-    onFocus: (e) => {
-      e.currentTarget.style.outline = '2px solid var(--focus-ring)';
-    },
-    onBlur: (e) => {
-      e.currentTarget.style.outline = '2px solid transparent';
-    },
-  };
 }
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -73,7 +57,9 @@ export function SettingsPanel() {
   const setLayoutMode = useSettingsStore((s) => s.setLayoutMode);
   const setFontSize = useSettingsStore((s) => s.setFontSize);
   const setFontFamily = useSettingsStore((s) => s.setFontFamily);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const firstControlRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(overlayRef, true);
 
   // Auto-focus the first control on mount.
   useEffect(() => {
@@ -109,24 +95,6 @@ export function SettingsPanel() {
     focusEditor();
   };
 
-  /** Trap focus within the overlay — Tab cycles, Esc/Done are the only exits. */
-  const handleOverlayKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab') return;
-    const focusable = e.currentTarget.querySelectorAll<HTMLElement>(
-      'input:not([disabled]), button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
-
   const theme = config?.general?.theme ?? 'dark';
   // Legacy density values ('comfortable'/'compact') normalize to 'floating'.
   const layoutMode = normalizeLayoutMode(config?.general?.layoutMode);
@@ -136,8 +104,8 @@ export function SettingsPanel() {
 
   return (
     <div
+      ref={overlayRef}
       data-testid="settings-overlay"
-      onKeyDown={handleOverlayKeyDown}
       style={{
         position: 'fixed',
         inset: 0,
@@ -191,13 +159,13 @@ export function SettingsPanel() {
                     data-testid={`theme-${t}`}
                     aria-pressed={active}
                     onClick={() => setTheme(t)}
-                    {...withFocusRing({
+                    style={{
                       ...controlBase,
                       textTransform: 'capitalize',
                       background: active ? 'var(--accent-muted)' : 'var(--bg-surface)',
                       color: active ? 'var(--accent)' : 'var(--text-primary)',
                       fontWeight: active ? 600 : 400,
-                    })}
+                    }}
                   >
                     {t}
                   </button>
@@ -215,7 +183,7 @@ export function SettingsPanel() {
               data-testid="layout-mode-select"
               value={layoutMode}
               onChange={(e) => setLayoutMode(e.target.value)}
-              {...withFocusRing(controlBase)}
+              style={controlBase}
             >
               {WINDOW_LAYOUT_MODES.map((m) => (
                 <option key={m} value={m}>
@@ -244,7 +212,7 @@ export function SettingsPanel() {
                 step={1}
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                {...withFocusRing({ minHeight: '24px', cursor: 'pointer' })}
+                style={{ minHeight: '24px', cursor: 'pointer' }}
               />
               <span data-testid="font-size-value" style={{ ...labelStyle, minWidth: '40px', textAlign: 'right' }}>
                 {fontSize}px
@@ -261,7 +229,7 @@ export function SettingsPanel() {
               data-testid="font-family-select"
               value={fontFamily}
               onChange={(e) => setFontFamily(e.target.value)}
-              {...withFocusRing(controlBase)}
+              style={controlBase}
             >
               <option value="mono">monospace</option>
               <option value="sans">sans-serif</option>
@@ -308,7 +276,7 @@ export function SettingsPanel() {
           <button
             data-testid="settings-done"
             onClick={close}
-            {...withFocusRing({ ...controlBase, background: 'var(--accent-muted)', color: 'var(--accent)' })}
+            style={{ ...controlBase, background: 'var(--accent-muted)', color: 'var(--accent)' }}
           >
             Done
           </button>

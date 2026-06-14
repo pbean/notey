@@ -105,6 +105,11 @@ describe('NoteListPanel', () => {
     expect(second).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('focuses the panel itself on open', () => {
+    render(<NoteListPanel />);
+    expect(document.activeElement).toBe(screen.getByTestId('note-list-panel'));
+  });
+
   it('ArrowUp wraps from first to last item', () => {
     render(<NoteListPanel />);
     const panel = screen.getByTestId('note-list-panel');
@@ -196,10 +201,10 @@ describe('NoteListPanel', () => {
     render(<NoteListPanel />);
     const panel = screen.getByTestId('note-list-panel');
 
-    fireEvent.keyDown(panel, { key: 'Tab' });
+    const notPrevented = fireEvent.keyDown(panel, { key: 'Tab' });
 
-    // Tab should be prevented (focus trap) — panel remains in DOM and focused
-    expect(panel).toBeInTheDocument();
+    expect(notPrevented).toBe(false);
+    expect(document.activeElement).toBe(panel);
   });
 
   it('shows empty state when no notes', () => {

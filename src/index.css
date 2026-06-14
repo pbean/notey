@@ -295,11 +295,34 @@
   .save-indicator-saved {
     animation: none;
   }
+  /* Story 7.7 / NFR22: with reduced motion, all focus transitions and UI
+     animations are effectively instant. Applies app-wide so no surface needs
+     to gate its own transitions. */
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    }
+  /* Story 7.7 / NFR22: single source of truth for the keyboard focus
+     indicator — a 2px solid outline in the per-theme focus-ring token at 2px
+     offset, shown only for keyboard focus (`:focus-visible`, never on pointer
+     click). Interactive surfaces must not suppress this with `outline-none` /
+     inline outline overrides. Arrow-navigated menu/listbox items use a
+     background highlight instead and are exempt. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
     }
   body {
     @apply bg-background text-foreground;

@@ -44,7 +44,79 @@ export function TabBar() {
   const [hasOverflow, setHasOverflow] = useState(false);
   const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [focusedTabIndex, setFocusedTabIndex] = useState<number>(activeTabIndex ?? 0);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Set after a keyboard close so focus follows the closed tab's adjacent peer.
+  const refocusTabIndexRef = useRef<number | null>(null);
+
+  const focusVisibleTab = useCallback((index: number) => {
+    setFocusedTabIndex(index);
+    const target = tabRefs.current[index];
+    target?.focus();
+    target?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, []);
+
+  // Sync the roving tabindex anchor to the active tab when activation changes
+  // outside the arrow-key roving flow (click, Ctrl/Cmd+Tab, overflow menu).
+  useEffect(() => {
+    if (tabs.length === 0 || refocusTabIndexRef.current !== null) return;
+    setFocusedTabIndex(activeTabIndex ?? 0);
+  }, [activeTabIndex, tabs.length]);
+
+  // After a keyboard-initiated close, move focus to the closed tab's adjacent
+  // neighbor so the user keeps a keyboard foothold in the tablist.
+  useEffect(() => {
+    if (refocusTabIndexRef.current === null || tabs.length === 0) return;
+    const targetIndex = Math.min(refocusTabIndexRef.current, tabs.length - 1);
+    refocusTabIndexRef.current = null;
+    focusVisibleTab(targetIndex);
+  }, [focusVisibleTab, tabs.length]);
+
+  // Roving tabindex anchor — the single tab stop for the tablist. Falls back to
+  // the first tab if no tab is active so the tablist always has one Tab stop.
+  const rovingIndex = focusedTabIndex;
+
+  /** ARIA tablist keyboard navigation: arrows move focus, Enter/Space activate,
+   * Delete/Backspace close the focused tab. */
+  const handleTabKeyDown = useCallback(
+    (e: React.KeyboardEvent, index: number) => {
+      const count = tabs.length;
+      switch (e.key) {
+        case 'ArrowRight':
+          e.preventDefault();
+          focusVisibleTab((index + 1) % count);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          focusVisibleTab((index - 1 + count) % count);
+          break;
+        case 'Home':
+          e.preventDefault();
+          focusVisibleTab(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          focusVisibleTab(count - 1);
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          setFocusedTabIndex(index);
+          switchTab(index);
+          break;
+        case 'Delete':
+        case 'Backspace':
+          e.preventDefault();
+          refocusTabIndexRef.current = count > 1 ? Math.min(index, count - 2) : null;
+          closeTab(index);
+          break;
+        default:
+          break;
+      }
+    },
+    [closeTab, focusVisibleTab, switchTab, tabs.length],
+  );
 
   const checkOverflow = useCallback(() => {
     const el = tabsContainerRef.current;
@@ -145,10 +217,19 @@ export function TabBar() {
             <div
               key={tab.noteId}
               data-testid={`tab-${tab.noteId}`}
+              ref={(el) => {
+                tabRefs.current[index] = el;
+              }}
               role="tab"
               aria-selected={isActive}
+              tabIndex={index === rovingIndex ? 0 : -1}
               draggable={isDraggable}
-              onClick={() => switchTab(index)}
+              onClick={() => {
+                setFocusedTabIndex(index);
+                switchTab(index);
+              }}
+              onFocus={() => setFocusedTabIndex(index)}
+              onKeyDown={(e) => handleTabKeyDown(e, index)}
               onAuxClick={(e) => {
                 if (e.button === 1) {
                   e.preventDefault();
@@ -189,6 +270,7 @@ export function TabBar() {
               </span>
               <button
                 aria-label={`Close ${displayTitle(tab.title)}`}
+                tabIndex={-1}
                 onClick={(e) => {
                   e.stopPropagation();
                   closeTab(index);
@@ -201,7 +283,8 @@ export function TabBar() {
                   fontSize: '14px',
                   lineHeight: 1,
                   padding: '0 2px',
-                  visibility: hoveredIndex === index ? 'visible' : 'hidden',
+                  visibility:
+                    hoveredIndex === index || isActive ? 'visible' : 'hidden',
                 }}
               >
                 ×
@@ -260,7 +343,10 @@ export function TabBar() {
             {tabs.map((tab, index) => (
               <DropdownMenuItem
                 key={tab.noteId}
-                onClick={() => switchTab(index)}
+                onClick={() => {
+                  setFocusedTabIndex(index);
+                  switchTab(index);
+                }}
               >
                 {displayTitle(tab.title)}
               </DropdownMenuItem>
