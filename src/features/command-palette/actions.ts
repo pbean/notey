@@ -278,8 +278,10 @@ export function clampFontSize(size: number): number {
 /**
  * Apply the editor base font size to `<html>` via the `--editor-font-size`
  * custom property. Single source of truth for the size apply rule, shared by
- * startup application and the settings setter. Proportional `--text-*` scaling
- * is deferred to Story 7.3.
+ * startup application and the settings setter. This base is the only knob: the
+ * `--text-*` type scale in `index.css` is defined as `calc()` proportions of
+ * `--editor-font-size`, so setting it here scales the whole type scale
+ * proportionally (editor body plus app chrome), not just one element (Story 7.3).
  */
 function applyFontSize(size: number): void {
   document.documentElement.style.setProperty('--editor-font-size', `${clampFontSize(size)}px`);
