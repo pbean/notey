@@ -192,12 +192,14 @@ pub fn run() {
             {
                 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+                let default_shortcut = models::config::default_global_shortcut();
                 let shortcut = parse_shortcut(&shortcut_str).unwrap_or_else(|| {
                     eprintln!(
-                        "Warning: invalid shortcut '{}', falling back to Ctrl+Shift+N",
-                        shortcut_str
+                        "Warning: invalid shortcut '{}', falling back to {}",
+                        shortcut_str, default_shortcut
                     );
-                    parse_shortcut("Ctrl+Shift+N").unwrap()
+                    parse_shortcut(&default_shortcut)
+                        .expect("platform default shortcut must parse")
                 });
 
                 let app_handle = app.handle().clone();
@@ -214,7 +216,15 @@ pub fn run() {
                         .build(),
                 )?;
 
-                app.global_shortcut().register(shortcut)?;
+                // Non-fatal: a saved shortcut that conflicts with another app
+                // must not brick startup. Log and continue — the window stays
+                // summonable via the tray and the user can rebind in Settings.
+                if let Err(e) = app.global_shortcut().register(shortcut) {
+                    eprintln!(
+                        "Warning: failed to register global shortcut '{}': {}",
+                        shortcut_str, e
+                    );
+                }
             }
 
             // --- System tray ---
@@ -322,5 +332,39 @@ mod tests {
         specta_builder()
             .export(Typescript::default(), "../src/generated/bindings.ts")
             .expect("Failed to export TypeScript bindings");
+    }
+
+    #[test]
+    fn parse_shortcut_accepts_modifier_plus_key() {
+        // A standard modifier+letter combination parses.
+        assert!(parse_shortcut("Ctrl+Shift+N").is_some());
+        // Digit main keys are supported.
+        assert!(parse_shortcut("Ctrl+1").is_some());
+        // Whitespace around segments is tolerated.
+        assert!(parse_shortcut(" Ctrl + Alt + J ").is_some());
+    }
+
+    #[test]
+    fn parse_shortcut_accepts_modifier_aliases() {
+        // Each spelling of a modifier resolves; same combo parses every way.
+        for s in ["Ctrl+N", "Control+N", "Cmd+N", "Command+N", "Super+N", "Meta+N", "Alt+N"] {
+            assert!(parse_shortcut(s).is_some(), "expected '{s}' to parse");
+        }
+    }
+
+    #[test]
+    fn parse_shortcut_rejects_invalid_input() {
+        // Unknown modifier.
+        assert!(parse_shortcut("Hyper+N").is_none());
+        // Unsupported main key (function keys aren't mapped).
+        assert!(parse_shortcut("Ctrl+F1").is_none());
+        // Empty string.
+        assert!(parse_shortcut("").is_none());
+    }
+
+    #[test]
+    fn platform_default_shortcut_parses() {
+        // The platform default must always be a registrable binding.
+        assert!(parse_shortcut(&models::config::default_global_shortcut()).is_some());
     }
 }

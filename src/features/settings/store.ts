@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { AppConfig } from '../../generated/bindings';
 import { commands } from '../../generated/bindings';
+import { useToastStore } from '../toast/store';
 import { closeOtherOverlays, registerOverlay } from '../overlays/manager';
 import {
   clampFontSize,
@@ -35,6 +36,16 @@ interface SettingsActions {
   setFontSize: (size: number) => void;
   /** Set editor font family (mono/sans): snapshot + persist+apply live. */
   setFontFamily: (family: string) => void;
+  /**
+   * Set the global capture shortcut, conflict-checked. Unlike the live-apply
+   * setters this is NOT optimistic: it awaits the backend, which registers the
+   * new binding before committing. On success the snapshot is replaced with the
+   * returned merged config and a confirmation toast shows; on conflict the
+   * previous shortcut stays active, the snapshot is left unchanged, and a
+   * 5-second conflict toast shows. Resolves `true` on success, `false` on
+   * conflict/error.
+   */
+  setGlobalShortcut: (shortcut: string) => Promise<boolean>;
   /** Reset all settings state to initial values (test cleanup only). */
   resetSettings: () => void;
 }
@@ -108,6 +119,43 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       });
     }
     void applyFontFamily(family);
+  },
+  setGlobalShortcut: async (shortcut) => {
+    let result;
+    try {
+      result = await commands.updateConfig({ general: null, editor: null, hotkey: { globalShortcut: shortcut } });
+    } catch (error) {
+      console.error('updateConfig threw setting global shortcut:', error);
+      useToastStore
+        .getState()
+        .addToast('Couldn’t change the shortcut — keeping the previous one.', 5000);
+      return false;
+    }
+    if (result.status === 'error') {
+      console.error('updateConfig failed setting global shortcut:', result.error);
+      const conflictMessage =
+        'message' in result.error
+          ? result.error.message
+          : 'data' in result.error && typeof result.error.data === 'string'
+            ? result.error.data
+            : '';
+      const isConflict =
+        result.error.type === 'Config' && conflictMessage.includes('Failed to register new shortcut');
+      useToastStore
+        .getState()
+        .addToast(
+          isConflict
+            ? 'Shortcut unavailable — it may be in use by another app. Keeping the previous shortcut.'
+            : 'Couldn’t change the shortcut — keeping the previous one.',
+          5000,
+        );
+      return false;
+    }
+    // Adopt the backend's committed config so the displayed shortcut reflects
+    // what is actually registered, never an optimistic guess.
+    set({ config: result.data });
+    useToastStore.getState().addToast('Global shortcut updated');
+    return true;
   },
   resetSettings: () => set({ isOpen: false, config: null }),
 }));

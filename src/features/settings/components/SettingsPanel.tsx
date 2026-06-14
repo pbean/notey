@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../store';
-import { clampFontSize, stubAction } from '../../command-palette/actions';
+import { clampFontSize } from '../../command-palette/actions';
+import { HotkeyCaptureField } from './HotkeyCaptureField';
 
 /** Window layout modes offered by the General section (behavior lands in Story 7.5). */
 const LAYOUT_MODES = ['floating', 'half-screen', 'full-screen'] as const;
@@ -275,30 +276,7 @@ export function SettingsPanel() {
           <h3 style={sectionTitleStyle}>Hotkey</h3>
           <div style={rowStyle}>
             <span style={labelStyle}>Global capture shortcut</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <kbd
-                data-testid="global-shortcut-value"
-                style={{
-                  fontSize: 'var(--text-sm)',
-                  fontFamily: 'var(--font-mono)',
-                  padding: '4px 8px',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '4px',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {globalShortcut}
-              </kbd>
-              <button
-                data-testid="change-shortcut"
-                aria-label="Change global shortcut"
-                onClick={() => stubAction('Change global shortcut')}
-                {...withFocusRing(controlBase)}
-              >
-                Change
-              </button>
-            </div>
+            <HotkeyCaptureField shortcut={globalShortcut} />
           </div>
         </section>
 

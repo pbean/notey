@@ -51,6 +51,21 @@ pub struct HotkeyConfig {
     pub global_shortcut: String,
 }
 
+/// The platform default global capture shortcut. macOS follows the platform
+/// convention (`Cmd+Shift+N`); every other platform uses `Ctrl+Shift+N`. This
+/// is the single source of truth for both first-run config generation and the
+/// settings "Reset to default" action.
+pub fn default_global_shortcut() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "Cmd+Shift+N".to_string()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Ctrl+Shift+N".to_string()
+    }
+}
+
 /// Trash retention settings.
 ///
 /// `retention_days` controls how long soft-deleted notes remain recoverable
@@ -89,7 +104,7 @@ impl Default for EditorConfig {
 impl Default for HotkeyConfig {
     fn default() -> Self {
         Self {
-            global_shortcut: "Ctrl+Shift+N".to_string(),
+            global_shortcut: default_global_shortcut(),
         }
     }
 }

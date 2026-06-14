@@ -4,6 +4,7 @@ import { mockInvoke } from '../../test-utils/setup';
 import { buildConfig } from '../../test-utils/factories';
 import { useSettingsStore } from './store';
 import { useSearchStore } from '../search/store';
+import { useToastStore } from '../toast/store';
 
 describe('useSettingsStore', () => {
   beforeEach(() => {
@@ -110,5 +111,60 @@ describe('useSettingsStore', () => {
         partial: { general: null, editor: { fontSize: 24, fontFamily: null }, hotkey: null },
       });
     });
+  });
+
+  it('setGlobalShortcut adopts the backend config and toasts on success', async () => {
+    const updated = buildConfig({ hotkey: { globalShortcut: 'Ctrl+Alt+J' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Shift+N' } }));
+      if (cmd === 'update_config') return Promise.resolve(updated);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setGlobalShortcut('Ctrl+Alt+J');
+
+    expect(ok).toBe(true);
+    expect(useSettingsStore.getState().config?.hotkey?.globalShortcut).toBe('Ctrl+Alt+J');
+    expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+      partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' } },
+    });
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain('Global shortcut updated');
+  });
+
+  it('setGlobalShortcut keeps the previous shortcut and toasts on conflict', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Shift+N' } }));
+      if (cmd === 'update_config') return Promise.reject({ type: 'Config', message: 'Failed to register new shortcut' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setGlobalShortcut('Ctrl+Alt+J');
+
+    expect(ok).toBe(false);
+    // Snapshot is untouched — the previously-active shortcut is still shown.
+    expect(useSettingsStore.getState().config?.hotkey?.globalShortcut).toBe('Ctrl+Shift+N');
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes('in use by another app'))).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  it('setGlobalShortcut shows a generic toast for non-conflict backend errors', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Shift+N' } }));
+      if (cmd === 'update_config') return Promise.reject({ type: 'Io' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setGlobalShortcut('Ctrl+Alt+J');
+
+    expect(ok).toBe(false);
+    expect(useToastStore.getState().toasts.map((t) => t.message)).toContain(
+      'Couldn’t change the shortcut — keeping the previous one.',
+    );
+    consoleSpy.mockRestore();
   });
 });

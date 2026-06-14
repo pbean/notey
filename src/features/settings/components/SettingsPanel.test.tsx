@@ -4,6 +4,8 @@ import { mockInvoke } from '../../../test-utils/setup';
 import { buildConfig } from '../../../test-utils/factories';
 import type { AppConfig } from '../../../generated/bindings';
 import { useSettingsStore } from '../store';
+import { useToastStore } from '../../toast/store';
+import { platformDefaultShortcut } from '../shortcut';
 import { SettingsPanel } from './SettingsPanel';
 
 /** Open the store with a given config, then render the panel. */
@@ -105,14 +107,122 @@ describe('SettingsPanel', () => {
     expect(screen.getByTestId('layout-mode-select')).toHaveValue('floating');
   });
 
-  it('routes the Hotkey "Change" button to the deferred stub (Story 7.4)', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('captures a new shortcut and persists it on Save (Story 7.4)', async () => {
+    const updated = buildConfig({ hotkey: { globalShortcut: 'Ctrl+Alt+J' } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Shift+N' } }));
+      if (cmd === 'update_config') return Promise.resolve(updated);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByTestId('change-shortcut'));
+    expect(screen.getByTestId('shortcut-capture')).toHaveTextContent('Press new shortcut');
+
+    // The combo targets the focused capture region; the window capture-phase
+    // listener picks it up before it could trigger any app shortcut.
+    fireEvent.keyDown(screen.getByTestId('shortcut-capture'), { key: 'J', code: 'KeyJ', ctrlKey: true, altKey: true });
+    expect(screen.getByTestId('shortcut-capture')).toHaveTextContent('Ctrl+Alt+J');
+
+    fireEvent.click(screen.getByTestId('save-shortcut'));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: null, editor: null, hotkey: { globalShortcut: 'Ctrl+Alt+J' } },
+      });
+    });
+    // Back in display mode, showing the backend-confirmed binding.
+    await waitFor(() => {
+      expect(screen.getByTestId('global-shortcut-value')).toHaveTextContent('Ctrl+Alt+J');
+    });
+  });
+
+  it('keeps the previous shortcut and warns on a conflict (Story 7.4)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Shift+N' } }));
+      if (cmd === 'update_config') return Promise.reject({ type: 'Config', message: 'Failed to register new shortcut' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByTestId('change-shortcut'));
+    fireEvent.keyDown(screen.getByTestId('shortcut-capture'), { key: 'J', code: 'KeyJ', ctrlKey: true, altKey: true });
+    fireEvent.click(screen.getByTestId('save-shortcut'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shortcut-warning')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('global-shortcut-value')).toHaveTextContent('Ctrl+Shift+N');
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes('in use by another app'))).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  it('rejects a combination without a modifier in capture mode (Story 7.4)', async () => {
     await openWith(buildConfig());
 
     fireEvent.click(screen.getByTestId('change-shortcut'));
+    fireEvent.keyDown(screen.getByTestId('shortcut-capture'), { key: 'J', code: 'KeyJ' });
 
-    expect(warnSpy).toHaveBeenCalledWith('Not yet implemented: Change global shortcut');
-    warnSpy.mockRestore();
+    expect(screen.getByTestId('shortcut-capture')).toHaveTextContent('Press new shortcut');
+    expect(screen.getByTestId('shortcut-warning')).toBeInTheDocument();
+  });
+
+  it('cancels capture on Escape without closing the overlay (Story 7.4)', async () => {
+    await openWith(buildConfig());
+
+    fireEvent.click(screen.getByTestId('change-shortcut'));
+    const captureEl = screen.getByTestId('shortcut-capture');
+    expect(captureEl).toBeInTheDocument();
+
+    // Esc targets the in-modal capture region; the capture-phase listener
+    // cancels capture and stops propagation before the panel's Esc-to-close.
+    fireEvent.keyDown(captureEl, { key: 'Escape', code: 'Escape' });
+
+    // Back in display mode and the overlay is still open.
+    await waitFor(() => {
+      expect(screen.getByTestId('change-shortcut')).toHaveFocus();
+      expect(useSettingsStore.getState().isOpen).toBe(true);
+    });
+  });
+
+  it('resets the shortcut to the platform default (Story 7.4)', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Alt+J' } }));
+      if (cmd === 'update_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: platformDefaultShortcut() } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByTestId('reset-shortcut'));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('update_config', {
+        partial: { general: null, editor: null, hotkey: { globalShortcut: platformDefaultShortcut() } },
+      });
+    });
+  });
+
+  it('keeps the previous shortcut visible and warns when reset conflicts (Story 7.4)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.resolve(buildConfig({ hotkey: { globalShortcut: 'Ctrl+Alt+J' } }));
+      if (cmd === 'update_config') return Promise.reject({ type: 'Config', message: 'Failed to register new shortcut' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    fireEvent.click(screen.getByTestId('reset-shortcut'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shortcut-warning')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('global-shortcut-value')).toHaveTextContent('Ctrl+Alt+J');
+    consoleSpy.mockRestore();
   });
 
   it('does not close when the passive backdrop is clicked', async () => {

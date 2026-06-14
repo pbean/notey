@@ -145,7 +145,10 @@ mod tests {
         assert_eq!(config.general.theme, "system");
         assert_eq!(config.general.layout_mode, "comfortable");
         assert_eq!(config.editor.font_size, 14);
-        assert_eq!(config.hotkey.global_shortcut, "Ctrl+Shift+N");
+        assert_eq!(
+            config.hotkey.global_shortcut,
+            crate::models::config::default_global_shortcut()
+        );
         assert!(tmp.path().join("config.toml").exists());
     }
 
@@ -251,7 +254,10 @@ fontSize = 18
         assert_eq!(merged.editor.font_size, 20);
         assert_eq!(merged.editor.font_family, "mono"); // unchanged
         assert_eq!(merged.general.theme, "system"); // unchanged
-        assert_eq!(merged.hotkey.global_shortcut, "Ctrl+Shift+N"); // unchanged
+        assert_eq!(
+            merged.hotkey.global_shortcut,
+            crate::models::config::default_global_shortcut()
+        ); // unchanged
     }
 
     #[test]
