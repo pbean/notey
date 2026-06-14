@@ -511,6 +511,7 @@ origin: migrated from legacy ledger ("Deferred from: code review of 3-2-full-tex
 location: n/a
 reason: `i64`-to-`number` precision loss — Specta 2.0.0-rc.24 maps Rust `i64` to JS `number` (IEEE 754 float). IDs beyond 2^53 lose precision silently. No BigInt support in current specta version; fixing would break 5 frontend files for zero practical risk in a notes app.
 status: open
+decision: 2026-06-13 Keep monitoring specta — Hold until specta ships i64->BigInt support, then re-evaluate the binding change.
 decision: 2026-06-12 Keep open, monitor specta
 
 ### DW-67: Title-only matches produce empty snippets

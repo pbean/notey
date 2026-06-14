@@ -1,0 +1,11 @@
+{
+  "DW-66": {
+    "answered_at": "2026-06-13",
+    "bundle_name": "",
+    "effect": "keep-open",
+    "intent": "Hold until specta ships i64->BigInt support, then re-evaluate the binding change.",
+    "key": "1",
+    "label": "Keep monitoring specta",
+    "resolution": ""
+  }
+}
