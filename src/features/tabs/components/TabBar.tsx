@@ -282,6 +282,12 @@ export function TabBar() {
                   color: 'var(--text-secondary)',
                   fontSize: '14px',
                   lineHeight: 1,
+                  // ≥24px-tall pointer target (WCAG 2.1 AA, Story 7.8) — the 14px
+                  // × glyph stays small, centered inside the larger hit area.
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   padding: '0 2px',
                   visibility:
                     hoveredIndex === index || isActive ? 'visible' : 'hidden',
@@ -324,6 +330,7 @@ export function TabBar() {
         <DropdownMenu>
           <DropdownMenuTrigger
             data-testid="tab-overflow"
+            aria-label="More tabs"
             style={{
               background: 'none',
               border: 'none',
@@ -335,6 +342,8 @@ export function TabBar() {
               flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
+              // ≥24px-tall target (WCAG 2.1 AA, Story 7.8); the tab bar is 32px.
+              minHeight: '24px',
             }}
           >
             ···

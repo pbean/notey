@@ -86,4 +86,12 @@ describe('StatusBar', () => {
     render(<StatusBar />);
     expect(screen.getByRole('status')).toBeDefined();
   });
+
+  it('format toggle keeps a 24px target without reserving idle save-indicator gap', () => {
+    render(<StatusBar />);
+    const toggle = screen.getByText('Markdown') as HTMLButtonElement;
+    expect(toggle.style.height).toBe('24px');
+    expect(toggle.style.display).toBe('flex');
+    expect(toggle.parentElement?.style.gap).toBe('');
+  });
 });

@@ -58,6 +58,13 @@ describe('WorkspaceSelector', () => {
     expect(screen.getByLabelText('Workspace selector')).toBeDefined();
   });
 
+  it('trigger keeps an explicit 24px target', () => {
+    render(<WorkspaceSelector />);
+    const trigger = screen.getByTestId('workspace-name');
+    expect(trigger.style.height).toBe('24px');
+    expect(trigger.style.display).toBe('flex');
+  });
+
   it('calls loadWorkspaces when dropdown opens', async () => {
     const loadSpy = vi.fn();
     useWorkspaceStore.setState({ loadWorkspaces: loadSpy });

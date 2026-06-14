@@ -412,8 +412,46 @@ describe('TabBar', () => {
     });
 
     expect(screen.getByTestId('tab-overflow')).toBeDefined();
+    // Story 7.8 (WCAG 2.1 AA): the overflow trigger must expose an accessible
+    // name and present a ≥24px-tall target.
+    const overflow = screen.getByTestId('tab-overflow');
+    expect(overflow.getAttribute('aria-label')).toBe('More tabs');
+    expect(overflow.style.minHeight).toBe('24px');
 
     globalThis.ResizeObserver = originalRO;
+  });
+
+  describe('accessibility targets & affordances (Story 7.8)', () => {
+    it('close button presents a ≥24px-tall target', () => {
+      useTabStore.setState({
+        tabs: [{ noteId: 1, title: 'A' }],
+        activeTabIndex: 0,
+      });
+      render(<TabBar />);
+      const closeBtn = screen.getByLabelText('Close A') as HTMLButtonElement;
+      expect(closeBtn.style.height).toBe('24px');
+      expect(closeBtn.style.display).toBe('flex');
+    });
+
+    it('active tab is distinguished by border + aria-selected, not color alone', () => {
+      useTabStore.setState({
+        tabs: [
+          { noteId: 1, title: 'A' },
+          { noteId: 2, title: 'B' },
+        ],
+        activeTabIndex: 0,
+      });
+      render(<TabBar />);
+      const active = screen.getByTestId('tab-1');
+      // Non-color affordance: a visible bottom border distinguishes the active tab.
+      expect(active.style.borderBottom).toContain('2px solid');
+      expect(active.style.borderBottom).toContain('var(--accent)');
+      expect(active.getAttribute('aria-selected')).toBe('true');
+      // Inactive tab carries neither affordance.
+      const inactive = screen.getByTestId('tab-2');
+      expect(inactive.style.borderBottom).toContain('transparent');
+      expect(inactive.getAttribute('aria-selected')).toBe('false');
+    });
   });
 
   describe('keyboard navigation (Story 7.7)', () => {

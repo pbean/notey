@@ -53,6 +53,11 @@ export function WorkspaceSelector() {
           cursor: 'pointer',
           color: 'var(--text-secondary)',
           fontSize: '11px',
+          // Use an explicit 24px target so the hit area is not sensitive to
+          // parent-height changes.
+          height: '24px',
+          display: 'flex',
+          alignItems: 'center',
           padding: 0,
           fontFamily: 'inherit',
         }}

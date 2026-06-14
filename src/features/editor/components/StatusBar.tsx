@@ -42,7 +42,7 @@ export function StatusBar() {
       }}
     >
       <WorkspaceSelector />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <SaveIndicator />
         <button
           onClick={() => void handleFormatToggle()}
@@ -52,6 +52,11 @@ export function StatusBar() {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
+            // Use an explicit 24px target so the hit area does not depend on the
+            // height of this wrapper.
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
             padding: 0,
           }}
         >
