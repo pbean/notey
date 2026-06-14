@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-14 # story 7.2 → done
+last_updated: 2026-06-14 # story 7.3 → review
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -109,7 +109,7 @@ development_status:
   epic-5-retrospective: done # epic-5-retro-2026-06-12.md
 
   # Epic 6: CLI Integration
-  epic-6: in-progress
+  epic-6: done
   6-1-cli-crate-scaffold-argument-parsing: done
   6-2-ipc-socket-server-in-desktop-app: done
   6-3-cli-add-command: done
@@ -117,13 +117,13 @@ development_status:
   6-5-cli-search-command: done
   6-6-real-time-desktop-sync-on-cli-changes: done
   6-7-cli-error-handling-user-isolation: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done # epic-6-retro-2026-06-14.md
 
   # Epic 7: Personalization & Accessibility
   epic-7: in-progress
   7-1-settings-view-panel: done
   7-2-theme-switching: done
-  7-3-font-configuration: backlog
+  7-3-font-configuration: review
   7-4-global-hotkey-reconfiguration-conflict-detection: backlog
   7-5-layout-mode-switching: backlog
   7-6-keyboard-shortcut-configuration: backlog
@@ -185,7 +185,14 @@ development_status:
   # Deferred item (first E2E smoke test) resolved at Epic 5 retro → folded into epic-5-retro-item-1
 
   # Epic 5 Retro Items (2026-06-12):
-  epic-5-retro-item-1-test-design-and-backfill-prior-epics: backlog # CRITICAL — TEA test-design + build missing tests for Epics 3-5 incl. first feature E2E (trash lifecycle + export file-write) + dedup→toast regression tests; gates Epic 6
-  epic-5-retro-item-2-singleflight-inflight-guard-helper: backlog # HIGH — replace 6 hand-rolled guards with shared singleflight-style helper (dedupe by key, share in-flight result, no ambiguous null); kills false-failure-toast bug
+  epic-5-retro-item-1-test-design-and-backfill-prior-epics: in-progress # PARTIAL at Epic 6 retro: test-DESIGN done (test-design-epic-3..7, commit b43717a); first feature E2E NOT shipped (E2E still Epic-1 only) → Pinkyd owns the E2E build (see epic-6-retro-item-1)
+  epic-5-retro-item-2-singleflight-inflight-guard-helper: in-progress # NOT done by Epic 6; guard #7 added (realtimeSync.ts:16) → Pinkyd owns (see epic-6-retro-item-2)
   epic-5-retro-item-3-fix-retro-tracking-drift: done # MEDIUM — Epic 4 items 1/2/4 flipped to done above
-  epic-5-retro-item-4-permission-toml-auto-gen-check: backlog # LOW — recurs per new command (Tauri v2); consider scripted check/generator during Epic 6
+  epic-5-retro-item-4-permission-toml-auto-gen-check: done # MOOT at Epic 6 retro — Epic 6 added no new Tauri commands (IPC delegates to existing services), gotcha did not recur
+
+  # Epic 6 Retro Items (2026-06-14):
+  epic-6-retro-item-1-first-feature-e2e: in-progress # HIGH — first feature E2E via existing tauri-driver harness (trash lifecycle + export file-write and/or CLI live-sync); retires 6-epic E2E gap; Pinkyd-owned, NOT a gate (by decision)
+  epic-6-retro-item-2-singleflight-guard-helper: in-progress # HIGH — extract singleflight helper, migrate the 7 hand-rolled guards; Pinkyd-owned, NOT a gate (by decision); absorbs epic-5-retro-item-2
+  epic-6-retro-item-3-per-story-dw-logging: backlog # MEDIUM — log every real out-of-scope review dismissal to deferred-work.md PER STORY as part of the coding-assistant workflow (not swept at retro)
+  epic-6-retro-item-4-close-out-tracking-discipline: done # MEDIUM — reconcile status on close-out not at next retro; Epic 5 items 1/2/4 reconciled this retro
+  epic-6-retro-item-5-dw-85-ipc-worker-budget: backlog # LOW — resolve DW-85 cross-platform IPC worker-lifetime/connection-budget policy before broader CLI concurrency hardening
