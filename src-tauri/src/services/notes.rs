@@ -2,7 +2,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection};
 
 use crate::errors::NoteyError;
-use crate::models::Note;
+use crate::models::{Note, NoteListItem};
 
 pub fn create_note(
     conn: &Connection,
@@ -258,6 +258,47 @@ pub fn list_notes(conn: &Connection, workspace_id: Option<i64>) -> Result<Vec<No
     };
 
     Ok(notes)
+}
+
+/// Lists non-trashed notes enriched with their workspace name, optionally
+/// filtered by workspace name (Story 6.4, FR15).
+///
+/// This is the listing path for the `notey list` CLI command: it `LEFT JOIN`s
+/// `workspaces` so each row carries the workspace *name* (or `None` for an
+/// unassigned note), mirroring [`crate::services::search_service::search_notes`].
+/// It is intentionally separate from [`list_notes`] (the GUI path), which returns
+/// raw [`Note`] rows by `workspace_id` and is left unchanged.
+///
+/// When `workspace_name` is `Some(name)`, only notes whose workspace name equals
+/// `name` are returned. Because `workspaces.name` is not unique (only `path` is),
+/// a name filter may match notes across several workspaces sharing that name.
+/// Results are always ordered by `updated_at` DESC. The filter is parameterized —
+/// never interpolated — guarding the CLI injection vector (RISK-E6-006).
+pub fn list_notes_with_workspace(
+    conn: &Connection,
+    workspace_name: Option<&str>,
+) -> Result<Vec<NoteListItem>, NoteyError> {
+    let mut stmt = conn.prepare(
+        "SELECT n.id, n.title, w.name AS workspace_name, n.updated_at
+         FROM notes n
+         LEFT JOIN workspaces w ON w.id = n.workspace_id
+         WHERE n.is_trashed = 0
+           AND (?1 IS NULL OR w.name = ?1)
+         ORDER BY n.updated_at DESC",
+    )?;
+
+    let items = stmt
+        .query_map(params![workspace_name], |row| {
+            Ok(NoteListItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                workspace_name: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(items)
 }
 
 #[cfg(test)]
@@ -1153,5 +1194,82 @@ mod tests {
         let toggled_back = update_note(&conn, note.id, None, None, Some("markdown".to_string()))
             .expect("toggle back to markdown failed");
         assert_eq!(toggled_back.format, "markdown");
+    }
+
+    // ── Story 6.4: list_notes_with_workspace (name-enriched listing) ──────────
+
+    /// Insert a workspace row directly and return its id (names need not be unique).
+    fn insert_workspace(conn: &Connection, name: &str, path: &str) -> i64 {
+        conn.execute(
+            "INSERT INTO workspaces (name, path, created_at) VALUES (?1, ?2, ?3)",
+            params![name, path, "2026-06-13T00:00:00+00:00"],
+        )
+        .expect("insert workspace");
+        conn.last_insert_rowid()
+    }
+
+    /// Create a titled note in `workspace_id` and stamp a fixed `updated_at` so
+    /// ordering is deterministic.
+    fn seed_note(conn: &Connection, title: &str, workspace_id: Option<i64>, updated_at: &str) -> i64 {
+        let note = create_note(conn, "markdown", workspace_id).expect("create note");
+        conn.execute(
+            "UPDATE notes SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, updated_at, note.id],
+        )
+        .expect("stamp note");
+        note.id
+    }
+
+    #[test]
+    fn list_with_workspace_enriches_name_and_orders_desc() {
+        let conn = setup_test_db();
+        let ws = insert_workspace(&conn, "my-proj", "/home/me/my-proj");
+        seed_note(&conn, "older", Some(ws), "2026-06-10T00:00:00+00:00");
+        seed_note(&conn, "newer", None, "2026-06-12T00:00:00+00:00");
+
+        let items = list_notes_with_workspace(&conn, None).expect("list");
+        assert_eq!(items.len(), 2);
+        // updated_at DESC → "newer" first.
+        assert_eq!(items[0].title, "newer");
+        assert_eq!(items[0].workspace_name, None);
+        assert_eq!(items[1].title, "older");
+        assert_eq!(items[1].workspace_name, Some("my-proj".to_string()));
+    }
+
+    #[test]
+    fn list_with_workspace_filters_by_name() {
+        let conn = setup_test_db();
+        let a = insert_workspace(&conn, "alpha", "/p/alpha");
+        let b = insert_workspace(&conn, "beta", "/p/beta");
+        seed_note(&conn, "in-alpha", Some(a), "2026-06-11T00:00:00+00:00");
+        seed_note(&conn, "in-beta", Some(b), "2026-06-12T00:00:00+00:00");
+
+        let items = list_notes_with_workspace(&conn, Some("alpha")).expect("list");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "in-alpha");
+    }
+
+    #[test]
+    fn list_with_workspace_name_filter_matches_all_duplicate_names() {
+        // workspaces.name is not unique (only path is): a name filter spans them.
+        let conn = setup_test_db();
+        let ws1 = insert_workspace(&conn, "dup", "/p/one/dup");
+        let ws2 = insert_workspace(&conn, "dup", "/p/two/dup");
+        seed_note(&conn, "from-one", Some(ws1), "2026-06-11T00:00:00+00:00");
+        seed_note(&conn, "from-two", Some(ws2), "2026-06-12T00:00:00+00:00");
+
+        let items = list_notes_with_workspace(&conn, Some("dup")).expect("list");
+        assert_eq!(items.len(), 2, "name filter must match both 'dup' workspaces");
+    }
+
+    #[test]
+    fn list_with_workspace_excludes_trashed() {
+        let conn = setup_test_db();
+        let id = seed_note(&conn, "trashme", None, "2026-06-12T00:00:00+00:00");
+        conn.execute("UPDATE notes SET is_trashed = 1 WHERE id = ?1", params![id])
+            .expect("trash note");
+
+        let items = list_notes_with_workspace(&conn, None).expect("list");
+        assert!(items.is_empty(), "trashed notes must not be listed");
     }
 }

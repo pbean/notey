@@ -118,7 +118,15 @@ fn int_001_routes_workspace_resolution_and_positive_filters() {
     let unscoped = ts.send("create_note", json!({ "content": "workspace note other" }));
     assert!(unscoped.success, "create error: {:?}", unscoped.error);
 
-    let filtered_list = ts.send("list_notes", json!({ "workspaceId": workspace_id }));
+    // `list_notes` filters by workspace NAME (Story 6.4): the server detects the
+    // workspace from the create path; with no `.git`, the name is the dir basename.
+    let workspace_name = workspace_dir
+        .path()
+        .file_name()
+        .and_then(|n| n.to_str())
+        .expect("workspace name")
+        .to_string();
+    let filtered_list = ts.send("list_notes", json!({ "workspaceName": workspace_name }));
     assert!(
         filtered_list.success,
         "list error: {:?}",
@@ -128,6 +136,7 @@ fn int_001_routes_workspace_resolution_and_positive_filters() {
     let list_items = list_items.as_array().expect("list array");
     assert_eq!(list_items.len(), 1);
     assert_eq!(list_items[0]["id"], scoped_data["id"]);
+    assert_eq!(list_items[0]["workspaceName"], workspace_name);
 
     let filtered_search = ts.send(
         "search_notes",

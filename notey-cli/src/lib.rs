@@ -12,13 +12,16 @@
 //! mapping ([`exit_code_for`]). Story 6.3 wires the `add` command end-to-end:
 //! [`run`] collects content (argv or stdin), validates it, attaches the
 //! auto-detected workspace, and round-trips a `create_note` request to the app.
-//! `list` / `search` parse and validate but remain deferred to Stories 6.4 / 6.5.
+//! Story 6.4 wires `list`: it round-trips a `list_notes` request and prints one
+//! note per line — title, relative date, workspace name — pipe-friendly. `search`
+//! parses and validates but remains deferred to Story 6.5.
 
 use std::{
     ffi::OsString,
     io::{self, IsTerminal, Read},
 };
 
+use chrono::{DateTime, Datelike, FixedOffset, Local, TimeZone, Utc};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
@@ -115,6 +118,22 @@ pub struct CliResponse {
     pub data: Option<serde_json::Value>,
     /// Error message, when `success` is `false`.
     pub error: Option<String>,
+}
+
+/// Duplicated IPC **list item** (AC6). Mirrors `src-tauri`'s `NoteListItem`
+/// without sharing code — the `list_notes` action returns an array of these.
+/// Only the fields `notey list` prints are modeled; serde ignores the rest.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteListItem {
+    /// Note id, mirrored from the app-side IPC contract.
+    pub id: i64,
+    /// Note title (printed truncated to [`MAX_TITLE_CHARS`]).
+    pub title: String,
+    /// Workspace name, or `None` for a workspace-less note.
+    pub workspace_name: Option<String>,
+    /// ISO 8601 last-updated timestamp, rendered as a relative date.
+    pub updated_at: String,
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -307,20 +326,21 @@ where
                 return 1;
             }
         },
-        // `list` / `search` validate their workspace then stop short of dispatch —
-        // their output/formatting lands in Stories 6.4 / 6.5.
-        list_or_search => {
-            if let Err(err) = validate_non_add_workspace(&list_or_search) {
-                return match err {
-                    RunValidationError::Usage(message) => {
-                        eprintln!("{}", error_line(&message, stderr_tty));
-                        2
-                    }
-                    RunValidationError::Io(message) => {
-                        eprintln!("{}", error_line(&message, stderr_tty));
-                        1
-                    }
-                };
+        // `list` (Story 6.4) dispatches and prints its own formatted output, so it
+        // returns the exit code directly rather than flowing through `emit_outcome`.
+        Command::List { workspace } => {
+            if let Err(message) = validate_optional_workspace(workspace.as_deref()) {
+                eprintln!("{}", error_line(&message, stderr_tty));
+                return 2;
+            }
+            return dispatch_list(workspace.as_deref());
+        }
+        // `search` output/formatting lands in Story 6.5; validate its workspace then
+        // report the app as unreachable for now.
+        Command::Search { workspace, .. } => {
+            if let Err(message) = validate_optional_workspace(workspace.as_deref()) {
+                eprintln!("{}", error_line(&message, stderr_tty));
+                return 2;
             }
             CommandOutcome::NotRunning
         }
@@ -493,20 +513,172 @@ fn command_from_subcommand(sub: CliSub) -> Result<Command, CliError> {
     }
 }
 
-/// Validate the optional `--workspace` of a `list` / `search` command. `add` is
-/// handled by [`prepare_add`]; this never sees it.
-fn validate_non_add_workspace(command: &Command) -> Result<(), RunValidationError> {
-    match command {
-        Command::List {
-            workspace: Some(workspace),
-        }
-        | Command::Search {
-            workspace: Some(workspace),
-            ..
-        } => validate_workspace(workspace)
-            .map_err(|_| RunValidationError::Usage(format!("invalid workspace name: {workspace}"))),
-        _ => Ok(()),
+/// Validate an optional `--workspace` filter (shared by `list` / `search`) before
+/// any socket attempt. Returns a ready-to-print usage message on rejection.
+fn validate_optional_workspace(workspace: Option<&str>) -> Result<(), String> {
+    match workspace {
+        Some(name) => validate_workspace(name)
+            .map_err(|_| format!("invalid workspace name: {name}")),
+        None => Ok(()),
     }
+}
+
+/// Maximum displayed title width for `notey list`: titles longer than this are
+/// truncated with a trailing `…` (Story 6.4 / FR15).
+pub const MAX_TITLE_CHARS: usize = 50;
+
+/// Dispatch a `list_notes` request and print one note per line, returning the
+/// process exit code. Success → formatted lines + `0`; app error → `✕ <error>` +
+/// `1`; app not running → guidance + `2`. An empty result prints nothing (exit 0)
+/// so `notey list` stays pipe-friendly.
+fn dispatch_list(workspace: Option<&str>) -> i32 {
+    let request = build_list_request(workspace);
+    match client::send_request(&request) {
+        Ok(response) if response.success => match parse_list_data(response.data) {
+            Ok(items) => {
+                let rendered = format_list(&items, Utc::now());
+                if !rendered.is_empty() {
+                    println!("{rendered}");
+                }
+                0
+            }
+            Err(message) => {
+                eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
+                1
+            }
+        },
+        Ok(response) => {
+            let message = response.error.unwrap_or_else(|| "unknown error".to_string());
+            eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
+            1
+        }
+        Err(client::ClientError::NotRunning) => {
+            eprintln!(
+                "{}",
+                error_line(
+                    "Notey is not running. Start the application first.",
+                    io::stderr().is_terminal(),
+                )
+            );
+            2
+        }
+        Err(other) => {
+            eprintln!("{}", error_line(&other.to_string(), io::stderr().is_terminal()));
+            1
+        }
+    }
+}
+
+/// Build the `list_notes` request. No filter → payload `{}`; with a filter →
+/// `{ "workspaceName": "<name>" }` (camelCase, mirroring the server contract).
+fn build_list_request(workspace: Option<&str>) -> CliRequest {
+    let payload = match workspace {
+        Some(name) => serde_json::json!({ "workspaceName": name }),
+        None => serde_json::json!({}),
+    };
+    CliRequest {
+        action: "list_notes".to_string(),
+        payload,
+    }
+}
+
+/// Decode the response `data` into list items. A missing payload or shape mismatch
+/// is surfaced as a protocol error instead of being mistaken for an empty list.
+fn parse_list_data(data: Option<serde_json::Value>) -> Result<Vec<NoteListItem>, String> {
+    match data {
+        Some(value) => serde_json::from_value(value)
+            .map_err(|e| format!("malformed list response: {e}")),
+        None => Err("malformed list response: missing data".to_string()),
+    }
+}
+
+/// Render list items as newline-joined, TAB-separated lines (empty for no items).
+fn format_list(items: &[NoteListItem], now: DateTime<Utc>) -> String {
+    items
+        .iter()
+        .map(|item| format_list_line(item, now))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Format one note line: `title \t relative-date \t workspace-name`. TAB-separated
+/// (not aligned columns) so titles-with-spaces stay parseable by `cut`/`awk`; an
+/// absent workspace yields an empty trailing field. No ANSI color on list rows.
+fn format_list_line(item: &NoteListItem, now: DateTime<Utc>) -> String {
+    let title = truncate_title(&sanitize_list_field(&item.title));
+    let date = relative_date(&item.updated_at, now);
+    let workspace = sanitize_list_field(item.workspace_name.as_deref().unwrap_or(""));
+    format!("{title}\t{date}\t{workspace}")
+}
+
+/// Replace line/tab control separators so each rendered note always stays a
+/// single, three-field TAB-delimited record.
+fn sanitize_list_field(field: &str) -> String {
+    field
+        .chars()
+        .map(|ch| match ch {
+            '\t' | '\n' | '\r' => ' ',
+            other => other,
+        })
+        .collect()
+}
+
+/// Truncate a title to [`MAX_TITLE_CHARS`] display characters, appending `…` when
+/// it overflows (counted by `char`, so multibyte titles never split mid-codepoint).
+fn truncate_title(title: &str) -> String {
+    let chars: Vec<char> = title.chars().collect();
+    if chars.len() <= MAX_TITLE_CHARS {
+        return title.to_string();
+    }
+    let mut truncated: String = chars[..MAX_TITLE_CHARS - 1].iter().collect();
+    truncated.push('\u{2026}');
+    truncated
+}
+
+/// Format an ISO 8601 timestamp as a relative date, mirroring the frontend
+/// `formatRelativeDate` buckets: `just now` / `{n}m ago` / `{n}h ago` / `{n}d ago`
+/// (< 7 days), else `MonthAbbr Day`. `now` is injected so the function is pure and
+/// testable. Future and unparseable timestamps degrade gracefully.
+fn relative_date(iso: &str, now: DateTime<Utc>) -> String {
+    relative_date_in_timezone(iso, now, &Local)
+}
+
+fn relative_date_in_timezone<Tz>(iso: &str, now: DateTime<Utc>, timezone: &Tz) -> String
+where
+    Tz: TimeZone,
+    Tz::Offset: std::fmt::Display,
+{
+    let when = match DateTime::parse_from_rfc3339(iso) {
+        Ok(dt) => dt,
+        Err(_) => return String::new(),
+    };
+
+    let mins = (now - when.with_timezone(&Utc)).num_minutes();
+    if mins < 0 {
+        return month_day_in_timezone(&when, timezone);
+    }
+    if mins < 1 {
+        "just now".to_string()
+    } else if mins < 60 {
+        format!("{mins}m ago")
+    } else if mins < 24 * 60 {
+        format!("{}h ago", mins / 60)
+    } else if mins < 7 * 24 * 60 {
+        format!("{}d ago", mins / (24 * 60))
+    } else {
+        month_day_in_timezone(&when, timezone)
+    }
+}
+
+/// Render a timestamp as `MonthAbbr Day` (e.g. `Jun 13`) in the display timezone,
+/// matching the frontend's local-calendar-day behavior for older/future notes.
+fn month_day_in_timezone<Tz>(when: &DateTime<FixedOffset>, timezone: &Tz) -> String
+where
+    Tz: TimeZone,
+    Tz::Offset: std::fmt::Display,
+{
+    let localized = when.with_timezone(timezone);
+    format!("{} {}", localized.format("%b"), localized.day())
 }
 
 fn map_content_validation_error(error: CliError) -> RunValidationError {
@@ -664,5 +836,158 @@ mod tests {
             "notey-cli-missing-cwd-{}",
             std::process::id()
         ))
+    }
+
+    // ── Story 6.4 — list_notes request builder ───────────────────────────────
+
+    #[test]
+    fn build_list_request_uses_empty_payload_without_filter() {
+        let req = build_list_request(None);
+        assert_eq!(req.action, "list_notes");
+        assert_eq!(req.payload, serde_json::json!({}));
+    }
+
+    #[test]
+    fn build_list_request_carries_workspace_name_filter() {
+        let req = build_list_request(Some("my-proj"));
+        assert_eq!(req.action, "list_notes");
+        assert_eq!(req.payload, serde_json::json!({ "workspaceName": "my-proj" }));
+    }
+
+    // ── Story 6.4 — title truncation ─────────────────────────────────────────
+
+    #[test]
+    fn truncate_title_leaves_short_titles_untouched() {
+        assert_eq!(truncate_title("hello"), "hello");
+        let exact: String = "x".repeat(MAX_TITLE_CHARS);
+        assert_eq!(truncate_title(&exact), exact);
+    }
+
+    #[test]
+    fn truncate_title_appends_ellipsis_when_overflowing() {
+        let long: String = "x".repeat(MAX_TITLE_CHARS + 10);
+        let out = truncate_title(&long);
+        assert_eq!(out.chars().count(), MAX_TITLE_CHARS);
+        assert!(out.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn truncate_title_counts_chars_not_bytes() {
+        // Multibyte chars must not be split mid-codepoint.
+        let long: String = "é".repeat(MAX_TITLE_CHARS + 5);
+        let out = truncate_title(&long);
+        assert_eq!(out.chars().count(), MAX_TITLE_CHARS);
+    }
+
+    // ── Story 6.4 — relative-date buckets (mirror formatRelativeDate) ─────────
+
+    fn at(iso: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(iso)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn relative_date_matches_frontend_buckets() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let pacific = FixedOffset::west_opt(7 * 3600).unwrap();
+        assert_eq!(
+            relative_date_in_timezone("2026-06-13T11:59:40+00:00", now, &pacific),
+            "just now"
+        ); // 20s
+        assert_eq!(
+            relative_date_in_timezone("2026-06-13T11:55:00+00:00", now, &pacific),
+            "5m ago"
+        );
+        assert_eq!(
+            relative_date_in_timezone("2026-06-13T09:00:00+00:00", now, &pacific),
+            "3h ago"
+        );
+        assert_eq!(
+            relative_date_in_timezone("2026-06-11T12:00:00+00:00", now, &pacific),
+            "2d ago"
+        );
+        // > 7 days → month-day.
+        assert_eq!(
+            relative_date_in_timezone("2026-05-04T12:00:00+00:00", now, &pacific),
+            "May 4"
+        );
+    }
+
+    #[test]
+    fn relative_date_handles_future_and_unparseable() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let pacific = FixedOffset::west_opt(7 * 3600).unwrap();
+        // Future timestamp → month-day, never a negative "ago".
+        assert_eq!(
+            relative_date_in_timezone("2026-06-20T12:00:00+00:00", now, &pacific),
+            "Jun 20"
+        );
+        // Unparseable → empty (mirrors the frontend's `return ''`).
+        assert_eq!(relative_date("not-a-date", now), "");
+    }
+
+    #[test]
+    fn relative_date_month_day_uses_display_timezone_calendar_day() {
+        let now = at("2026-06-21T12:00:00+00:00");
+        let pacific = FixedOffset::west_opt(7 * 3600).unwrap();
+
+        assert_eq!(
+            relative_date_in_timezone("2026-06-13T06:30:00+00:00", now, &pacific),
+            "Jun 12"
+        );
+    }
+
+    // ── Story 6.4 — line formatting (TAB-separated, pipe-friendly) ────────────
+
+    #[test]
+    fn format_list_line_is_tab_separated_with_workspace() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = NoteListItem {
+            id: 1,
+            title: "my note".to_string(),
+            workspace_name: Some("proj".to_string()),
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        assert_eq!(format_list_line(&item, now), "my note\t5m ago\tproj");
+    }
+
+    #[test]
+    fn format_list_line_empty_workspace_field_when_absent() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = NoteListItem {
+            id: 2,
+            title: "loose".to_string(),
+            workspace_name: None,
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        let line = format_list_line(&item, now);
+        assert_eq!(line, "loose\t5m ago\t");
+        assert_eq!(line.matches('\t').count(), 2, "two tabs → three fields");
+        assert!(!line.contains('\u{1b}'), "list rows carry no ANSI escapes");
+    }
+
+    #[test]
+    fn format_list_empty_items_is_empty_string() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        assert_eq!(format_list(&[], now), "");
+    }
+
+    #[test]
+    fn format_list_line_sanitizes_embedded_record_delimiters() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = NoteListItem {
+            id: 3,
+            title: "tab\tseparated".to_string(),
+            workspace_name: Some("proj\tname".to_string()),
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+
+        assert_eq!(format_list_line(&item, now), "tab separated\t5m ago\tproj name");
+    }
+
+    #[test]
+    fn parse_list_data_rejects_missing_payload() {
+        assert!(parse_list_data(None).is_err());
     }
 }

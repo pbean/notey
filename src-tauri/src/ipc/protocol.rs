@@ -76,7 +76,7 @@ struct CreateNotePayload {
 #[serde(rename_all = "camelCase")]
 struct ListNotesPayload {
     #[serde(default)]
-    workspace_id: Option<i64>,
+    workspace_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,7 +189,7 @@ fn handle_list(conn: &Connection, payload: Value) -> IpcResponse {
         }
     };
 
-    match notes::list_notes(conn, payload.workspace_id) {
+    match notes::list_notes_with_workspace(conn, payload.workspace_name.as_deref()) {
         Ok(list) => ok_value(list),
         Err(e) => IpcResponse::err(e.to_string()),
     }
@@ -342,22 +342,59 @@ mod tests {
     }
 
     #[test]
-    fn list_notes_routes_with_and_without_filter() {
+    fn list_notes_routes_enriched_with_and_without_name_filter() {
         let conn = setup_test_db();
+        // A note inside a git-resolved workspace (server detects + upserts it).
+        let repo = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(repo.path().join(".git")).expect("mk .git");
+        let repo_path = repo.path().to_str().unwrap();
         handle_request(
             &conn,
-            &request("create_note", serde_json::json!({ "content": "one" })),
+            &request(
+                "create_note",
+                serde_json::json!({ "content": "scoped", "workspacePath": repo_path }),
+            ),
         );
-        let resp = handle_request(&conn, &request("list_notes", Value::Null));
-        assert!(resp.success);
-        assert_eq!(resp.data.unwrap().as_array().unwrap().len(), 1);
+        // A workspace-less note.
+        handle_request(
+            &conn,
+            &request("create_note", serde_json::json!({ "content": "loose" })),
+        );
 
+        // No filter: both notes, each carrying a (possibly null) workspaceName.
+        let resp = handle_request(&conn, &request("list_notes", serde_json::json!({})));
+        assert!(resp.success);
+        let all = resp.data.unwrap();
+        let all = all.as_array().unwrap();
+        assert_eq!(all.len(), 2);
+        assert!(all.iter().all(|n| n.get("workspaceName").is_some()));
+
+        // Filter by the detected workspace name → only the scoped note.
+        let ws_name = repo
+            .path()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let filtered = handle_request(
             &conn,
-            &request("list_notes", serde_json::json!({ "workspaceId": 4242 })),
+            &request("list_notes", serde_json::json!({ "workspaceName": ws_name })),
         );
         assert!(filtered.success);
-        assert!(filtered.data.unwrap().as_array().unwrap().is_empty());
+        let rows = filtered.data.unwrap();
+        let rows = rows.as_array().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["title"], "scoped");
+        assert_eq!(rows[0]["workspaceName"], ws_name);
+
+        // A non-existent workspace name → empty.
+        let none = handle_request(
+            &conn,
+            &request("list_notes", serde_json::json!({ "workspaceName": "no-such-ws" })),
+        );
+        assert!(none.success);
+        assert!(none.data.unwrap().as_array().unwrap().is_empty());
     }
 
     #[test]
