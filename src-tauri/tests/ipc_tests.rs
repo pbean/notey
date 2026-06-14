@@ -113,7 +113,6 @@ fn int_001_routes_workspace_resolution_and_positive_filters() {
     );
     assert!(scoped.success, "create error: {:?}", scoped.error);
     let scoped_data = scoped.data.expect("scoped data");
-    let workspace_id = scoped_data["workspaceId"].as_i64().expect("workspace id");
 
     let unscoped = ts.send("create_note", json!({ "content": "workspace note other" }));
     assert!(unscoped.success, "create error: {:?}", unscoped.error);
@@ -140,7 +139,7 @@ fn int_001_routes_workspace_resolution_and_positive_filters() {
 
     let filtered_search = ts.send(
         "search_notes",
-        json!({ "query": "workspace", "workspaceId": workspace_id }),
+        json!({ "query": "workspace", "workspaceName": workspace_name }),
     );
     assert!(
         filtered_search.success,

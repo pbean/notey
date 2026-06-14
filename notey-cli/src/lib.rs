@@ -13,8 +13,10 @@
 //! [`run`] collects content (argv or stdin), validates it, attaches the
 //! auto-detected workspace, and round-trips a `create_note` request to the app.
 //! Story 6.4 wires `list`: it round-trips a `list_notes` request and prints one
-//! note per line — title, relative date, workspace name — pipe-friendly. `search`
-//! parses and validates but remains deferred to Story 6.5.
+//! note per line — title, relative date, workspace name — pipe-friendly. Story 6.5
+//! wires `search`: it round-trips a `search_notes` request and prints one result
+//! per line — title, snippet, workspace name, relative date — and reports
+//! `No notes matching '<query>'` when the result set is empty.
 
 use std::{
     ffi::OsString,
@@ -130,6 +132,25 @@ pub struct NoteListItem {
     pub id: i64,
     /// Note title (printed truncated to [`MAX_TITLE_CHARS`]).
     pub title: String,
+    /// Workspace name, or `None` for a workspace-less note.
+    pub workspace_name: Option<String>,
+    /// ISO 8601 last-updated timestamp, rendered as a relative date.
+    pub updated_at: String,
+}
+
+/// Duplicated IPC **search item** (AC6). Mirrors `src-tauri`'s `SearchResult`
+/// without sharing code — the `search_notes` action returns an array of these.
+/// Only the fields `notey search` prints are modeled; serde ignores the rest
+/// (e.g. `format`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultItem {
+    /// Note id, mirrored from the app-side IPC contract.
+    pub id: i64,
+    /// Note title (printed truncated to [`MAX_TITLE_CHARS`]).
+    pub title: String,
+    /// Match snippet with `<mark>…</mark>` highlight tags (stripped for display).
+    pub snippet: String,
     /// Workspace name, or `None` for a workspace-less note.
     pub workspace_name: Option<String>,
     /// ISO 8601 last-updated timestamp, rendered as a relative date.
@@ -277,8 +298,9 @@ pub fn exit_code_for(outcome: &CommandOutcome) -> i32 {
 /// `--help` / `--version` / usage errors keep clap's convention (stdout + exit 0,
 /// or stderr + exit 2). `add` (Story 6.3) collects its content once, validates it,
 /// attaches the auto-detected workspace, and round-trips a `create_note` request
-/// to the desktop app over the IPC socket. `list` / `search` parse and validate
-/// but remain deferred to Stories 6.4 / 6.5, so they report the app as unreachable.
+/// to the desktop app over the IPC socket. `list` (Story 6.4) and `search`
+/// (Story 6.5) validate their optional workspace filters, round-trip their IPC
+/// requests, print pipe-friendly output, and return canonical exit codes.
 pub fn run<I, T>(args: I) -> i32
 where
     I: IntoIterator<Item = T>,
@@ -335,14 +357,14 @@ where
             }
             return dispatch_list(workspace.as_deref());
         }
-        // `search` output/formatting lands in Story 6.5; validate its workspace then
-        // report the app as unreachable for now.
-        Command::Search { workspace, .. } => {
+        // `search` (Story 6.5) dispatches and prints its own formatted output, so it
+        // returns the exit code directly rather than flowing through `emit_outcome`.
+        Command::Search { query, workspace } => {
             if let Err(message) = validate_optional_workspace(workspace.as_deref()) {
                 eprintln!("{}", error_line(&message, stderr_tty));
                 return 2;
             }
-            CommandOutcome::NotRunning
+            return dispatch_search(&query, workspace.as_deref());
         }
     };
 
@@ -611,15 +633,12 @@ fn format_list_line(item: &NoteListItem, now: DateTime<Utc>) -> String {
     format!("{title}\t{date}\t{workspace}")
 }
 
-/// Replace line/tab control separators so each rendered note always stays a
-/// single, three-field TAB-delimited record.
+/// Replace control characters with spaces so rendered output stays a single
+/// record and never carries raw terminal control bytes.
 fn sanitize_list_field(field: &str) -> String {
     field
         .chars()
-        .map(|ch| match ch {
-            '\t' | '\n' | '\r' => ' ',
-            other => other,
-        })
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
         .collect()
 }
 
@@ -679,6 +698,108 @@ where
 {
     let localized = when.with_timezone(timezone);
     format!("{} {}", localized.format("%b"), localized.day())
+}
+
+/// Dispatch a `search_notes` request and print one result per line, returning the
+/// process exit code. Success with matches → formatted lines + `0`; success with
+/// no matches → `No notes matching '<query>'` on stdout + `0` (AC3); app error →
+/// `✕ <error>` + `1`; app not running → guidance + `2`.
+fn dispatch_search(query: &str, workspace: Option<&str>) -> i32 {
+    let request = build_search_request(query, workspace);
+    match client::send_request(&request) {
+        Ok(response) if response.success => match parse_search_data(response.data) {
+            Ok(items) => {
+                if items.is_empty() {
+                    println!("{}", format_no_match_message(query));
+                } else {
+                    println!("{}", format_search(&items, Utc::now()));
+                }
+                0
+            }
+            Err(message) => {
+                eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
+                1
+            }
+        },
+        Ok(response) => {
+            let message = response.error.unwrap_or_else(|| "unknown error".to_string());
+            eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
+            1
+        }
+        Err(client::ClientError::NotRunning) => {
+            eprintln!(
+                "{}",
+                error_line(
+                    "Notey is not running. Start the application first.",
+                    io::stderr().is_terminal(),
+                )
+            );
+            2
+        }
+        Err(other) => {
+            eprintln!("{}", error_line(&other.to_string(), io::stderr().is_terminal()));
+            1
+        }
+    }
+}
+
+/// Build the `search_notes` request. No filter → payload `{ "query": "<q>" }`; with
+/// a filter → `{ "query": "<q>", "workspaceName": "<name>" }` (camelCase, mirroring
+/// the server contract).
+fn build_search_request(query: &str, workspace: Option<&str>) -> CliRequest {
+    let mut payload = serde_json::json!({ "query": query });
+    if let Some(name) = workspace {
+        payload["workspaceName"] = serde_json::Value::String(name.to_string());
+    }
+    CliRequest {
+        action: "search_notes".to_string(),
+        payload,
+    }
+}
+
+/// Decode the response `data` into search items. A missing payload or shape
+/// mismatch is surfaced as a protocol error instead of an empty/no-match result.
+fn parse_search_data(data: Option<serde_json::Value>) -> Result<Vec<SearchResultItem>, String> {
+    match data {
+        Some(value) => {
+            serde_json::from_value(value).map_err(|e| format!("malformed search response: {e}"))
+        }
+        None => Err("malformed search response: missing data".to_string()),
+    }
+}
+
+/// Render search items as newline-joined, TAB-separated lines.
+fn format_search(items: &[SearchResultItem], now: DateTime<Utc>) -> String {
+    items
+        .iter()
+        .map(|item| format_search_line(item, now))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Render the no-match success line while stripping raw control bytes from the
+/// echoed query so stdout remains pipe-friendly.
+fn format_no_match_message(query: &str) -> String {
+    format!("No notes matching '{}'", sanitize_list_field(query))
+}
+
+/// Format one search result: `title \t snippet \t workspace-name \t relative-date`.
+/// TAB-separated (not aligned columns) so the fields stay parseable by `cut`/`awk`;
+/// FTS5 `<mark>` highlight tags are stripped, embedded delimiters are sanitized,
+/// and an absent workspace yields an empty third field. No ANSI color on rows.
+fn format_search_line(item: &SearchResultItem, now: DateTime<Utc>) -> String {
+    let title = truncate_title(&sanitize_list_field(&item.title));
+    let snippet = sanitize_list_field(&strip_marks(&item.snippet));
+    let workspace = sanitize_list_field(item.workspace_name.as_deref().unwrap_or(""));
+    let date = relative_date(&item.updated_at, now);
+    format!("{title}\t{snippet}\t{workspace}\t{date}")
+}
+
+/// Strip the literal FTS5 highlight tags (`<mark>` / `</mark>`) from a snippet,
+/// leaving the surrounding text and `...` ellipsis intact. The terminal has no
+/// styled spans, so matches render as plain text.
+fn strip_marks(snippet: &str) -> String {
+    snippet.replace("<mark>", "").replace("</mark>", "")
 }
 
 fn map_content_validation_error(error: CliError) -> RunValidationError {
@@ -989,5 +1110,114 @@ mod tests {
     #[test]
     fn parse_list_data_rejects_missing_payload() {
         assert!(parse_list_data(None).is_err());
+    }
+
+    // ── Story 6.5 — search_notes request builder ─────────────────────────────
+
+    #[test]
+    fn build_search_request_uses_query_only_without_filter() {
+        let req = build_search_request("deploy steps", None);
+        assert_eq!(req.action, "search_notes");
+        assert_eq!(req.payload, serde_json::json!({ "query": "deploy steps" }));
+    }
+
+    #[test]
+    fn build_search_request_carries_workspace_name_filter() {
+        let req = build_search_request("deploy", Some("my-proj"));
+        assert_eq!(req.action, "search_notes");
+        assert_eq!(
+            req.payload,
+            serde_json::json!({ "query": "deploy", "workspaceName": "my-proj" })
+        );
+    }
+
+    // ── Story 6.5 — snippet mark stripping ───────────────────────────────────
+
+    #[test]
+    fn strip_marks_removes_highlight_tags_only() {
+        assert_eq!(
+            strip_marks("the <mark>deploy</mark> step..."),
+            "the deploy step..."
+        );
+        assert_eq!(
+            strip_marks("<mark>a</mark> b <mark>c</mark>"),
+            "a b c"
+        );
+        assert_eq!(strip_marks("no tags here"), "no tags here");
+    }
+
+    // ── Story 6.5 — search line formatting (4-field TAB layout) ───────────────
+
+    #[test]
+    fn format_search_line_is_four_tab_fields_with_marks_stripped() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = SearchResultItem {
+            id: 1,
+            title: "deploy guide".to_string(),
+            snippet: "the <mark>deploy</mark> step".to_string(),
+            workspace_name: Some("proj".to_string()),
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        let line = format_search_line(&item, now);
+        assert_eq!(line, "deploy guide\tthe deploy step\tproj\t5m ago");
+        assert_eq!(line.matches('\t').count(), 3, "three tabs → four fields");
+        assert!(!line.contains('\u{1b}'), "search rows carry no ANSI escapes");
+    }
+
+    #[test]
+    fn format_search_line_empty_workspace_field_when_absent() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = SearchResultItem {
+            id: 2,
+            title: "loose".to_string(),
+            snippet: "match".to_string(),
+            workspace_name: None,
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        assert_eq!(format_search_line(&item, now), "loose\tmatch\t\t5m ago");
+    }
+
+    #[test]
+    fn format_search_line_sanitizes_embedded_delimiters() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = SearchResultItem {
+            id: 3,
+            title: "tab\ttitle".to_string(),
+            snippet: "line\none\ttwo".to_string(),
+            workspace_name: Some("ws\tname".to_string()),
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        let line = format_search_line(&item, now);
+        assert_eq!(line, "tab title\tline one two\tws name\t5m ago");
+        assert_eq!(line.matches('\t').count(), 3, "delimiters stay at three tabs");
+    }
+
+    #[test]
+    fn format_search_line_sanitizes_other_control_bytes() {
+        let now = at("2026-06-13T12:00:00+00:00");
+        let item = SearchResultItem {
+            id: 4,
+            title: "\u{0007}title".to_string(),
+            snippet: "\u{001b}[2Jdeploy".to_string(),
+            workspace_name: Some("ws".to_string()),
+            updated_at: "2026-06-13T11:55:00+00:00".to_string(),
+        };
+        let line = format_search_line(&item, now);
+        assert!(!line.contains('\u{0007}'));
+        assert!(!line.contains('\u{001b}'));
+        assert_eq!(line.matches('\t').count(), 3);
+    }
+
+    #[test]
+    fn format_no_match_message_sanitizes_control_bytes() {
+        assert_eq!(
+            format_no_match_message("deploy\n\u{001b}[2J"),
+            "No notes matching 'deploy  [2J'"
+        );
+    }
+
+    #[test]
+    fn parse_search_data_rejects_missing_payload() {
+        assert!(parse_search_data(None).is_err());
     }
 }

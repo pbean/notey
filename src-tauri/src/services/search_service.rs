@@ -130,6 +130,68 @@ pub fn search_notes(
     Ok(results)
 }
 
+/// Search notes by workspace **name** rather than id (the CLI `notey search`
+/// path, Story 6.5).
+///
+/// Identical FTS5 ranking/snippet behavior to [`search_notes`], but the optional
+/// filter resolves on `workspaces.name` via a `LEFT JOIN`. Because
+/// `workspaces.name` is not unique (only `path` is), a name filter matches notes
+/// in *every* workspace sharing that name (same rule as
+/// [`crate::services::notes::list_notes_with_workspace`]). `None` returns every
+/// matching note. An empty / operator-only query returns an empty vec without
+/// hitting the database. The GUI's id-based [`search_notes`] is left untouched.
+pub fn search_notes_by_workspace_name(
+    conn: &Connection,
+    query: &str,
+    workspace_name: Option<&str>,
+) -> Result<Vec<SearchResult>, NoteyError> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let sanitized = sanitize_fts_query(trimmed);
+    if sanitized.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT
+            n.id,
+            n.title,
+            CASE
+                WHEN snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32) IN ('', '...')
+                THEN snippet(notes_fts, 0, '<mark>', '</mark>', '...', 32)
+                ELSE snippet(notes_fts, 1, '<mark>', '</mark>', '...', 32)
+            END AS snippet,
+            w.name AS workspace_name,
+            n.updated_at,
+            n.format
+        FROM notes_fts
+        JOIN notes n ON n.id = notes_fts.rowid
+        LEFT JOIN workspaces w ON w.id = n.workspace_id
+        WHERE notes_fts MATCH ?1
+          AND n.is_trashed = 0
+          AND (?2 IS NULL OR w.name = ?2)
+        ORDER BY rank
+        LIMIT 50",
+    )?;
+    let results = stmt
+        .query_map(params![sanitized, workspace_name], |row| {
+            Ok(SearchResult {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                snippet: row.get(2)?,
+                workspace_name: row.get(3)?,
+                updated_at: row.get(4)?,
+                format: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +413,80 @@ mod tests {
             json.get("updated_at").is_none(),
             "should not have snake_case"
         );
+    }
+
+    // ── Story 6.5: search_notes_by_workspace_name ────────────────────────────
+
+    #[test]
+    fn by_name_no_filter_matches_existing_search_path() {
+        let conn = setup_test_db();
+        let ws = create_workspace(&conn, "alpha");
+        insert_note_in_workspace(&conn, "by_name_term_xyz title hit", "other text", ws);
+        insert_note(
+            &conn,
+            "loose note",
+            "by_name_term_xyz by_name_term_xyz by_name_term_xyz",
+        );
+
+        let existing = search_notes(&conn, "by_name_term_xyz", None).expect("search");
+        let by_name = search_notes_by_workspace_name(&conn, "by_name_term_xyz", None)
+            .expect("search");
+        assert_eq!(
+            serde_json::to_value(&by_name).expect("serialize by-name search"),
+            serde_json::to_value(&existing).expect("serialize existing search"),
+            "workspace-name helper must be a no-filter drop-in for the GUI search path",
+        );
+    }
+
+    #[test]
+    fn by_name_filters_to_named_workspace() {
+        let conn = setup_test_db();
+        let ws_a = create_workspace(&conn, "alpha");
+        let ws_b = create_workspace(&conn, "beta");
+        insert_note_in_workspace(&conn, "alpha note", "scoped_term_abc", ws_a);
+        insert_note_in_workspace(&conn, "beta note", "scoped_term_abc", ws_b);
+        insert_note(&conn, "loose note", "scoped_term_abc");
+
+        let results = search_notes_by_workspace_name(&conn, "scoped_term_abc", Some("alpha"))
+            .expect("search");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "alpha note");
+        assert_eq!(results[0].workspace_name, Some("alpha".to_string()));
+    }
+
+    #[test]
+    fn by_name_matches_all_workspaces_sharing_a_name() {
+        let conn = setup_test_db();
+        // workspaces.name is not unique — two distinct workspaces, same name.
+        let dup_a = conn
+            .execute(
+                "INSERT INTO workspaces (name, path, created_at) VALUES ('dup', '/tmp/dup-a', '2026-01-01T00:00:00+00:00')",
+                [],
+            )
+            .map(|_| conn.last_insert_rowid())
+            .expect("insert dup-a");
+        let dup_b = conn
+            .execute(
+                "INSERT INTO workspaces (name, path, created_at) VALUES ('dup', '/tmp/dup-b', '2026-01-01T00:00:00+00:00')",
+                [],
+            )
+            .map(|_| conn.last_insert_rowid())
+            .expect("insert dup-b");
+        insert_note_in_workspace(&conn, "in a", "dup_term_qrs", dup_a);
+        insert_note_in_workspace(&conn, "in b", "dup_term_qrs", dup_b);
+
+        let results =
+            search_notes_by_workspace_name(&conn, "dup_term_qrs", Some("dup")).expect("search");
+        assert_eq!(results.len(), 2, "duplicate names match every sharing workspace");
+    }
+
+    #[test]
+    fn by_name_empty_query_returns_empty() {
+        let conn = setup_test_db();
+        insert_note(&conn, "note", "content");
+        assert!(search_notes_by_workspace_name(&conn, "  ", None)
+            .expect("search")
+            .is_empty());
     }
 
     #[test]

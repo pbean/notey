@@ -80,11 +80,11 @@ struct ListNotesPayload {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchNotesPayload {
     query: String,
     #[serde(default)]
-    workspace_id: Option<i64>,
+    workspace_name: Option<String>,
 }
 
 /// Derive a note title from its content, mirroring the GUI auto-save rule
@@ -201,7 +201,11 @@ fn handle_search(conn: &Connection, payload: Value) -> IpcResponse {
         Err(e) => return IpcResponse::err(format!("invalid search_notes payload: {e}")),
     };
 
-    match search_service::search_notes(conn, &payload.query, payload.workspace_id) {
+    match search_service::search_notes_by_workspace_name(
+        conn,
+        &payload.query,
+        payload.workspace_name.as_deref(),
+    ) {
         Ok(results) => ok_value(results),
         Err(e) => IpcResponse::err(e.to_string()),
     }
@@ -421,6 +425,20 @@ mod tests {
         let resp = handle_request(&conn, &request("search_notes", serde_json::json!({})));
         assert!(!resp.success);
         assert!(resp.error.unwrap().contains("payload"));
+    }
+
+    #[test]
+    fn search_notes_legacy_workspace_id_is_error() {
+        let conn = setup_test_db();
+        let resp = handle_request(
+            &conn,
+            &request(
+                "search_notes",
+                serde_json::json!({ "query": "findme", "workspaceId": 7 }),
+            ),
+        );
+        assert!(!resp.success);
+        assert!(resp.error.unwrap().contains("workspaceId"));
     }
 
     #[test]
