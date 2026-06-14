@@ -681,7 +681,8 @@ resolution: Story 7.5 makes `layoutMode` mean window mode (`floating`/`half-scre
 origin: code review of spec-7-1-settings-view-panel.md, 2026-06-13
 location: src-tauri/src/commands/config.rs:52-79
 reason: `update_config` persists the new shortcut before OS re-registration runs. If unregister/register fails, the saved config can diverge from the live registered hotkey. This behavior predates Story 7.1 and needs a broader hotkey rollback design rather than a settings-panel patch.
-status: open
+status: done 2026-06-14
+resolution: already resolved: src-tauri/src/commands/config.rs:97-172 (commit 4072fec, story 7-4): update_config now registers the new shortcut FIRST while the old is still active, persists ONLY after a successful bind, and on save failure calls restore_shortcut_registrations() to put the prior binding back. A registration conflict returns early with nothing written. The 'persists before re-registration / config can diverge' condition described in DW-87 no longer exists.
 
 ### DW-88: Theme contract is documented but not schema-enforced
 
