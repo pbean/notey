@@ -368,7 +368,7 @@ where
         }
     };
 
-    emit_outcome(&outcome)
+    emit_outcome(&outcome, CommandClass::Mutating)
 }
 
 /// Internal validation errors surfaced by [`run`] before any IPC happens.
@@ -453,13 +453,52 @@ fn dispatch(request: CliRequest) -> CommandOutcome {
         Ok(response) => {
             CommandOutcome::AppError(response.error.unwrap_or_else(|| "unknown error".to_string()))
         }
-        Err(client::ClientError::NotRunning) => CommandOutcome::NotRunning,
-        Err(other) => CommandOutcome::AppError(other.to_string()),
+        Err(err) => outcome_for_client_error(err),
+    }
+}
+
+/// Whether a command mutates server state. Selects the [`CommandOutcome::Timeout`]
+/// message: a read-only timeout is unambiguous, but a mutating timeout is
+/// **indeterminate** — the request may have committed before the bound elapsed
+/// (the protocol has no ack / idempotency key) — so its message must say so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommandClass {
+    /// `list` / `search` — no server state changes.
+    ReadOnly,
+    /// `add` (`create_note`) — may persist a note.
+    Mutating,
+}
+
+/// Classify a transport-layer [`client::ClientError`] into a terminal
+/// [`CommandOutcome`]. The single mapping every command routes through so the
+/// exit-code/message contract cannot diverge between `add` / `list` / `search`
+/// (RISK-E6-005): not-running → exit 2 guidance, timeout → exit 2, every other
+/// transport failure → exit 1 app-error.
+fn outcome_for_client_error(err: client::ClientError) -> CommandOutcome {
+    match err {
+        client::ClientError::NotRunning => CommandOutcome::NotRunning,
+        client::ClientError::Timeout => CommandOutcome::Timeout,
+        other => CommandOutcome::AppError(other.to_string()),
+    }
+}
+
+/// The stderr line for a timeout, chosen by command class. Pure so the
+/// per-command-class wording is unit-testable without capturing stderr.
+fn timeout_message(class: CommandClass) -> &'static str {
+    match class {
+        CommandClass::ReadOnly => "Notey did not respond in time.",
+        // Indeterminate: never claim failure, never auto-retry — point at a cheap
+        // verification instead (frozen Story 6.7 decision).
+        CommandClass::Mutating => {
+            "Notey did not respond in time; your note may or may not have been saved. \
+Run 'notey list' to check."
+        }
     }
 }
 
 /// Print the user-facing line for an outcome (TTY-aware) and return its exit code.
-fn emit_outcome(outcome: &CommandOutcome) -> i32 {
+/// `class` only affects the [`CommandOutcome::Timeout`] wording.
+fn emit_outcome(outcome: &CommandOutcome, class: CommandClass) -> i32 {
     match outcome {
         CommandOutcome::Success => {
             println!("{}", success_line("Note created", io::stdout().is_terminal()));
@@ -479,7 +518,7 @@ fn emit_outcome(outcome: &CommandOutcome) -> i32 {
         CommandOutcome::Timeout => {
             eprintln!(
                 "{}",
-                error_line("Notey did not respond in time.", io::stderr().is_terminal())
+                error_line(timeout_message(class), io::stderr().is_terminal())
             );
         }
     }
@@ -569,25 +608,11 @@ fn dispatch_list(workspace: Option<&str>) -> i32 {
                 1
             }
         },
-        Ok(response) => {
-            let message = response.error.unwrap_or_else(|| "unknown error".to_string());
-            eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
-            1
-        }
-        Err(client::ClientError::NotRunning) => {
-            eprintln!(
-                "{}",
-                error_line(
-                    "Notey is not running. Start the application first.",
-                    io::stderr().is_terminal(),
-                )
-            );
-            2
-        }
-        Err(other) => {
-            eprintln!("{}", error_line(&other.to_string(), io::stderr().is_terminal()));
-            1
-        }
+        Ok(response) => emit_outcome(
+            &CommandOutcome::AppError(response.error.unwrap_or_else(|| "unknown error".to_string())),
+            CommandClass::ReadOnly,
+        ),
+        Err(err) => emit_outcome(&outcome_for_client_error(err), CommandClass::ReadOnly),
     }
 }
 
@@ -721,25 +746,11 @@ fn dispatch_search(query: &str, workspace: Option<&str>) -> i32 {
                 1
             }
         },
-        Ok(response) => {
-            let message = response.error.unwrap_or_else(|| "unknown error".to_string());
-            eprintln!("{}", error_line(&message, io::stderr().is_terminal()));
-            1
-        }
-        Err(client::ClientError::NotRunning) => {
-            eprintln!(
-                "{}",
-                error_line(
-                    "Notey is not running. Start the application first.",
-                    io::stderr().is_terminal(),
-                )
-            );
-            2
-        }
-        Err(other) => {
-            eprintln!("{}", error_line(&other.to_string(), io::stderr().is_terminal()));
-            1
-        }
+        Ok(response) => emit_outcome(
+            &CommandOutcome::AppError(response.error.unwrap_or_else(|| "unknown error".to_string())),
+            CommandClass::ReadOnly,
+        ),
+        Err(err) => emit_outcome(&outcome_for_client_error(err), CommandClass::ReadOnly),
     }
 }
 
@@ -941,10 +952,63 @@ mod tests {
 
     #[test]
     fn emit_outcome_returns_canonical_exit_codes() {
-        assert_eq!(emit_outcome(&CommandOutcome::Success), 0);
-        assert_eq!(emit_outcome(&CommandOutcome::AppError("e".into())), 1);
-        assert_eq!(emit_outcome(&CommandOutcome::NotRunning), 2);
-        assert_eq!(emit_outcome(&CommandOutcome::Timeout), 2);
+        assert_eq!(emit_outcome(&CommandOutcome::Success, CommandClass::Mutating), 0);
+        assert_eq!(
+            emit_outcome(&CommandOutcome::AppError("e".into()), CommandClass::ReadOnly),
+            1
+        );
+        assert_eq!(emit_outcome(&CommandOutcome::NotRunning, CommandClass::ReadOnly), 2);
+        assert_eq!(emit_outcome(&CommandOutcome::Timeout, CommandClass::ReadOnly), 2);
+        assert_eq!(emit_outcome(&CommandOutcome::Timeout, CommandClass::Mutating), 2);
+    }
+
+    // ── Story 6.7 — shared transport-error classifier (RISK-E6-005) ──────────
+
+    #[test]
+    fn outcome_for_client_error_maps_not_running_to_not_running() {
+        assert_eq!(
+            outcome_for_client_error(client::ClientError::NotRunning),
+            CommandOutcome::NotRunning
+        );
+    }
+
+    #[test]
+    fn outcome_for_client_error_maps_timeout_to_timeout() {
+        assert_eq!(
+            outcome_for_client_error(client::ClientError::Timeout),
+            CommandOutcome::Timeout
+        );
+    }
+
+    #[test]
+    fn outcome_for_client_error_maps_transport_io_and_decode_to_app_error() {
+        let io = outcome_for_client_error(client::ClientError::Io(io::Error::other("boom")));
+        assert!(matches!(io, CommandOutcome::AppError(_)));
+        let decode = outcome_for_client_error(client::ClientError::Decode("bad".into()));
+        assert!(matches!(decode, CommandOutcome::AppError(_)));
+    }
+
+    // ── Story 6.7 — per-command-class timeout wording ────────────────────────
+
+    #[test]
+    fn timeout_message_is_unambiguous_for_read_only_commands() {
+        assert_eq!(
+            timeout_message(CommandClass::ReadOnly),
+            "Notey did not respond in time."
+        );
+    }
+
+    #[test]
+    fn timeout_message_is_indeterminate_for_mutating_commands() {
+        let msg = timeout_message(CommandClass::Mutating);
+        assert_eq!(
+            msg,
+            "Notey did not respond in time; your note may or may not have been saved. \
+Run 'notey list' to check."
+        );
+        // Must neither claim failure nor promise success.
+        assert!(msg.contains("may or may not"));
+        assert!(!msg.to_lowercase().contains("failed"));
     }
 
     fn workspace_path_from_cwd(cwd: std::path::PathBuf) -> Option<String> {
