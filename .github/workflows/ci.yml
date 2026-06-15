@@ -50,7 +50,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             src-tauri/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            notey-cli/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock', 'notey-cli/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
@@ -99,6 +100,14 @@ jobs:
       - name: Build debug binary (Linux)
         if: runner.os == 'Linux'
         run: npx tauri build --debug --no-bundle
+
+      - name: Build notey-cli (Linux)
+        # The CLI live-sync E2E suite spawns the standalone `notey` binary from
+        # notey-cli/target/debug/. It's a separate, workspace-less crate not built
+        # by the tauri build above, so build it explicitly before E2E.
+        if: runner.os == 'Linux'
+        working-directory: notey-cli
+        run: cargo build
 
       - name: E2E tests (Linux)
         if: runner.os == 'Linux'
