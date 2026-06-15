@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-15 # epic-6-retro items 1 (E2E green on CI run 27527258028) + 2 (singleflight) → done; fixed pre-existing Windows-only clippy break in ipc/socket_server.rs
+last_updated: 2026-06-15 # epic-6-retro item 5 (DW-85 IPC worker budget + watchdog) → done (spec-dw-85-ipc-worker-budget.md); items 1 (E2E) + 2 (singleflight) previously → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -195,4 +195,4 @@ development_status:
   epic-6-retro-item-2-singleflight-guard-helper: done # HIGH — shared singleflight helper extracted (src/lib/singleflight.ts) + all 7 hand-rolled guards migrated (realtimeSync refreshInFlight/refreshQueued, command-palette isCreatingNote/isTrashingNote/isTogglingTheme/isTogglingLayoutMode, export isExporting); spec-singleflight-guard-helper.md status done, merged b6a0c06/86f2ff4. Verified 2026-06-15: acceptance grep clean (zero legacy-guard hits outside singleflight.ts), tsc clean, 572 FE tests pass. Absorbs epic-5-retro-item-2. Pinkyd-owned.
   epic-6-retro-item-3-per-story-dw-logging: backlog # MEDIUM — log every real out-of-scope review dismissal to deferred-work.md PER STORY as part of the coding-assistant workflow (not swept at retro)
   epic-6-retro-item-4-close-out-tracking-discipline: done # MEDIUM — reconcile status on close-out not at next retro; Epic 5 items 1/2/4 reconciled this retro
-  epic-6-retro-item-5-dw-85-ipc-worker-budget: backlog # LOW — resolve DW-85 cross-platform IPC worker-lifetime/connection-budget policy before broader CLI concurrency hardening
+  epic-6-retro-item-5-dw-85-ipc-worker-budget: done # LOW — DW-85 resolved 2026-06-15 (spec-dw-85-ipc-worker-budget.md): budget + cross-platform watchdog implemented in ipc/socket_server.rs; clippy clean + 14 ipc tests green on Linux; Windows unblock-path runtime check deferred to DW-94

@@ -665,8 +665,9 @@ decision: 2026-06-12 Align default to 'comfortable' — Change the backend `Gene
 origin: code review of spec-6-2-ipc-socket-server-in-desktop-app.md, 2026-06-13
 location: src-tauri/src/ipc/socket_server.rs:199, src-tauri/src/ipc/socket_server.rs:284
 reason: The current one-thread-per-connection model satisfies the story's single slow-client acceptance criterion, but a broader timeout / worker-budget policy is still undefined, and Windows named pipes in `interprocess` do not support I/O timeouts. This needs an explicit cross-platform design call before patching.
-status: open
+status: done 2026-06-15
 decision: 2026-06-13 Defer until cross-platform design agreed — Keep tracking until a cross-platform timeout + worker-budget design (covering the Windows named-pipe no-timeout constraint) is decided.
+resolution: 2026-06-15 (spec-dw-85-ipc-worker-budget.md, epic-6-retro-item-5). Design call made: budget + cross-platform watchdog (chosen over budget-only / budget+Unix-timeout for uniform behavior). Implemented in src-tauri/src/ipc/socket_server.rs — a concurrent-worker budget (NOTEY_IPC_MAX_WORKERS, default 128; over-budget → one `server busy` frame then close) plus a single reaper thread that, under the worker-registry lock, unblocks any worker still in its read phase past a deadline (NOTEY_IPC_READ_DEADLINE_MS, default 5000) via `libc::shutdown(SHUT_RD)` on Unix / `CancelIoEx` on Windows (no I/O timeout needed, addressing the Windows constraint). Verified on Linux (clippy clean; 14 ipc tests incl. budget + watchdog-reclaim). Windows unblock-path runtime verification deferred to DW-94.
 
 ### DW-86: Legacy `layoutMode` values are misrepresented in the Settings selector
 
@@ -726,4 +727,11 @@ status: open
 origin: code review of spec-cli-live-sync-e2e.md (blind + edge-case review), 2026-06-15
 location: e2e/run.mjs (cliLiveSyncTests, runCli `cwd: process.cwd()`)
 reason: The suite's core assertion — the CLI-added note appears in the desktop note list via the `note-created` event — only holds if the desktop's active workspace matches the workspace the CLI resolved from its cwd. Two un-asserted assumptions back this: (1) the tauri-driver-launched app process inherits the runner's cwd, so `getCurrentDir()`-resolved workspace == the CLI's `cwd: process.cwd()` workspace; (2) `App.tsx` runs `restoreSession()` → `restoreWorkspaceId(persisted)` AFTER cwd-based `initWorkspace()`, so a stale `localStorage` activeWorkspaceId from prior manual use could filter the list to a DIFFERENT workspace and time the assertion out. Holds in CI (clean localStorage) and in the actual suite flow (no workspace switching, persisted == cwd workspace), so the spec's frozen Boundaries deliberately chose the cwd mechanism with a documented "fails visibly" tradeoff rather than silent pass. Hardening (drive the note list to "All Workspaces" so the filter is null, or reset localStorage before the suite) would decouple the assertion from workspace state but deviates from the frozen approach — needs a spec renegotiation, not a silent patch. Hygiene/robustness, not a correctness regression.
+status: open
+
+### DW-94: Verify the DW-85 watchdog actually unblocks a stuck named-pipe read on Windows
+
+origin: code review of spec-dw-85-ipc-worker-budget.md (blind hunter), 2026-06-15
+location: src-tauri/src/ipc/socket_server.rs (unblock_conn, #[cfg(windows)] branch)
+reason: DW-85's reaper unblocks a worker stalled in `read_frame` via `libc::shutdown(fd, SHUT_RDWR)` on Unix (empirically confirmed — `int_dw85_watchdog_reclaims_stalled_slots` passes on Linux) and `CancelIoEx(handle, None)` on Windows. The Windows path is `#[cfg(windows)]` and was NOT compiled or run on the Linux dev/CI host, so it is unverified that `CancelIoEx` actually cancels the worker thread's pending synchronous `ReadFile` on an `interprocess` 2.4.2 named-pipe handle (cancellation semantics differ for handles opened without `FILE_FLAG_OVERLAPPED`; `CancelIoEx` is cross-thread, unlike `CancelIo`, which is the reason it was chosen). Also confirm the `RawHandle as *mut _ → HANDLE` cast and the two-arg `CancelIoEx` signature compile under `windows = 0.61`. If `CancelIoEx` does not unblock the read, the budget cap still bounds concurrency on Windows but stalled half-open slots are never reclaimed there (degrades to budget-only on Windows). Needs a Windows CI job or manual Windows run to validate; pairs with the broader cross-platform IPC QA (RISK-E6-007).
 status: open
