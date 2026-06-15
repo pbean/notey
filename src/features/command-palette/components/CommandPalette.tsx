@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -22,6 +23,15 @@ const GROUP_ORDER: GroupType[] = ['Actions', 'Settings', 'Navigation'];
 export function CommandPalette() {
   const isOpen = useCommandPaletteStore((s) => s.isOpen);
   const commands = usePaletteCommands();
+
+  // Controlled search query. Base UI keeps the dialog subtree mounted while
+  // closed, so cmdk's internal query would otherwise survive across opens and a
+  // stale command name from the previous invocation would linger in the input.
+  // Reset it to empty every time the palette opens so each invocation starts fresh.
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    if (isOpen) setSearch('');
+  }, [isOpen]);
 
   // Group commands by their group field
   const grouped = GROUP_ORDER.map((group) => ({
@@ -66,6 +76,8 @@ export function CommandPalette() {
           <CommandInput
             placeholder="> Type a command..."
             data-testid="command-input"
+            value={search}
+            onValueChange={setSearch}
           />
           <CommandList>
             <CommandEmpty>No commands found.</CommandEmpty>

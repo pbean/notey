@@ -13,6 +13,21 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Force WebKitGTK software rendering before anything spawns the driver. Under a
+// GPU-less virtual framebuffer (xvfb on CI / headless local runs) WebKitGTK's
+// accelerated-compositing + DMABUF renderer crashes the web process as soon as
+// the page renders under WebDriver automation, which wedges every subsequent
+// command and times the run out (exit 124). These vars fall back to software
+// rendering. WEBKIT_DISABLE_COMPOSITING_MODE is the official Tauri WebDriver CI
+// recommendation; the other two cover the no-GPU DMABUF/GL paths. They inherit
+// down the spawn chain (node → tauri-driver → WebKitWebDriver → app web process),
+// so a bare `node e2e/run.mjs` works without the caller exporting anything.
+// `??=` lets a caller still override any of them.
+process.env.WEBKIT_DISABLE_COMPOSITING_MODE ??= '1';
+process.env.WEBKIT_DISABLE_DMABUF_RENDERER ??= '1';
+process.env.LIBGL_ALWAYS_SOFTWARE ??= '1';
+
 import {
   createSession,
   deleteSession,
@@ -21,7 +36,8 @@ import {
   elementId,
   getElementAttribute,
   getElementText,
-  clickElement,
+  getElementProperty,
+  executeScript,
   isElementDisplayed,
   sendKeysToElement,
   sendSpecialKey,
@@ -82,6 +98,17 @@ async function waitForCss(selector, timeoutMs = 5000) {
   throw lastErr || new Error(`Timed out waiting for ${selector}`);
 }
 
+/**
+ * Click the element matching `selector` by waiting for it to exist, then
+ * dispatching a programmatic `.click()`. The capture window is hidden
+ * (`visible:false`), so a W3C element-click would fail "element not
+ * interactable"; a DOM `.click()` still triggers the React onClick handler.
+ */
+async function clickCss(selector, timeoutMs = 5000) {
+  await waitForCss(selector, timeoutMs);
+  await executeScript(sessionId, 'document.querySelector(arguments[0]).click();', [selector]);
+}
+
 /** Poll the toast region until a toast containing `substring` appears (toasts auto-dismiss at 3s). */
 async function waitForToast(substring, timeoutMs = 4000) {
   const deadline = Date.now() + timeoutMs;
@@ -112,16 +139,19 @@ async function runPaletteCommand(label) {
 }
 
 /**
- * Among elements matching `selector`, find the one whose visible text contains
- * `marker` and return its `data-testid`. The dev DB is not isolated, so tests
- * target their own marker note rather than "the first row".
+ * Among elements matching `selector`, find the one whose text contains `marker`
+ * and return its `data-testid`. Matches against the `textContent` property — not
+ * WebDriver visible text — because panel titles render in the hidden capture
+ * window with clipping styles that make `getElementText` return them empty. The
+ * dev DB is not isolated, so tests target their own marker note rather than
+ * "the first row".
  */
 async function testIdContaining(selector, marker) {
   const els = await findElements(sessionId, 'css selector', selector);
   for (const el of els) {
     const id = elementId(el);
-    const text = await getElementText(sessionId, id);
-    if (text.includes(marker)) {
+    const text = await getElementProperty(sessionId, id, 'textContent');
+    if ((text || '').includes(marker)) {
       return { id, testId: await getElementAttribute(sessionId, id, 'data-testid') };
     }
   }
@@ -164,7 +194,7 @@ async function reopenNoteByMarker(marker) {
   await pause(200);
   const match = await testIdContaining('[data-testid^="note-list-item-"]', marker);
   assert(match, `Note list has no item matching marker "${marker}"`);
-  await clickElement(sessionId, match.id);
+  await clickCss(`[data-testid="${match.testId}"]`);
   await pause(400); // panel closes, note loads into the editor
 }
 
@@ -260,12 +290,35 @@ async function windowManagementTests() {
   });
 }
 
+/**
+ * Best-effort permanent purge of the marker note from trash. Used as a safety
+ * net so a mid-run failure (before the happy-path permanent-delete step) does
+ * not leave an orphan in the non-isolated dev DB. Swallows every error — this
+ * is cleanup, not an assertion, and the session may already be dead.
+ */
+async function purgeMarkerFromTrash(marker) {
+  try {
+    await runPaletteCommand('View Trash');
+    await waitForCss('[data-testid="trash-panel"]', 2000);
+    const item = await testIdContaining('[data-testid^="trash-item-"]', marker);
+    if (!item) return; // already gone (happy path completed) — nothing to clean
+    const noteId = item.testId.replace('trash-item-', '');
+    await clickCss(`[data-testid="trash-delete-${noteId}"]`, 2000);
+    await clickCss('[data-testid="confirm-delete-confirm"]', 2000);
+    await waitForMarkerGoneFromTrash(marker, 3000);
+    console.log(`  ⌫ cleaned up orphaned marker note "${marker}"`);
+  } catch {
+    /* cleanup is best-effort; never fail the run because teardown could not run */
+  }
+}
+
 async function trashLifecycleTests() {
   console.log('\nP1-E2E-002: Trash Lifecycle');
 
   // Unique per run so the marker note is identifiable in a non-isolated dev DB.
   const marker = `E2E-TRASH-${Date.now()}`;
 
+  try {
   await test('create a note tagged with a unique marker', async () => {
     await sendChord(sessionId, CONTROL, 'n'); // New Note → fresh active tab
     await pause(400);
@@ -291,7 +344,7 @@ async function trashLifecycleTests() {
     const item = await testIdContaining('[data-testid^="trash-item-"]', marker);
     assert(item, `Trash row for marker "${marker}" should exist`);
     const noteId = item.testId.replace('trash-item-', '');
-    await clickElement(sessionId, await waitForCss(`[data-testid="trash-restore-${noteId}"]`));
+    await clickCss(`[data-testid="trash-restore-${noteId}"]`);
     await waitForToast('restored');
     await waitForMarkerGoneFromTrash(marker);
     await sendSpecialKey(sessionId, ESCAPE); // close the trash panel
@@ -310,11 +363,16 @@ async function trashLifecycleTests() {
     const item = await testIdContaining('[data-testid^="trash-item-"]', marker);
     assert(item, `Trash row for marker "${marker}" should exist before delete`);
     const noteId = item.testId.replace('trash-item-', '');
-    await clickElement(sessionId, await waitForCss(`[data-testid="trash-delete-${noteId}"]`));
+    await clickCss(`[data-testid="trash-delete-${noteId}"]`);
     await waitForCss('[data-testid="confirm-delete-dialog"]');
-    await clickElement(sessionId, await waitForCss('[data-testid="confirm-delete-confirm"]'));
+    await clickCss('[data-testid="confirm-delete-confirm"]');
     await waitForMarkerGoneFromTrash(marker);
   });
+  } finally {
+    // Safety net for DW-91: if any step above threw before the permanent-delete,
+    // the marker note is still in trash. Purge it so the shared dev DB stays clean.
+    await purgeMarkerFromTrash(marker);
+  }
 }
 
 // --- Main ---
