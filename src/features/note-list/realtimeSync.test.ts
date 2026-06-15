@@ -89,6 +89,77 @@ describe('startNoteCreatedSync', () => {
     unlisten();
   });
 
+  it('schedules exactly one trailing refresh for an event that coalesces mid-flight', async () => {
+    // First refresh stays in flight until released; later refreshes resolve at once.
+    let releaseFirst!: () => void;
+    const firstLoad = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let calls = 0;
+    const controllableLoad = vi.fn<() => Promise<void>>().mockImplementation(() => {
+      calls += 1;
+      return calls === 1 ? firstLoad : Promise.resolve();
+    });
+    useWorkspaceStore.setState({ loadFilteredNotes: controllableLoad });
+
+    const unlisten = await startNoteCreatedSync();
+
+    // Event 1 → debounce fires → refresh #1 starts and stays in flight.
+    captured!(noteCreatedEvent(1));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(controllableLoad).toHaveBeenCalledTimes(1);
+
+    // Event 2 arrives mid-flight → its debounced runRefresh coalesces onto #1.
+    captured!(noteCreatedEvent(2));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(controllableLoad).toHaveBeenCalledTimes(1);
+
+    // Release #1 → onCoalesced schedules exactly one trailing pass.
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(0); // flush settle → onCoalesced → scheduleRefresh
+    await vi.advanceTimersByTimeAsync(200); // run the trailing debounce
+    expect(controllableLoad).toHaveBeenCalledTimes(2);
+
+    // Nothing piles up beyond the single trailing refresh.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(controllableLoad).toHaveBeenCalledTimes(2);
+
+    unlisten();
+  });
+
+  it('does not re-arm a trailing refresh after stop() when sync restarts mid-flight', async () => {
+    let releaseFirst!: () => void;
+    const firstLoad = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let calls = 0;
+    const controllableLoad = vi.fn<() => Promise<void>>().mockImplementation(() => {
+      calls += 1;
+      return calls === 1 ? firstLoad : Promise.resolve();
+    });
+    useWorkspaceStore.setState({ loadFilteredNotes: controllableLoad });
+
+    // Session 1: start refresh #1, then coalesce a second event onto it.
+    const unlisten1 = await startNoteCreatedSync();
+    captured!(noteCreatedEvent(1));
+    await vi.advanceTimersByTimeAsync(200); // refresh #1 in flight
+    captured!(noteCreatedEvent(2));
+    await vi.advanceTimersByTimeAsync(200); // coalesces onto #1
+    expect(controllableLoad).toHaveBeenCalledTimes(1);
+
+    // Tear down session 1 mid-flight, then restart (session 2).
+    unlisten1();
+    const unlisten2 = await startNoteCreatedSync();
+
+    // Releasing the orphaned refresh #1 must NOT re-arm a trailing pass on the
+    // new session — the stale coalesced marker belongs to a retired generation.
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(controllableLoad).toHaveBeenCalledTimes(1);
+
+    unlisten2();
+  });
+
   it('unlisten cancels a pending refresh and detaches the listener', async () => {
     const unlisten = await startNoteCreatedSync();
 

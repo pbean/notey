@@ -1,6 +1,7 @@
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { events } from '../../generated/bindings';
 import { useWorkspaceStore } from '../workspace/store';
+import { singleflight } from '../../lib/singleflight';
 
 /**
  * Debounce window for collapsing a burst of `note-created` events into a single
@@ -10,11 +11,19 @@ import { useWorkspaceStore } from '../workspace/store';
  */
 const REFRESH_DEBOUNCE_MS = 200;
 
+/** Singleflight key for the note-list refresh (one in-flight refresh at a time). */
+const REFRESH_KEY = 'note-list-refresh';
+
 let stopSync: UnlistenFn | null = null;
 let syncPromise: Promise<UnlistenFn> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-let refreshInFlight = false;
-let refreshQueued = false;
+/**
+ * Bumped on every {@link stop} so a refresh still in flight at teardown cannot
+ * re-arm a trailing pass on a *later* sync session. Replaces the old
+ * `refreshQueued = false` reset, which a stored boolean handled implicitly but a
+ * shared singleflight (whose coalesced marker outlives stop()) does not.
+ */
+let syncGeneration = 0;
 
 /** Cancel any pending debounced refresh. */
 function clearPendingRefresh(): void {
@@ -26,23 +35,27 @@ function clearPendingRefresh(): void {
 
 /** Run one refresh at a time; if more events land mid-flight, queue one follow-up pass. */
 async function runRefresh(): Promise<void> {
-  if (refreshInFlight) {
-    refreshQueued = true;
-    return;
-  }
-
-  refreshInFlight = true;
-  try {
-    await useWorkspaceStore.getState().loadFilteredNotes();
-  } catch (e) {
-    console.error('note-created refresh failed:', e);
-  } finally {
-    refreshInFlight = false;
-    if (refreshQueued) {
-      refreshQueued = false;
-      scheduleRefresh();
-    }
-  }
+  const generation = syncGeneration;
+  await singleflight(
+    REFRESH_KEY,
+    async () => {
+      try {
+        await useWorkspaceStore.getState().loadFilteredNotes();
+      } catch (e) {
+        console.error('note-created refresh failed:', e);
+      }
+    },
+    {
+      // Events that coalesced onto the in-flight refresh schedule exactly one
+      // follow-up debounced pass — but only while THIS sync session is still
+      // active. A stop() (or stop()+restart) bumps syncGeneration, so a refresh
+      // that settles after teardown never re-arms the timer on a stale or newer
+      // session (replaces the old `refreshQueued = false` reset in stop()).
+      onCoalesced: () => {
+        if (stopSync !== null && generation === syncGeneration) scheduleRefresh();
+      },
+    },
+  );
 }
 
 /**
@@ -85,7 +98,9 @@ export async function startNoteCreatedSync(): Promise<UnlistenFn> {
     .then((unlisten) => {
       const stop = () => {
         clearPendingRefresh();
-        refreshQueued = false;
+        // Invalidate any in-flight refresh's pending trailing pass (see
+        // syncGeneration) so teardown cannot re-arm the debounce afterward.
+        syncGeneration += 1;
         if (stopSync === stop) {
           stopSync = null;
           syncPromise = null;

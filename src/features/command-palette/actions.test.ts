@@ -145,7 +145,7 @@ describe('toggleTheme', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
-  it('drops a concurrent call while a toggle is in flight', async () => {
+  it('coalesces a concurrent call onto the in-flight toggle', async () => {
     document.documentElement.classList.add('dark');
     let resolveGetConfig!: (value: unknown) => void;
     const pendingGetConfig = new Promise((resolve) => {
@@ -161,11 +161,12 @@ describe('toggleTheme', () => {
     });
 
     const first = toggleTheme(); // enters, awaits the pending get_config
-    await toggleTheme(); // guard set → returns immediately, no IPC
+    const second = toggleTheme(); // coalesces onto the in-flight call — no extra IPC
 
     resolveGetConfig(config);
-    await first;
+    await Promise.all([first, second]);
 
+    // Both callers shared one run: a single read-modify-write, one toggle applied.
     const getConfigCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'get_config');
     const updateCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'update_config');
     expect(getConfigCalls).toHaveLength(1);
@@ -344,7 +345,7 @@ describe('toggleLayoutMode', () => {
     consoleSpy.mockRestore();
   });
 
-  it('drops a concurrent call while a toggle is in flight', async () => {
+  it('coalesces a concurrent call onto the in-flight toggle', async () => {
     let resolveGetConfig!: (value: unknown) => void;
     const pendingGetConfig = new Promise((resolve) => {
       resolveGetConfig = resolve;
@@ -359,11 +360,12 @@ describe('toggleLayoutMode', () => {
     });
 
     const first = toggleLayoutMode(); // enters, awaits the pending get_config
-    await toggleLayoutMode(); // guard set → returns immediately, no IPC
+    const second = toggleLayoutMode(); // coalesces onto the in-flight call — no extra IPC
 
     resolveGetConfig(config);
-    await first;
+    await Promise.all([first, second]);
 
+    // Both callers shared one run: a single read-modify-write.
     const getConfigCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'get_config');
     const updateCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'update_config');
     expect(getConfigCalls).toHaveLength(1);

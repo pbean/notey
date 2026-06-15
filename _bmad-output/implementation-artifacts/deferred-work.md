@@ -699,3 +699,10 @@ location: src/features/settings/shortcuts.ts:205, src/features/editor/components
 reason: The Settings UI prevents duplicate configurable bindings, but a hand-edited `[shortcuts]` config can still give multiple actions the same combo. The runtime then has no defined recovery policy and multiple handlers can fire on one keypress. Auto review deferred this because the right fallback (first wins, revert later duplicates to defaults, or surface an error) needs a product decision.
 status: done 2026-06-14
 resolution: bindingsFromConfig now applies first-binding-wins dedupe at load (reserved combos pre-claimed), reverting later duplicates to their default (or empty) and emitting a console.warn, so only one handler fires per combo. See spec-dw-decision-dw-89.md.
+
+### DW-90: singleflight has no timeout/abort — a never-settling fn permanently wedges its key
+
+origin: code review of spec-singleflight-guard-helper.md (edge-case + blind review), 2026-06-14
+location: src/lib/singleflight.ts:50
+reason: The shared `singleflight` helper only clears an in-flight key in `started.finally(...)`. If the wrapped operation never settles (e.g. a Tauri IPC/dialog promise that hangs), the key stays in the `inFlight` map forever and every later same-key call coalesces onto the dead promise, so that command (createNewNote/toggleTheme/export/note-list refresh) is disabled until reload. This is a PRE-EXISTING gap inherited from the hand-rolled boolean guards it replaced (they likewise never reset on a hung promise), surfaced incidentally by this refactor — it is NOT a regression. Adding a timeout/abort to the helper is explicitly out of scope per the spec's "Never" boundary (no timers/retries in the helper), so it needs a deliberate design call: whether to add an optional abort/timeout to the helper or to push timeouts to the IPC layer (note Story 6.7 already added a 5s timeout on the CLI side).
+status: open

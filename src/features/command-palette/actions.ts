@@ -7,9 +7,7 @@ import { useWorkspaceStore } from '../workspace/store';
 import { flushSave } from '../editor/hooks/useAutoSave';
 import { normalizeLayoutMode, nextLayoutMode } from '../settings/layoutMode';
 import { useSettingsStore } from '../settings/store';
-
-let isCreatingNote = false;
-let isTrashingNote = false;
+import { singleflight } from '../../lib/singleflight';
 
 /**
  * Create a new note, open it in a tab, and load it into the editor.
@@ -17,10 +15,7 @@ let isTrashingNote = false;
  * Guarded against concurrent calls (e.g. key repeat).
  */
 export async function createNewNote(): Promise<void> {
-  if (isCreatingNote) return;
-  isCreatingNote = true;
-
-  try {
+  await singleflight('create-note', async () => {
     try {
       await flushSave();
     } catch (err) {
@@ -48,9 +43,7 @@ export async function createNewNote(): Promise<void> {
         useTabStore.getState().closeTab(tabIndex);
       }
     }
-  } finally {
-    isCreatingNote = false;
-  }
+  });
 }
 
 /**
@@ -60,14 +53,10 @@ export async function createNewNote(): Promise<void> {
  * contradictory toasts.
  */
 export async function trashActiveNote(): Promise<void> {
-  if (isTrashingNote) return;
+  await singleflight('trash-active-note', async () => {
+    const activeTab = useTabStore.getState().getActiveTab();
+    if (!activeTab) return;
 
-  const activeTab = useTabStore.getState().getActiveTab();
-  if (!activeTab) return;
-
-  isTrashingNote = true;
-
-  try {
     try {
       await flushSave();
     } catch (err) {
@@ -87,22 +76,8 @@ export async function trashActiveNote(): Promise<void> {
     } else {
       useToastStore.getState().addToast("Couldn't move note to trash");
     }
-  } finally {
-    isTrashingNote = false;
-  }
+  });
 }
-
-/**
- * Test-only reset for module-level action guards. Called from the global
- * test cleanup to prevent in-flight markers leaking between tests.
- */
-export function resetActionGuards(): void {
-  isCreatingNote = false;
-  isTrashingNote = false;
-}
-
-let isTogglingTheme = false;
-let isTogglingLayoutMode = false;
 
 /**
  * Display dimensions the user has explicitly toggled this session. Consulted by
@@ -394,10 +369,7 @@ export async function applyStartupConfig(): Promise<void> {
  * lost-update race on the read-modify-write.
  */
 export async function toggleTheme(): Promise<void> {
-  if (isTogglingTheme) return;
-  isTogglingTheme = true;
-
-  try {
+  await singleflight('toggle-theme', async () => {
     const configResult = await commands.getConfig();
     if (configResult.status === 'error') {
       console.error('getConfig failed:', configResult.error);
@@ -424,9 +396,7 @@ export async function toggleTheme(): Promise<void> {
     // success path — a failed toggle must not suppress startup application.
     userToggled.theme = true;
     applyThemeClass(next);
-  } finally {
-    isTogglingTheme = false;
-  }
+  });
 }
 
 /** Toggle editor format between markdown and plaintext. */
@@ -443,10 +413,7 @@ export function toggleFormat(): void {
  * to avoid a lost-update race on the read-modify-write.
  */
 export async function toggleLayoutMode(): Promise<void> {
-  if (isTogglingLayoutMode) return;
-  isTogglingLayoutMode = true;
-
-  try {
+  await singleflight('toggle-layout-mode', async () => {
     const configResult = await commands.getConfig();
     if (configResult.status === 'error') {
       console.error('getConfig failed:', configResult.error);
@@ -470,9 +437,7 @@ export async function toggleLayoutMode(): Promise<void> {
     // path only, so a failed toggle does not suppress startup application.
     userToggled.layoutMode = true;
     await applyLayoutModeToWindow(next);
-  } finally {
-    isTogglingLayoutMode = false;
-  }
+  });
 }
 
 /**

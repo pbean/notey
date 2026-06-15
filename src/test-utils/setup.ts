@@ -10,7 +10,8 @@ import { useToastStore } from '../features/toast/store';
 import { useTrashStore } from '../features/trash/store';
 import { useSettingsStore } from '../features/settings/store';
 import { useOnboardingStore } from '../features/onboarding/store';
-import { resetActionGuards, resetToggleTracking } from '../features/command-palette/actions';
+import { resetToggleTracking } from '../features/command-palette/actions';
+import { resetSingleflight } from '../lib/singleflight';
 
 /**
  * Per-test mock handler for Tauri IPC invoke calls.
@@ -45,8 +46,9 @@ afterEach(() => {
   useSettingsStore.getState().resetSettings();
   useOnboardingStore.getState().reset();
 
-  // Clear the sticky per-session theme/layout toggle markers (module-level, not a store)
-  resetActionGuards();
+  // Clear shared in-flight (singleflight) dedup keys and the sticky per-session
+  // theme/layout toggle markers (module-level, not a store)
+  resetSingleflight();
   resetToggleTracking();
 
   // Remove CodeMirror DOM nodes that leak between tests
