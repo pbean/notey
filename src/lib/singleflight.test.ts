@@ -38,6 +38,24 @@ describe('singleflight', () => {
     await expect(b).resolves.toBe(7);
   });
 
+  it('coalesces same-key calls made during the synchronous prefix of fn', async () => {
+    const d = deferred<number>();
+    let reentrant: Promise<number> | null = null;
+    const fn = vi.fn(() => {
+      reentrant = singleflight('k', fn);
+      return d.promise;
+    });
+
+    const first = singleflight('k', fn);
+
+    expect(reentrant).toBe(first);
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    d.resolve(9);
+    await expect(first).resolves.toBe(9);
+    await expect(reentrant).resolves.toBe(9);
+  });
+
   it('runs independent keys concurrently', async () => {
     const f1 = vi.fn(async () => 'a');
     const f2 = vi.fn(async () => 'b');
@@ -121,6 +139,28 @@ describe('singleflight', () => {
     expect(onCoalesced).toHaveBeenCalledTimes(1);
   });
 
+  it('does not let onCoalesced errors replace the shared operation result', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const d = deferred<number>();
+    const onCoalesced = vi.fn(() => {
+      throw new Error('hook-boom');
+    });
+
+    const a = singleflight('k', () => d.promise, { onCoalesced });
+    const b = singleflight('k', () => d.promise, { onCoalesced });
+
+    d.resolve(11);
+
+    await expect(a).resolves.toBe(11);
+    await expect(b).resolves.toBe(11);
+    expect(onCoalesced).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'singleflight onCoalesced failed:',
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
+  });
+
   it('resetSingleflight drops in-flight state so the key starts fresh', async () => {
     const d = deferred<number>();
     singleflight('k', () => d.promise);
@@ -132,5 +172,26 @@ describe('singleflight', () => {
     expect(fn2).toHaveBeenCalledTimes(1);
 
     d.resolve(1); // settle the orphaned promise for a clean test exit
+  });
+
+  it('does not let an orphaned reset flight clear a newer in-flight entry', async () => {
+    const old = deferred<number>();
+    const oldRun = singleflight('k', () => old.promise);
+
+    resetSingleflight();
+
+    const fresh = deferred<number>();
+    const freshFn = vi.fn(() => fresh.promise);
+    const freshRun = singleflight('k', freshFn);
+
+    old.resolve(1);
+    await expect(oldRun).resolves.toBe(1);
+
+    const coalescedFreshRun = singleflight('k', freshFn);
+    expect(coalescedFreshRun).toBe(freshRun);
+    expect(freshFn).toHaveBeenCalledTimes(1);
+
+    fresh.resolve(2);
+    await expect(freshRun).resolves.toBe(2);
   });
 });

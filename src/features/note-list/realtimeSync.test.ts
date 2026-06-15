@@ -160,6 +160,37 @@ describe('startNoteCreatedSync', () => {
     unlisten2();
   });
 
+  it('refreshes a new-session event even while the old session refresh is in flight', async () => {
+    let releaseFirst!: () => void;
+    const firstLoad = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let calls = 0;
+    const controllableLoad = vi.fn<() => Promise<void>>().mockImplementation(() => {
+      calls += 1;
+      return calls === 1 ? firstLoad : Promise.resolve();
+    });
+    useWorkspaceStore.setState({ loadFilteredNotes: controllableLoad });
+
+    const unlisten1 = await startNoteCreatedSync();
+    captured!(noteCreatedEvent(1));
+    await vi.advanceTimersByTimeAsync(200); // refresh #1 in flight
+    expect(controllableLoad).toHaveBeenCalledTimes(1);
+
+    unlisten1();
+    const unlisten2 = await startNoteCreatedSync();
+    captured!(noteCreatedEvent(2));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(controllableLoad).toHaveBeenCalledTimes(2);
+
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(controllableLoad).toHaveBeenCalledTimes(2);
+
+    unlisten2();
+  });
+
   it('unlisten cancels a pending refresh and detaches the listener', async () => {
     const unlisten = await startNoteCreatedSync();
 

@@ -11,7 +11,7 @@ import { singleflight } from '../../lib/singleflight';
  */
 const REFRESH_DEBOUNCE_MS = 200;
 
-/** Singleflight key for the note-list refresh (one in-flight refresh at a time). */
+/** Singleflight key prefix for note-list refreshes (one in-flight refresh per session). */
 const REFRESH_KEY = 'note-list-refresh';
 
 let stopSync: UnlistenFn | null = null;
@@ -19,9 +19,9 @@ let syncPromise: Promise<UnlistenFn> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 /**
  * Bumped on every {@link stop} so a refresh still in flight at teardown cannot
- * re-arm a trailing pass on a *later* sync session. Replaces the old
- * `refreshQueued = false` reset, which a stored boolean handled implicitly but a
- * shared singleflight (whose coalesced marker outlives stop()) does not.
+ * re-arm a trailing pass on a *later* sync session. The current generation also
+ * scopes the singleflight key, so restarted sync sessions do not coalesce onto a
+ * stale refresh that began before teardown.
  */
 let syncGeneration = 0;
 
@@ -37,7 +37,7 @@ function clearPendingRefresh(): void {
 async function runRefresh(): Promise<void> {
   const generation = syncGeneration;
   await singleflight(
-    REFRESH_KEY,
+    `${REFRESH_KEY}:${generation}`,
     async () => {
       try {
         await useWorkspaceStore.getState().loadFilteredNotes();
@@ -50,7 +50,7 @@ async function runRefresh(): Promise<void> {
       // follow-up debounced pass — but only while THIS sync session is still
       // active. A stop() (or stop()+restart) bumps syncGeneration, so a refresh
       // that settles after teardown never re-arms the timer on a stale or newer
-      // session (replaces the old `refreshQueued = false` reset in stop()).
+      // session.
       onCoalesced: () => {
         if (stopSync !== null && generation === syncGeneration) scheduleRefresh();
       },

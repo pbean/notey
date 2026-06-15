@@ -71,6 +71,14 @@ baseline_commit: '540a3e582e0d17047c11ae7e1d9178752a6e7c5e'
 - Given a toast-bearing op (trash/export) fired twice concurrently, then `fn` runs once and exactly one toast appears (no duplicate/false toast).
 - Given the full frontend suite, when it runs, then it passes with no new flakes.
 
+### Review Findings
+
+- [x] [Review][Patch] New sync session can lose events while an old refresh is still in flight [src/features/note-list/realtimeSync.ts:39]
+- [x] [Review][Patch] Orphaned reset flight can delete a newer in-flight entry [src/lib/singleflight.ts:54]
+- [x] [Review][Patch] Same-key calls during the synchronous part of `fn` are not coalesced [src/lib/singleflight.ts:48]
+- [x] [Review][Patch] `onCoalesced` can corrupt the shared operation result if it throws [src/lib/singleflight.ts:54]
+- [x] [Review][Patch] Acceptance grep still matches legacy guard names outside allowed files [src/features/note-list/realtimeSync.ts:23]
+
 ## Design Notes
 
 The 6 simple guards currently return `void` synchronously on the dropped call; after migration the coalesced caller awaits and receives the first call's real result. All 7 sites are fire-and-forget (return value unused), so this is a safe, intended improvement that retires the dedup→false-toast / ambiguous-null bug class.

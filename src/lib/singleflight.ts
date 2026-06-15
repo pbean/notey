@@ -2,7 +2,7 @@
  * Keyed singleflight: collapse concurrent async calls that share a `key` into a
  * single in-flight execution.
  *
- * The first call for a key invokes `fn` and stores its promise; concurrent calls
+ * The first call for a key stores its promise and invokes `fn`; concurrent calls
  * for the same in-flight key receive that **same** promise — and therefore the
  * same resolved value or rejection — without invoking `fn` again. The in-flight
  * entry is removed once the promise settles, in a `finally`, so a rejection can
@@ -16,21 +16,27 @@
  *
  * `fn` is invoked eagerly (synchronously up to its first `await`), matching the
  * timing of the guards it replaces; a synchronous throw is surfaced as a rejected
- * promise and leaves no in-flight entry behind.
+ * promise and leaves no in-flight entry behind. The in-flight marker is installed
+ * before `fn` runs, so same-key calls made reentrantly during `fn`'s synchronous
+ * prefix still coalesce onto the first call.
  *
  * @param key   Identifies the logical operation. Same key ⇒ shared in-flight run.
  *              Callers must use a consistent `T` for a given key.
  * @param fn    The async operation to run (or share).
  * @param opts.onCoalesced Optional one-shot trailing hook: fires exactly once,
  *              after the in-flight run settles, IF at least one call coalesced
- *              onto it while it was running. The hook honored is the one supplied
- *              by the call that *started* the flight; a coalescing caller's own
- *              `onCoalesced` only arms (not replaces) it, so all calls for a key
- *              should pass the same hook. Used by the note-list refresh to
- *              schedule a single follow-up pass for events that arrived mid-flight.
+ *              onto it while it was running. The hook honored is the first hook
+ *              supplied for the flight, so all calls for a key should pass the
+ *              same hook. Used by the note-list refresh to schedule a single
+ *              follow-up pass for events that arrived mid-flight.
  */
-const inFlight = new Map<string, Promise<unknown>>();
-const coalesced = new Set<string>();
+interface Flight<T> {
+  promise: Promise<T>;
+  coalesced: boolean;
+  onCoalesced?: () => void;
+}
+
+const inFlight = new Map<string, Flight<unknown>>();
 
 export function singleflight<T>(
   key: string,
@@ -39,25 +45,55 @@ export function singleflight<T>(
 ): Promise<T> {
   const existing = inFlight.get(key);
   if (existing !== undefined) {
-    if (opts?.onCoalesced) coalesced.add(key);
-    return existing as Promise<T>;
+    existing.coalesced = true;
+    if (opts?.onCoalesced && existing.onCoalesced === undefined) {
+      existing.onCoalesced = opts.onCoalesced;
+    }
+    return existing.promise as Promise<T>;
   }
 
-  let started: Promise<T>;
-  try {
-    started = fn();
-  } catch (err) {
-    // Synchronous throw: nothing entered flight, surface as a rejection.
-    return Promise.reject(err);
-  }
+  let resolveFlight!: (value: T) => void;
+  let rejectFlight!: (reason?: unknown) => void;
+  const flight: Flight<T> = {
+    promise: new Promise<T>((resolve, reject) => {
+      resolveFlight = resolve;
+      rejectFlight = reject;
+    }),
+    coalesced: false,
+    onCoalesced: opts?.onCoalesced,
+  };
 
-  const tracked = started.finally(() => {
+  inFlight.set(key, flight as Flight<unknown>);
+
+  const finish = (): void => {
+    if (inFlight.get(key) !== flight) return;
     inFlight.delete(key);
-    if (coalesced.delete(key)) opts?.onCoalesced?.();
-  });
+    if (flight.coalesced && flight.onCoalesced) {
+      try {
+        flight.onCoalesced();
+      } catch (err) {
+        console.error('singleflight onCoalesced failed:', err);
+      }
+    }
+  };
 
-  inFlight.set(key, tracked);
-  return tracked;
+  try {
+    fn().then(
+      (value) => {
+        finish();
+        resolveFlight(value);
+      },
+      (reason) => {
+        finish();
+        rejectFlight(reason);
+      },
+    );
+  } catch (err) {
+    finish();
+    rejectFlight(err);
+  }
+
+  return flight.promise;
 }
 
 /**
@@ -66,5 +102,4 @@ export function singleflight<T>(
  */
 export function resetSingleflight(): void {
   inFlight.clear();
-  coalesced.clear();
 }
