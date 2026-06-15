@@ -706,3 +706,17 @@ origin: code review of spec-singleflight-guard-helper.md (edge-case + blind revi
 location: src/lib/singleflight.ts:50
 reason: The shared `singleflight` helper only clears an in-flight key in `started.finally(...)`. If the wrapped operation never settles (e.g. a Tauri IPC/dialog promise that hangs), the key stays in the `inFlight` map forever and every later same-key call coalesces onto the dead promise, so that command (createNewNote/toggleTheme/export/note-list refresh) is disabled until reload. This is a PRE-EXISTING gap inherited from the hand-rolled boolean guards it replaced (they likewise never reset on a hung promise), surfaced incidentally by this refactor — it is NOT a regression. Adding a timeout/abort to the helper is explicitly out of scope per the spec's "Never" boundary (no timers/retries in the helper), so it needs a deliberate design call: whether to add an optional abort/timeout to the helper or to push timeouts to the IPC layer (note Story 6.7 already added a 5s timeout on the CLI side).
 status: open
+
+### DW-91: First-feature E2E leaves orphaned marker notes if it fails mid-cycle
+
+origin: code review of spec-6-retro-1-first-feature-e2e.md (blind + edge-case review), 2026-06-14
+location: e2e/run.mjs (trashLifecycleTests)
+reason: The trash-lifecycle suite self-cleans only via its final permanent-delete test. If an intermediate assertion throws (the `test()` wrapper records the failure and continues), the per-run marker note is left in trash or the active list. Because the dev DB has no test-isolation seam (Linux `data_dir()` is still a `todo!()`), these orphans accumulate across runs. The unique `E2E-TRASH-${Date.now()}` marker prevents cross-run assertion contamination, so this is hygiene, not correctness. Proper fix is either a try/finally that purges the marker note regardless of outcome, or a real app-data-dir override seam for hermetic E2E (the latter is the better long-term answer and pairs with the CLI-live-sync E2E follow-up).
+status: open
+
+### DW-92: Trash E2E relies on implicit overlay auto-close rather than asserting panel state
+
+origin: code review of spec-6-retro-1-first-feature-e2e.md (edge-case review), 2026-06-14
+location: e2e/run.mjs (Restore + re-trash steps)
+reason: Between the restore and re-trash steps the suite sends a single ESCAPE to close the trash panel and then opens the note list / command palette. It works because the overlay stores call `closeOtherOverlays(...)` on open, but the test never asserts the trash panel is actually gone before acting — a belt-and-suspenders gap. If the overlay-coordination contract ever changes, the suite could act against a stacked overlay and fail opaquely. Add an explicit `waitForCssGone('[data-testid="trash-panel"]')`-style assertion at the transition rather than trusting implicit close.
+status: open

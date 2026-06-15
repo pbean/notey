@@ -40,6 +40,22 @@ export async function findElement(sessionId, using, value) {
   return request('POST', `/session/${sessionId}/element`, { using, value });
 }
 
+export async function findElements(sessionId, using, value) {
+  return request('POST', `/session/${sessionId}/elements`, { using, value });
+}
+
+/**
+ * Unwrap a WebDriver element reference to its id, tolerating both the legacy
+ * `ELEMENT` key and the W3C `element-6066-…` key.
+ */
+export function elementId(el) {
+  return el.ELEMENT || el['element-6066-11e4-a52e-4f735466cecf'];
+}
+
+export async function getElementAttribute(sessionId, elementId, name) {
+  return request('GET', `/session/${sessionId}/element/${elementId}/attribute/${name}`);
+}
+
 export async function getElementText(sessionId, elementId) {
   return request('GET', `/session/${sessionId}/element/${elementId}/text`);
 }
@@ -82,6 +98,28 @@ export async function sendSpecialKey(sessionId, key) {
         actions: [
           { type: 'keyDown', value: key },
           { type: 'keyUp', value: key },
+        ],
+      },
+    ],
+  });
+}
+
+/**
+ * Press a modifier+key chord (e.g. Ctrl+P): hold `modifier` down across a
+ * single `key` press, then release both. `sendKeys`/`sendSpecialKey` only emit
+ * standalone keys and cannot express chorded shortcuts.
+ */
+export async function sendChord(sessionId, modifier, key) {
+  return request('POST', `/session/${sessionId}/actions`, {
+    actions: [
+      {
+        type: 'key',
+        id: 'keyboard',
+        actions: [
+          { type: 'keyDown', value: modifier },
+          { type: 'keyDown', value: key },
+          { type: 'keyUp', value: key },
+          { type: 'keyUp', value: modifier },
         ],
       },
     ],

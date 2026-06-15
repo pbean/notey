@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-14 # story 7-8 → done
+last_updated: 2026-06-14 # epic-6-retro-item-1 first feature E2E implemented + reviewed (pending CI green)
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -191,7 +191,7 @@ development_status:
   epic-5-retro-item-4-permission-toml-auto-gen-check: done # MOOT at Epic 6 retro — Epic 6 added no new Tauri commands (IPC delegates to existing services), gotcha did not recur
 
   # Epic 6 Retro Items (2026-06-14):
-  epic-6-retro-item-1-first-feature-e2e: in-progress # HIGH — first feature E2E via existing tauri-driver harness (trash lifecycle + export file-write and/or CLI live-sync); retires 6-epic E2E gap; Pinkyd-owned, NOT a gate (by decision)
+  epic-6-retro-item-1-first-feature-e2e: in-progress # HIGH — trash-lifecycle feature E2E IMPLEMENTED on the existing tauri-driver harness + adversarially reviewed (spec-6-retro-1-first-feature-e2e.md status done, 2026-06-14); CI build unblocked by aligning the tauri stack to 2.11. Kept in-progress until the first CI green run: local WebKitGTK/xvfb crashes the pre-existing suite identically, so green is unverifiable on this machine (app healthy standalone). CLI live-sync + export-dialog E2E deferred (DW-91/DW-92 logged). Pinkyd-owned, NOT a gate.
   epic-6-retro-item-2-singleflight-guard-helper: in-progress # HIGH — extract singleflight helper, migrate the 7 hand-rolled guards; Pinkyd-owned, NOT a gate (by decision); absorbs epic-5-retro-item-2
   epic-6-retro-item-3-per-story-dw-logging: backlog # MEDIUM — log every real out-of-scope review dismissal to deferred-work.md PER STORY as part of the coding-assistant workflow (not swept at retro)
   epic-6-retro-item-4-close-out-tracking-discipline: done # MEDIUM — reconcile status on close-out not at next retro; Epic 5 items 1/2/4 reconciled this retro
