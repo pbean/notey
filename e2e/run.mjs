@@ -8,10 +8,13 @@
  *   - tauri-driver installed (cargo install tauri-driver)
  *   - WebKitWebDriver available (webkit2gtk-driver package)
  *   - Debug binary built (npx tauri build --debug --no-bundle)
+ *   - notey CLI binary built (cargo build, run in notey-cli/) — for the live-sync suite
  */
 
 import { spawn } from 'child_process';
 import path from 'path';
+import os from 'os';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 // Force WebKitGTK software rendering before anything spawns the driver. Under a
@@ -27,6 +30,15 @@ import { fileURLToPath } from 'url';
 process.env.WEBKIT_DISABLE_COMPOSITING_MODE ??= '1';
 process.env.WEBKIT_DISABLE_DMABUF_RENDERER ??= '1';
 process.env.LIBGL_ALWAYS_SOFTWARE ??= '1';
+
+// Pin a unique per-run IPC socket so the CLI live-sync suite rendezvous's the
+// test app and the `notey` CLI on their own endpoint — never colliding with a
+// real notey instance the developer may have running on the default
+// `$XDG_RUNTIME_DIR/notey.sock`. Set before the driver spawns so it inherits
+// down node → tauri-driver → app (same chain as the WEBKIT vars above), and the
+// CLI (spawned from this process) reads the same value. `??=` lets a caller
+// override it.
+process.env.NOTEY_SOCKET_PATH ??= path.join(os.tmpdir(), `notey-e2e-${process.pid}.sock`);
 
 import {
   createSession,
@@ -196,6 +208,71 @@ async function reopenNoteByMarker(marker) {
   assert(match, `Note list has no item matching marker "${marker}"`);
   await clickCss(`[data-testid="${match.testId}"]`);
   await pause(400); // panel closes, note loads into the editor
+}
+
+/**
+ * Spawn the standalone `notey` CLI debug binary and resolve with its exit code
+ * and captured output. Runs with `cwd: process.cwd()` — the same cwd the app
+ * inherited from this runner — so the CLI's git-root workspace detection lands
+ * on the same workspace the desktop made active, and the new note passes the
+ * desktop's active-workspace filter. A missing binary rejects with a build hint
+ * rather than a cryptic ENOENT.
+ */
+function runCli(args, { timeoutMs = 8000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const bin = path.resolve(__dirname, '..', 'notey-cli', 'target', 'debug', 'notey');
+    const child = spawn(bin, args, { cwd: process.cwd(), env: process.env });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`CLI '${args.join(' ')}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(new Error(`CLI spawn failed (build it first: cargo build in notey-cli/): ${e.message}`));
+    });
+    child.stdout.on('data', (d) => {
+      stdout += d;
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+    // Swallow stream-level errors (e.g. EPIPE when we SIGKILL on timeout) so they
+    // can't surface as an unhandled 'error' and crash the runner.
+    child.stdout.on('error', () => {});
+    child.stderr.on('error', () => {});
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+/** Poll the (open) note list until a row's text contains `marker`. */
+async function waitForMarkerInNoteList(marker, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await testIdContaining('[data-testid^="note-list-item-"]', marker)) return;
+    await pause(200);
+  }
+  throw new Error(`Note list never showed CLI-added marker "${marker}" within ${timeoutMs}ms`);
+}
+
+/**
+ * Poll until the app's IPC socket file exists. The app's IPC server binds during
+ * Tauri's setup hook, which can lag a freshly-created WebDriver session on a cold
+ * CI runner — without this gate the first `notey add` can race the bind and fail
+ * exit-2 ("not running") as a flake. Best-effort: returns after the deadline
+ * regardless, leaving the CLI's own connect timeout to report a genuine absence.
+ */
+async function waitForSocket(timeoutMs = 5000) {
+  const sock = process.env.NOTEY_SOCKET_PATH;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (sock && fs.existsSync(sock)) return;
+    await pause(150);
+  }
 }
 
 // --- Setup ---
@@ -375,6 +452,76 @@ async function trashLifecycleTests() {
   }
 }
 
+/**
+ * Best-effort cleanup of the CLI-created marker note: load it as the active tab
+ * (selecting it from the list also closes the panel), move it to trash, then
+ * permanently purge it from trash. Panel-state-agnostic so it works whether the
+ * happy path left the panel open or a mid-run failure left unknown state. Never
+ * throws — teardown must not fail the run.
+ */
+async function purgeCliNote(marker) {
+  try {
+    let match = await testIdContaining('[data-testid^="note-list-item-"]', marker);
+    if (!match) {
+      // Panel closed (or note not yet shown) — open the list and look again.
+      await sendChord(sessionId, CONTROL, 'b');
+      await waitForCss('[data-testid="note-list-panel"]', 2000);
+      await pause(200);
+      match = await testIdContaining('[data-testid^="note-list-item-"]', marker);
+    }
+    if (match) {
+      await clickCss(`[data-testid="${match.testId}"]`);
+      await pause(400); // panel closes, note loads into the editor
+      await runPaletteCommand('Move to Trash');
+      await waitForToast('moved to trash', 3000);
+    }
+  } catch (e) {
+    // Best-effort: the note may already be gone or the session may be dead. Log a
+    // non-fatal failure so a genuinely-stuck teardown is visible rather than
+    // silently leaking the marker note into the shared dev DB.
+    if (!isFatalSession(e)) console.log(`    (cleanup: pre-trash step failed: ${e.message})`);
+  }
+  // Purge from trash regardless of how far the above got.
+  await purgeMarkerFromTrash(marker);
+}
+
+async function cliLiveSyncTests() {
+  console.log('\nP1-E2E-003: CLI Live Sync');
+
+  // Unique per run so the marker note is identifiable in a non-isolated dev DB.
+  const marker = `E2E-CLISYNC-${Date.now()}`;
+  let addSucceeded = false;
+
+  try {
+    await test('note list panel opens with no pre-existing marker note', async () => {
+      await sendChord(sessionId, CONTROL, 'b'); // open the note list
+      await waitForCss('[data-testid="note-list-panel"]');
+      await pause(300);
+      const pre = await testIdContaining('[data-testid^="note-list-item-"]', marker);
+      assert(!pre, `marker note "${marker}" must not exist before the CLI add`);
+    });
+
+    await test('notey add (CLI, separate process) exits 0', async () => {
+      await waitForSocket(); // let the app's IPC server finish binding before connecting
+      const res = await runCli(['add', marker]);
+      assert(res.code === 0, `CLI exited ${res.code}; stderr: "${res.stderr.trim()}"`);
+      addSucceeded = true;
+    });
+
+    await test('new note appears in the open list via the note-created event', async () => {
+      // The panel was opened BEFORE the add, so the only thing that can surface
+      // this row is the live note-created → debounced refresh seam — not a
+      // UI-triggered load. This is the cross-process assertion under test.
+      // Short-circuit a failed add: otherwise this waits the full timeout and
+      // misreports a CLI-side failure as an event-pipeline failure.
+      assert(addSucceeded, 'skipped: CLI add did not succeed (see the prior failure)');
+      await waitForMarkerInNoteList(marker);
+    });
+  } finally {
+    await purgeCliNote(marker);
+  }
+}
+
 // --- Main ---
 
 async function main() {
@@ -408,6 +555,15 @@ async function main() {
     await pause(3000);
 
     await trashLifecycleTests();
+
+    // Fresh session for the CLI live-sync feature suite.
+    await deleteSession(sessionId);
+    await pause(2000);
+
+    sessionId = await createSession(APP_PATH);
+    await pause(3000);
+
+    await cliLiveSyncTests();
   } catch (e) {
     console.error('Fatal error:', e.message);
     failed++;

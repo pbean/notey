@@ -12,11 +12,13 @@
 //! verified by manual/platform QA (RISK-E6-007); the automatable guarantees are
 //! the `0600` mode and the user-scoped path.
 
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use interprocess::local_socket::traits::Stream as _;
 use interprocess::local_socket::{prelude::*, ListenerOptions, Name, Stream};
@@ -27,6 +29,75 @@ use crate::ipc::protocol::IpcResponse;
 /// Hard cap on a single request frame. Set well above the 1 MiB content cap to
 /// allow envelope/escaping overhead while still bounding a memory-DoS frame.
 const MAX_REQUEST_BYTES: usize = 8 * 1024 * 1024;
+
+/// Default concurrent-worker budget when `NOTEY_IPC_MAX_WORKERS` is unset.
+const DEFAULT_MAX_WORKERS: usize = 128;
+
+/// Default request-read deadline (ms) when `NOTEY_IPC_READ_DEADLINE_MS` is unset.
+const DEFAULT_READ_DEADLINE_MS: u64 = 5000;
+
+/// How often the reaper wakes to unblock workers past their read deadline. Kept
+/// short so a reclaimed slot becomes available promptly (and tests run fast).
+const REAPER_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Resolved budget cap: `NOTEY_IPC_MAX_WORKERS` or [`DEFAULT_MAX_WORKERS`].
+///
+/// Parsed once at server start (mirrors the `NOTEY_SOCKET_PATH` seam). A value of
+/// `0` or an unparseable value falls back to the default.
+fn max_workers() -> usize {
+    std::env::var("NOTEY_IPC_MAX_WORKERS")
+        .ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_MAX_WORKERS)
+}
+
+/// Resolved request-read deadline: `NOTEY_IPC_READ_DEADLINE_MS` or
+/// [`DEFAULT_READ_DEADLINE_MS`]. Parsed once at server start.
+fn read_deadline() -> Duration {
+    let ms = std::env::var("NOTEY_IPC_READ_DEADLINE_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_READ_DEADLINE_MS);
+    Duration::from_millis(ms)
+}
+
+/// A raw, non-owning reference to a worker's open connection, used solely so the
+/// reaper can unblock a stuck read without owning (and thus closing) the stream.
+///
+/// The raw fd/handle is captured from the [`Stream`] at accept time and stored
+/// here as a plain value. It is only ever acted upon (`shutdown`/`CancelIoEx`)
+/// while the owning worker's registry entry is held under the registry lock,
+/// which guarantees the underlying fd/handle is still open (the worker removes
+/// its entry under that same lock *before* dropping its `Stream`).
+#[derive(Clone, Copy)]
+struct RawConn {
+    #[cfg(unix)]
+    fd: std::os::fd::RawFd,
+    #[cfg(windows)]
+    handle: std::os::windows::io::RawHandle,
+}
+
+// SAFETY: `RawConn` holds only a raw fd/handle as a plain integer/pointer value.
+// We never dereference or close it; we only pass it to `shutdown`/`CancelIoEx`
+// under the registry lock (see the safety invariant on the reaper). Sending the
+// raw value across threads is sound because ownership of the fd/handle stays with
+// the worker's `Stream`; the registry merely borrows its raw value to unblock it.
+unsafe impl Send for RawConn {}
+
+/// One live worker's registry entry: its raw connection plus, while it is still
+/// in the request-read phase, a deadline after which the reaper may unblock it.
+/// `read_deadline` is cleared (`None`) once a full frame is read so the handler
+/// and response write are never reaped mid-flight.
+struct WorkerEntry {
+    conn: RawConn,
+    read_deadline: Option<Instant>,
+}
+
+/// Shared map of in-flight workers keyed by a monotonic id. The map's length
+/// under its lock *is* the connection budget.
+type WorkerRegistry = Arc<Mutex<HashMap<u64, WorkerEntry>>>;
 
 /// A request handler: given a de-framed JSON body, produce a response.
 ///
@@ -155,6 +226,8 @@ pub struct IpcServer {
     shutdown: Arc<AtomicBool>,
     path: PathBuf,
     handle: Option<JoinHandle<()>>,
+    /// Join handle for the read-phase watchdog/reaper thread.
+    reaper: Option<JoinHandle<()>>,
     /// `true` once the socket file is a real filesystem path we own (Unix).
     owns_file: bool,
 }
@@ -166,6 +239,12 @@ impl IpcServer {
     /// sets mode `0600` on Unix, and dispatches every accepted connection's
     /// request to `handler` on a per-connection worker thread so one slow client
     /// cannot block the accept loop.
+    ///
+    /// Worker threads are bounded two ways: a concurrent-connection budget
+    /// (`NOTEY_IPC_MAX_WORKERS`, default [`DEFAULT_MAX_WORKERS`]) and a
+    /// cross-platform read-phase watchdog. A single reaper thread unblocks any
+    /// worker still waiting to read its request frame past the read deadline
+    /// (`NOTEY_IPC_READ_DEADLINE_MS`, default [`DEFAULT_READ_DEADLINE_MS`]).
     pub fn start(path: &Path, handler: Handler) -> Result<IpcServer, NoteyError> {
         reclaim_stale(path)?;
 
@@ -184,20 +263,42 @@ impl IpcServer {
             }
         };
 
+        // Parse the env-override config once at start (mirrors `NOTEY_SOCKET_PATH`).
+        let max_workers = max_workers();
+        let read_deadline = read_deadline();
+
         let shutdown = Arc::new(AtomicBool::new(false));
+        let registry: WorkerRegistry = Arc::new(Mutex::new(HashMap::new()));
+
         let accept_shutdown = Arc::clone(&shutdown);
-        let handle = thread::spawn(move || accept_loop(listener, accept_shutdown, handler));
+        let accept_registry = Arc::clone(&registry);
+        let handle = thread::spawn(move || {
+            accept_loop(
+                listener,
+                accept_shutdown,
+                handler,
+                accept_registry,
+                max_workers,
+                read_deadline,
+            )
+        });
+
+        let reaper_shutdown = Arc::clone(&shutdown);
+        let reaper_registry = Arc::clone(&registry);
+        let reaper = thread::spawn(move || reaper_loop(reaper_shutdown, reaper_registry));
 
         Ok(IpcServer {
             shutdown,
             path: path.to_path_buf(),
             handle: Some(handle),
+            reaper: Some(reaper),
             owns_file,
         })
     }
 
-    /// Signal the accept loop to stop, wake it with a throwaway connection, join
-    /// it, and remove the socket file. Idempotent.
+    /// Signal the accept loop and reaper to stop, wake the accept loop with a
+    /// throwaway connection, join both threads, and remove the socket file.
+    /// Idempotent.
     pub fn shutdown(&mut self) {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return; // already shut down
@@ -208,6 +309,10 @@ impl IpcServer {
         }
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
+        }
+        // The reaper observes the shutdown flag within REAPER_INTERVAL and exits.
+        if let Some(reaper) = self.reaper.take() {
+            let _ = reaper.join();
         }
         if self.owns_file {
             let _ = std::fs::remove_file(&self.path);
@@ -281,30 +386,164 @@ fn set_owner_only(path: &Path) -> Result<bool, NoteyError> {
     }
 }
 
+/// Capture the raw fd (Unix) / handle (Windows) of a connection by matching the
+/// unified [`Stream`] enum. The raw value is stored in the registry as a plain
+/// value; ownership of the fd/handle remains with the worker's `Stream`.
+fn raw_conn(stream: &Stream) -> RawConn {
+    match stream {
+        #[cfg(unix)]
+        Stream::UdSocket(s) => {
+            use std::os::fd::{AsFd, AsRawFd};
+            RawConn {
+                fd: s.as_fd().as_raw_fd(),
+            }
+        }
+        #[cfg(windows)]
+        Stream::NamedPipe(s) => {
+            use std::os::windows::io::AsHandle;
+            RawConn {
+                handle: s.as_handle().as_raw_handle(),
+            }
+        }
+    }
+}
+
+/// Unblock a worker stuck in its read by acting on its raw connection — without
+/// closing it (the owning worker's `Stream` still owns the fd/handle).
+///
+/// On Unix, `shutdown(SHUT_RD)` makes the worker's `read_exact` return so it
+/// errors and drops its stream normally (no double-close). Only the *read* half
+/// is shut down: if the reaper fires in the narrow window after a frame finished
+/// reading but before the worker cleared its deadline, the response write half is
+/// left intact, so a just-completed request is never torn. On Windows,
+/// `CancelIoEx` cross-thread-cancels the worker's synchronous `ReadFile`.
+///
+/// MUST be called only while holding the registry lock (see the reaper's safety
+/// invariant): an entry observed under the lock is guaranteed still-open.
+fn unblock_conn(conn: RawConn) {
+    #[cfg(unix)]
+    {
+        // SAFETY: `conn.fd` is still open (entry held under the registry lock);
+        // `shutdown(SHUT_RD)` does not close the fd (and leaves the write half
+        // open), so the owning `Stream` may still drop it normally afterwards.
+        unsafe {
+            libc::shutdown(conn.fd, libc::SHUT_RD);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::IO::CancelIoEx;
+        // SAFETY: `conn.handle` is still open (entry held under the registry
+        // lock). `CancelIoEx` cancels pending I/O cross-thread without closing
+        // the handle; the owning `Stream` still drops it normally afterwards.
+        unsafe {
+            let _ = CancelIoEx(HANDLE(conn.handle as *mut _), None);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn accept_loop(
     listener: interprocess::local_socket::Listener,
     shutdown: Arc<AtomicBool>,
     handler: Handler,
+    registry: WorkerRegistry,
+    max_workers: usize,
+    read_deadline: Duration,
 ) {
+    let next_id = AtomicU64::new(0);
+
     for incoming in listener.incoming() {
         if shutdown.load(Ordering::SeqCst) {
             break;
         }
         match incoming {
-            Ok(stream) => {
+            Ok(mut stream) => {
+                // Capture the raw fd/handle BEFORE moving the stream into a worker
+                // so the reaper can later unblock it.
+                let conn = raw_conn(&stream);
+                let id = next_id.fetch_add(1, Ordering::Relaxed);
+
+                // Budget gate: hold the registry lock only briefly. If at capacity,
+                // reply "server busy" and drop the connection without spawning.
+                // Otherwise register the worker, then spawn outside the lock so the
+                // accept loop is never blocked on worker work.
+                let admitted = {
+                    let mut reg = registry.lock().unwrap_or_else(|e| e.into_inner());
+                    if reg.len() >= max_workers {
+                        false
+                    } else {
+                        reg.insert(
+                            id,
+                            WorkerEntry {
+                                conn,
+                                read_deadline: Some(Instant::now() + read_deadline),
+                            },
+                        );
+                        true
+                    }
+                };
+
+                if !admitted {
+                    let busy = IpcResponse::err("server busy");
+                    let encoded = serde_json::to_vec(&busy).unwrap_or_else(|_| {
+                        br#"{"success":false,"data":null,"error":"server busy"}"#.to_vec()
+                    });
+                    let _ = write_frame(&mut stream, &encoded);
+                    drop(stream);
+                    continue;
+                }
+
                 let handler = Arc::clone(&handler);
-                // One worker per connection: a slow/never-closing client parks its
-                // own thread without blocking the accept loop (RISK-E6-003).
-                thread::spawn(move || handle_connection(stream, handler));
+                let registry = Arc::clone(&registry);
+                // One worker per connection (within budget): a slow/never-closing
+                // client parks its own thread without blocking the accept loop
+                // (RISK-E6-003), and is reclaimed by the reaper past the deadline.
+                thread::spawn(move || handle_connection(stream, handler, registry, id));
             }
             Err(_) => continue, // transient accept error — keep serving
         }
     }
 }
 
-fn handle_connection(mut stream: Stream, handler: Handler) {
+/// RAII guard that removes a worker's registry entry under the registry lock when
+/// the worker exits. Declared *after* the `stream` binding so it drops *before*
+/// the `stream` (Rust drops locals in reverse declaration order): the entry is
+/// removed under the lock before the fd/handle closes, so an entry observed under
+/// the lock by the reaper is always still-open.
+struct DeregisterGuard {
+    registry: WorkerRegistry,
+    id: u64,
+}
+
+impl Drop for DeregisterGuard {
+    fn drop(&mut self) {
+        let mut reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        reg.remove(&self.id);
+    }
+}
+
+fn handle_connection(stream: Stream, handler: Handler, registry: WorkerRegistry, id: u64) {
+    // Bind `stream` first, then the guard: the guard drops first (reverse
+    // declaration order), removing the registry entry UNDER THE LOCK before the
+    // stream — and thus the fd/handle — is dropped/closed.
+    let mut stream = stream;
+    let _guard = DeregisterGuard {
+        registry: Arc::clone(&registry),
+        id,
+    };
+
     let response = match read_frame(&mut stream) {
         Ok(body) => {
+            // Full frame read: clear this worker's deadline so the handler and
+            // response write are never reaped mid-flight.
+            {
+                let mut reg = registry.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(entry) = reg.get_mut(&id) {
+                    entry.read_deadline = None;
+                }
+            }
             // Defense in depth: a content payload can never legitimately exceed the
             // frame cap, but reject early regardless.
             if body.len() > MAX_REQUEST_BYTES {
@@ -320,4 +559,31 @@ fn handle_connection(mut stream: Stream, handler: Handler) {
         br#"{"success":false,"data":null,"error":"response encode failed"}"#.to_vec()
     });
     let _ = write_frame(&mut stream, &encoded);
+}
+
+/// Single watchdog/reaper thread: periodically unblock any worker still in its
+/// request-read phase past its deadline so its slot is reclaimed. Exits when the
+/// shared `shutdown` flag is set (within [`REAPER_INTERVAL`]).
+///
+/// Safety invariant: `unblock_conn` is called *while holding the registry lock*.
+/// Because a worker removes its entry — and only then drops its `Stream`/closes
+/// its fd/handle — under that same lock, any entry observed here is guaranteed
+/// still-open, so shutdown/cancel can never race a reused fd/handle.
+fn reaper_loop(shutdown: Arc<AtomicBool>, registry: WorkerRegistry) {
+    while !shutdown.load(Ordering::SeqCst) {
+        thread::sleep(REAPER_INTERVAL);
+        if shutdown.load(Ordering::SeqCst) {
+            break;
+        }
+        let reg = registry.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        for entry in reg.values() {
+            if let Some(deadline) = entry.read_deadline {
+                if deadline <= now {
+                    unblock_conn(entry.conn);
+                }
+            }
+        }
+        drop(reg);
+    }
 }

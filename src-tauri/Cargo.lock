@@ -4007,6 +4007,7 @@ dependencies = [
  "dirs 5.0.1",
  "dunce",
  "interprocess",
+ "libc",
  "rusqlite",
  "rusqlite_migration",
  "serde",
@@ -4022,6 +4023,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml 0.8.2",
+ "windows",
 ]
 
 [[package]]

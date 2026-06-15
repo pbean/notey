@@ -35,8 +35,26 @@ struct TestServer {
 static SOCKET_SEQ: AtomicUsize = AtomicUsize::new(0);
 static SOCKET_PATH_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+/// Serializes EVERY `IpcServer::start` in this suite. `IpcServer::start` reads the
+/// process-global `NOTEY_IPC_*` env vars on every start, so an env-setting test's
+/// "set env → start → clear env" window must not overlap any other server start —
+/// including the many plain `start()` servers that don't set the vars but would
+/// otherwise read a leaked value. `start_with` holds this lock across that whole
+/// window, so the overrides are captured by exactly the server that set them.
+static IPC_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 impl TestServer {
     fn start() -> TestServer {
+        TestServer::start_with(None, None)
+    }
+
+    /// Start a server with optional `NOTEY_IPC_MAX_WORKERS` /
+    /// `NOTEY_IPC_READ_DEADLINE_MS` overrides. Acquires [`IPC_ENV_LOCK`] across the
+    /// whole "set env → start (parses env once) → clear env" window — for ALL
+    /// callers, including the plain `start()` path with no overrides — so a
+    /// concurrent server start can never read another test's overrides. Callers
+    /// must NOT hold the lock themselves (it is not reentrant).
+    fn start_with(max_workers: Option<usize>, read_deadline_ms: Option<u64>) -> TestServer {
         let (conn, db_dir) = create_temp_db();
         let conn = Arc::new(Mutex::new(conn));
         let sock_dir = TempDir::new().expect("socket dir");
@@ -48,7 +66,24 @@ impl TestServer {
             let guard = handler_conn.lock().unwrap_or_else(|e| e.into_inner());
             tauri_app_lib::ipc::protocol::handle_request(&guard, raw)
         });
+
+        // Held across env mutation AND `IpcServer::start` (which reads the env),
+        // so no other server start in the suite can observe these overrides.
+        let _env_guard = IPC_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(mw) = max_workers {
+            std::env::set_var("NOTEY_IPC_MAX_WORKERS", mw.to_string());
+        }
+        if let Some(rd) = read_deadline_ms {
+            std::env::set_var("NOTEY_IPC_READ_DEADLINE_MS", rd.to_string());
+        }
         let server = IpcServer::start(&path, handler).expect("start IPC server");
+        if max_workers.is_some() {
+            std::env::remove_var("NOTEY_IPC_MAX_WORKERS");
+        }
+        if read_deadline_ms.is_some() {
+            std::env::remove_var("NOTEY_IPC_READ_DEADLINE_MS");
+        }
+        drop(_env_guard);
 
         TestServer {
             _server: server,
@@ -394,4 +429,88 @@ fn int_007_slow_client_does_not_block_accept_loop() {
     assert!(ok.success, "a slow client must not block other clients");
 
     drop(slow); // release the parked worker
+}
+
+// ── DW-85: connection budget — over-capacity connections get `server busy` ────
+
+/// Open a connection and send a partial length prefix so the worker parks in
+/// `read_frame`, occupying a budget slot. The returned stream must be kept alive
+/// to hold the slot.
+fn half_open(path: &Path) -> Stream {
+    let mut stream = raw_connect(path);
+    stream.write_all(&[0x00, 0x00]).unwrap(); // 2 of 4 length bytes, then nothing
+    stream.flush().unwrap();
+    stream
+}
+
+#[test]
+fn int_dw85_budget_rejects_over_capacity_with_server_busy() {
+    const MAX: usize = 4;
+    // Long read deadline so the reaper does not reclaim slots during the test.
+    let ts = TestServer::start_with(Some(MAX), Some(60_000));
+
+    // Saturate the budget with half-open connections parked in read.
+    let mut parked = Vec::new();
+    for _ in 0..MAX {
+        parked.push(half_open(&ts.path));
+    }
+
+    // Give the accept loop time to admit and register all MAX workers.
+    thread::sleep(std::time::Duration::from_millis(300));
+
+    // The next connection is over budget: it must get exactly one framed
+    // `server busy` error, then be closed.
+    let mut over = raw_connect(&ts.path);
+    over.write_all(&[0x00, 0x00, 0x00, 0x01]).unwrap(); // a 1-byte frame attempt
+    over.write_all(&[0x7b]).unwrap();
+    over.flush().unwrap();
+
+    let mut len_buf = [0u8; 4];
+    over.read_exact(&mut len_buf).expect("server busy length prefix");
+    let len = u32::from_be_bytes(len_buf) as usize;
+    let mut body = vec![0u8; len];
+    over.read_exact(&mut body).expect("server busy body");
+    let resp: IpcResponse = serde_json::from_slice(&body).expect("parse server busy envelope");
+    assert!(!resp.success, "over-budget connection must be rejected");
+    assert_eq!(
+        resp.error.as_deref(),
+        Some("server busy"),
+        "over-budget connection must get a `server busy` error frame"
+    );
+
+    drop(over);
+    drop(parked); // release the parked workers
+}
+
+// ── DW-85: watchdog reclaim — a stalled read past the deadline frees its slot ──
+
+#[test]
+fn int_dw85_watchdog_reclaims_stalled_slots() {
+    const MAX: usize = 2;
+    const DEADLINE_MS: u64 = 200;
+    let ts = TestServer::start_with(Some(MAX), Some(DEADLINE_MS));
+
+    // Saturate the budget with half-open connections that never finish reading.
+    let mut parked = Vec::new();
+    for _ in 0..MAX {
+        parked.push(half_open(&ts.path));
+    }
+    thread::sleep(std::time::Duration::from_millis(150));
+
+    // Wait past the read deadline + a couple of reaper intervals: the reaper
+    // unblocks the stalled reads, their workers exit, and the slots are freed.
+    thread::sleep(std::time::Duration::from_millis(DEADLINE_MS + 400));
+
+    // A burst of normal full requests must now all succeed (slots reclaimed).
+    for i in 0..MAX {
+        let ok = ts.send("create_note", json!({ "content": format!("reclaimed-{i}") }));
+        assert!(
+            ok.success,
+            "request {i} should succeed after slot reclaim: {:?}",
+            ok.error
+        );
+    }
+
+    // The parked sockets' workers have been reaped already; dropping is harmless.
+    drop(parked);
 }
