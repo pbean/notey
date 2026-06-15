@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-14 # epic-6-retro-item-1 first feature E2E implemented + reviewed (pending CI green)
+last_updated: 2026-06-15 # epic-6-retro items 1 (E2E green on CI run 27527258028) + 2 (singleflight) → done; fixed pre-existing Windows-only clippy break in ipc/socket_server.rs
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -185,14 +185,14 @@ development_status:
   # Deferred item (first E2E smoke test) resolved at Epic 5 retro → folded into epic-5-retro-item-1
 
   # Epic 5 Retro Items (2026-06-12):
-  epic-5-retro-item-1-test-design-and-backfill-prior-epics: in-progress # PARTIAL at Epic 6 retro: test-DESIGN done (test-design-epic-3..7, commit b43717a); first feature E2E NOT shipped (E2E still Epic-1 only) → Pinkyd owns the E2E build (see epic-6-retro-item-1)
-  epic-5-retro-item-2-singleflight-inflight-guard-helper: in-progress # NOT done by Epic 6; guard #7 added (realtimeSync.ts:16) → Pinkyd owns (see epic-6-retro-item-2)
+  epic-5-retro-item-1-test-design-and-backfill-prior-epics: in-progress # test-DESIGN done (test-design-epic-3..7, commit b43717a). Carved-out "first feature E2E" sub-item now CLOSED via epic-6-retro-item-1 (trash-lifecycle E2E green on CI run 27527258028, 2026-06-15) and dedup→toast regression covered by the singleflight work. Remaining: broader test-backfill across Epics 3–5 — left in-progress pending a coverage pass (not yet audited complete).
+  epic-5-retro-item-2-singleflight-inflight-guard-helper: done # RESOLVED via epic-6-retro-item-2 — shared singleflight helper landed (src/lib/singleflight.ts), all 7 guards (incl. guard #7 realtimeSync) migrated; verified 2026-06-15
   epic-5-retro-item-3-fix-retro-tracking-drift: done # MEDIUM — Epic 4 items 1/2/4 flipped to done above
   epic-5-retro-item-4-permission-toml-auto-gen-check: done # MOOT at Epic 6 retro — Epic 6 added no new Tauri commands (IPC delegates to existing services), gotcha did not recur
 
   # Epic 6 Retro Items (2026-06-14):
-  epic-6-retro-item-1-first-feature-e2e: in-progress # HIGH — trash-lifecycle feature E2E IMPLEMENTED on the existing tauri-driver harness + adversarially reviewed (spec-6-retro-1-first-feature-e2e.md status done, 2026-06-14); CI build unblocked by aligning the tauri stack to 2.11. Kept in-progress until the first CI green run: local WebKitGTK/xvfb crashes the pre-existing suite identically, so green is unverifiable on this machine (app healthy standalone). CLI live-sync + export-dialog E2E deferred (DW-91/DW-92 logged). Pinkyd-owned, NOT a gate.
-  epic-6-retro-item-2-singleflight-guard-helper: in-progress # HIGH — extract singleflight helper, migrate the 7 hand-rolled guards; Pinkyd-owned, NOT a gate (by decision); absorbs epic-5-retro-item-2
+  epic-6-retro-item-1-first-feature-e2e: done # HIGH — trash-lifecycle feature E2E GENUINELY GREEN ON CI: run 27527258028 (HEAD 5be24c7), Linux job success incl. "Build debug binary (Linux)" AND "E2E tests (Linux)". The 2.11 stack alignment fixed the prior "Build debug binary (Linux)" failure; CI's WebKit software-rendering env (WEBKIT_DISABLE_COMPOSITING_MODE/DMABUF + LIBGL_ALWAYS_SOFTWARE) runs the suite that crashes under local xvfb. spec-6-retro-1-first-feature-e2e.md status done. CLI live-sync + export-dialog E2E deferred (DW-91/DW-92 logged). Pinkyd-owned.
+  epic-6-retro-item-2-singleflight-guard-helper: done # HIGH — shared singleflight helper extracted (src/lib/singleflight.ts) + all 7 hand-rolled guards migrated (realtimeSync refreshInFlight/refreshQueued, command-palette isCreatingNote/isTrashingNote/isTogglingTheme/isTogglingLayoutMode, export isExporting); spec-singleflight-guard-helper.md status done, merged b6a0c06/86f2ff4. Verified 2026-06-15: acceptance grep clean (zero legacy-guard hits outside singleflight.ts), tsc clean, 572 FE tests pass. Absorbs epic-5-retro-item-2. Pinkyd-owned.
   epic-6-retro-item-3-per-story-dw-logging: backlog # MEDIUM — log every real out-of-scope review dismissal to deferred-work.md PER STORY as part of the coding-assistant workflow (not swept at retro)
   epic-6-retro-item-4-close-out-tracking-discipline: done # MEDIUM — reconcile status on close-out not at next retro; Epic 5 items 1/2/4 reconciled this retro
   epic-6-retro-item-5-dw-85-ipc-worker-budget: backlog # LOW — resolve DW-85 cross-platform IPC worker-lifetime/connection-budget policy before broader CLI concurrency hardening
