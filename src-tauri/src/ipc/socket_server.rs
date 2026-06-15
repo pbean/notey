@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use interprocess::local_socket::traits::Stream as _;
-use interprocess::local_socket::{prelude::*, GenericFilePath, ListenerOptions, Name, Stream};
+use interprocess::local_socket::{prelude::*, ListenerOptions, Name, Stream};
 
 use crate::errors::NoteyError;
 use crate::ipc::protocol::IpcResponse;
@@ -97,14 +97,14 @@ fn to_name(path: &Path) -> io::Result<Name<'static>> {
     {
         let raw = path
             .file_name()
-            .unwrap_or_else(|| path.as_os_str())
+            .unwrap_or(path.as_os_str())
             .to_owned();
         raw.to_ns_name::<interprocess::local_socket::GenericNamespaced>()
     }
 
     #[cfg(not(windows))]
     {
-        path.as_os_str().to_owned().to_fs_name::<GenericFilePath>()
+        path.as_os_str().to_owned().to_fs_name::<interprocess::local_socket::GenericFilePath>()
     }
 }
 
