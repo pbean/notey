@@ -94,7 +94,7 @@ jobs:
 
       - name: Install tauri-driver (Linux)
         if: runner.os == 'Linux'
-        run: cargo install --force tauri-driver
+        run: cargo install --force --locked tauri-driver
 
       - name: Build debug binary (Linux)
         if: runner.os == 'Linux'
@@ -102,4 +102,13 @@ jobs:
 
       - name: E2E tests (Linux)
         if: runner.os == 'Linux'
+        # WebKitGTK's accelerated compositing / DMABUF renderer crashes the web
+        # process under a GPU-less virtual framebuffer, hanging the WebDriver run.
+        # Force software rendering. run.mjs also sets these as a fallback; they are
+        # mirrored here for visibility. WEBKIT_DISABLE_COMPOSITING_MODE is the
+        # official Tauri WebDriver CI recommendation.
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: 1
+          WEBKIT_DISABLE_DMABUF_RENDERER: 1
+          LIBGL_ALWAYS_SOFTWARE: 1
         run: xvfb-run node e2e/run.mjs
