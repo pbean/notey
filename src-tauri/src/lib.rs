@@ -3,6 +3,7 @@ pub mod db;
 pub mod errors;
 pub mod ipc;
 pub mod models;
+pub mod platform;
 pub mod services;
 
 use std::sync::Mutex;
