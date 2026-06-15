@@ -400,7 +400,7 @@ fn raw_conn(stream: &Stream) -> RawConn {
         }
         #[cfg(windows)]
         Stream::NamedPipe(s) => {
-            use std::os::windows::io::AsHandle;
+            use std::os::windows::io::{AsHandle, AsRawHandle};
             RawConn {
                 handle: s.as_handle().as_raw_handle(),
             }
