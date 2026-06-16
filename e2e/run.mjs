@@ -51,6 +51,7 @@ import {
   getElementText,
   getElementProperty,
   executeScript,
+  executeAsyncScript,
   isElementDisplayed,
   sendKeysToElement,
   sendSpecialKey,
@@ -152,6 +153,31 @@ async function runPaletteCommand(label) {
   await pause(300); // let cmdk filter down to the exact match
   await sendSpecialKey(sessionId, ENTER);
   await pause(300);
+}
+
+/**
+ * Invoke a Tauri command over the app's real IPC bridge from inside the page and
+ * resolve with `{ ok, value }` or `{ ok:false, err }`. Used by the export suite:
+ * the export *flow* opens a native OS file picker, and neither the picker nor any
+ * JS interception of it is drivable — Tauri v2 freezes `__TAURI_INTERNALS__`
+ * (its `invoke`/`postMessage` are non-writable, non-configurable), so the picker
+ * cannot be stubbed in-page. We therefore drive the command directly with a
+ * harness-chosen temp path (the picker's only contribution to the flow), exactly
+ * as the epic-5 test design prescribes — still exercising the packaged binary's
+ * real command and a real on-disk write. The picker's cancel/`null` branch stays
+ * covered by the frontend unit tests. Uses `execute/async` (the callback is the
+ * script's last argument) so the command's resolved value is awaited per the W3C
+ * standard — not via any driver-specific sync-await-of-thenables behavior.
+ */
+async function invokeCommand(cmd, args) {
+  return executeAsyncScript(
+    sessionId,
+    `var done = arguments[arguments.length - 1];
+     window.__TAURI_INTERNALS__.invoke(arguments[0], arguments[1])
+       .then(function (v) { done({ ok: true, value: v }); })
+       .catch(function (e) { done({ ok: false, err: String((e && e.message) || e) }); });`,
+    [cmd, args],
+  );
 }
 
 /**
@@ -587,6 +613,97 @@ async function cliLiveSyncTests() {
   }
 }
 
+async function exportTests() {
+  console.log('\nP1-E2E-004: Export (file-write)');
+
+  // Unique per run so the marker note is identifiable in the non-isolated dev DB,
+  // and so its text is findable in the exported files regardless of how the title
+  // is derived (the marker lands in the note body).
+  const marker = `E2E-EXPORT-${Date.now()}`;
+
+  // Harness-side temp targets — the path the OS picker would have returned. Created
+  // on the same filesystem the app process sees, passed to the real export command,
+  // then read back here to prove the packaged binary genuinely wrote them. Removed
+  // in `finally`.
+  const mdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'notey-e2e-md-'));
+  const jsonDir = fs.mkdtempSync(path.join(os.tmpdir(), 'notey-e2e-json-'));
+  const jsonFile = path.join(jsonDir, 'out.json');
+
+  try {
+    await test('create a note tagged with a unique marker', async () => {
+      await sendChord(sessionId, CONTROL, 'n'); // New Note → fresh active tab
+      await pause(400);
+      const contentId = await waitForCss('.cm-content');
+      await sendKeysToElement(sessionId, contentId, marker);
+      await pause(800); // 300ms auto-save debounce + save round-trip
+      const text = await getElementText(sessionId, contentId);
+      assert(text.includes(marker), `Editor should contain marker, got: "${text}"`);
+    });
+
+    await test('export_markdown writes per-note files to the target dir (5.E2E-002)', async () => {
+      const res = await invokeCommand('export_markdown', { directory: mdDir });
+      assert(res.ok, `export_markdown failed: ${res.err}`);
+      assert(typeof res.value === 'number' && res.value >= 1, `expected ≥1 files written, got ${res.value}`);
+
+      const files = fs.readdirSync(mdDir);
+      const mdFiles = files.filter((f) => f.endsWith('.md'));
+      assert(mdFiles.length >= 1, `expected ≥1 .md file in ${mdDir}, saw: ${files.join(', ') || '(none)'}`);
+
+      // Filenames stay confined to the dir (basenames only, no traversal / separators).
+      for (const f of mdFiles) {
+        assert(/^[^/\\]+\.md$/.test(f), `unsafe export filename: "${f}"`);
+      }
+
+      // Exactly one file is *our* note (matched by body marker), and it carries
+      // YAML frontmatter (title+format) ahead of the body.
+      const ours = mdFiles
+        .map((f) => ({ f, body: fs.readFileSync(path.join(mdDir, f), 'utf8') }))
+        .filter((x) => x.body.includes(marker));
+      assert(ours.length === 1, `expected exactly 1 exported file containing the marker, found ${ours.length}`);
+      const { body } = ours[0];
+      assert(body.startsWith('---'), 'exported markdown should open with YAML frontmatter');
+      assert(/\ntitle:/.test(body) && /\nformat:/.test(body), 'frontmatter should carry title and format');
+      // The note title derives from its content, so the marker also appears in the
+      // frontmatter `title:` line — assert it in the *body*, after the closing fence.
+      const fenceClose = body.indexOf('\n---\n', 3);
+      assert(fenceClose !== -1, 'markdown should have a closing frontmatter fence');
+      const afterFrontmatter = body.slice(fenceClose + '\n---\n'.length);
+      assert(afterFrontmatter.includes(marker), 'marker should appear in the note body (after frontmatter)');
+    });
+
+    await test('export_json writes a single re-parseable array file (5.E2E-003)', async () => {
+      const res = await invokeCommand('export_json', { filePath: jsonFile });
+      assert(res.ok, `export_json failed: ${res.err}`);
+      assert(typeof res.value === 'number' && res.value >= 1, `expected ≥1 notes written, got ${res.value}`);
+
+      const raw = fs.readFileSync(jsonFile, 'utf8');
+      const parsed = JSON.parse(raw); // re-parse proves valid JSON on disk
+      assert(Array.isArray(parsed), 'JSON export should be an array');
+      // 2-space pretty-print: array elements indent 2, object keys indent 4. The
+      // shared dev DB always has ≥1 active note (ours), so the array is non-empty.
+      assert(raw.startsWith('[\n  {') && /\n    "/.test(raw), 'JSON export should be 2-space indented');
+
+      const entry = parsed.find((n) => typeof n?.content === 'string' && n.content.includes(marker));
+      assert(entry, 'exported JSON should contain our marker note');
+      for (const field of ['id', 'title', 'content', 'format', 'workspaceName', 'createdAt', 'updatedAt']) {
+        assert(field in entry, `exported note is missing field "${field}"`);
+      }
+    });
+  } finally {
+    // Trash + permanently purge the marker note so the shared dev DB stays clean
+    // (purgeCliNote loads it from the list, trashes it, then hard-deletes — exactly
+    // the active-note teardown we need here). Then drop the temp dirs. Best-effort.
+    await purgeCliNote(marker);
+    for (const dir of [mdDir, jsonDir]) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* temp cleanup is best-effort */
+      }
+    }
+  }
+}
+
 // --- Main ---
 
 async function main() {
@@ -636,6 +753,15 @@ async function main() {
     await pause(3000);
 
     await cliLiveSyncTests();
+
+    // Fresh session for the export feature suite.
+    await deleteSession(sessionId);
+    await pause(2000);
+
+    sessionId = await createSession(APP_PATH);
+    await pause(3000);
+
+    await exportTests();
   } catch (e) {
     console.error('Fatal error:', e.message);
     failed++;
