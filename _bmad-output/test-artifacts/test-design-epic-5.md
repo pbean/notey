@@ -154,7 +154,7 @@ project-context and out of this epic's new scope.
 
 - [ ] All P0 baseline (existing) tests still pass (no regression)
 - [ ] All P1 backfill scenarios passing (≥95%); RISK-E5-001 mitigation green
-- [ ] `5.E2E-001` (trash lifecycle) and `5.E2E-002` (markdown file-write) green — first feature E2E
+- [x] `5.E2E-001` (trash lifecycle) and `5.E2E-002` (markdown file-write) green — first feature E2E
 - [ ] dedup→toast regression net (`5.2-COMP-002`, `5.3-COMP-003/004`) green
 - [ ] No open high-priority (≥6) items unmitigated
 - [ ] 10k/30s export benches recorded (advisory baseline, not a blocker)
@@ -293,8 +293,8 @@ boundary are all unit-tested. **Total NEW P0: 0.**
 | ID | Scenario | Level | Pri | AC/Risk | Status |
 |----|----------|-------|-----|---------|--------|
 | 5.E2E-001 | Trash lifecycle: trash (toast, tab closes) → view → restore → trash → permanent delete → gone from list + FTS | E2E | P1 | RISK-E5-002 | 🆕 |
-| 5.E2E-002 | Markdown export file-write: `.md`/note on disk, frontmatter+body, safe filenames, **confined to dir** | E2E | P1 | RISK-E5-001/002 | 🆕 |
-| 5.E2E-003 | JSON export file-write: re-parse valid array, 7 fields, `workspaceName:null` loose note, confined to dir | E2E | P2 | RISK-E5-001/002/007 | 🆕 |
+| 5.E2E-002 | Markdown export file-write: `.md`/note on disk, frontmatter+body, safe filenames, **confined to dir** | E2E | P1 | RISK-E5-001/002 | ✅ done — P1-E2E-004 in e2e/run.mjs (direct-command-invoke; native picker un-drivable) |
+| 5.E2E-003 | JSON export file-write: re-parse valid array, 7 fields, `workspaceName:null` loose note, confined to dir | E2E | P2 | RISK-E5-001/002/007 | ✅ done — P1-E2E-004 in e2e/run.mjs |
 | 5.E2E-004 | Startup auto-purge after restart: aged gone, fresh survives, silent | E2E | P2 | RISK-E5-004 | 🆕 |
 
 ---

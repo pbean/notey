@@ -153,6 +153,19 @@ export async function executeScript(sessionId, script, args = []) {
   return request('POST', `/session/${sessionId}/execute/sync`, { script, args });
 }
 
+/**
+ * Run an asynchronous script in the page and return what it passes to its
+ * completion callback. The callback is the script's LAST argument
+ * (`arguments[arguments.length - 1]`); the command resolves when the script
+ * invokes it. Unlike `executeScript` (sync), this is the W3C-standard way to
+ * await a promise — used to drive a real Tauri command (`__TAURI_INTERNALS__.invoke`)
+ * and observe its resolved value without depending on a particular driver's
+ * (non-standard) sync-await-of-thenables behavior.
+ */
+export async function executeAsyncScript(sessionId, script, args = []) {
+  return request('POST', `/session/${sessionId}/execute/async`, { script, args });
+}
+
 export function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
