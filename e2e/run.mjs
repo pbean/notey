@@ -15,6 +15,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import net from 'node:net';
 import { fileURLToPath } from 'url';
 
 // Force WebKitGTK software rendering before anything spawns the driver. Under a
@@ -68,6 +69,9 @@ let tauriDriver;
 let sessionId;
 let passed = 0;
 let failed = 0;
+// Set once, before any test app launches: whether a real notey instance already
+// owns the default IPC socket (see the live-sync suite's guard for why it matters).
+let realInstancePresent = false;
 
 async function test(name, fn) {
   try {
@@ -260,19 +264,61 @@ async function waitForMarkerInNoteList(marker, timeoutMs = 5000) {
 }
 
 /**
- * Poll until the app's IPC socket file exists. The app's IPC server binds during
- * Tauri's setup hook, which can lag a freshly-created WebDriver session on a cold
- * CI runner — without this gate the first `notey add` can race the bind and fail
- * exit-2 ("not running") as a flake. Best-effort: returns after the deadline
- * regardless, leaving the CLI's own connect timeout to report a genuine absence.
+ * Paths the app's IPC server may have bound, in priority order. The app resolves
+ * its socket as NOTEY_SOCKET_PATH → `$XDG_RUNTIME_DIR/notey.sock` → temp fallback
+ * (mirrors `socket_server::socket_path`). We export a unique per-run
+ * NOTEY_SOCKET_PATH, but a modern WebKitWebDriver (webkit2gtk ≥2.52) resets the
+ * launched app's environment — stripping NOTEY_SOCKET_PATH and forcing
+ * XDG_RUNTIME_DIR back to the real session value — and tauri-driver has no env
+ * passthrough, so the harness cannot steer the app's path: it must discover it.
+ * On CI's older driver the env survives, so the first candidate wins and behavior
+ * is unchanged.
  */
-async function waitForSocket(timeoutMs = 5000) {
-  const sock = process.env.NOTEY_SOCKET_PATH;
+function appSocketCandidates() {
+  const xdg = process.env.XDG_RUNTIME_DIR;
+  return [process.env.NOTEY_SOCKET_PATH, xdg ? path.join(xdg, 'notey.sock') : null].filter(Boolean);
+}
+
+/**
+ * Whether a Unix socket path is *accepting connections* (a live server), as
+ * opposed to a leftover stale socket file. A probe connect that immediately
+ * disconnects is harmless: the IPC worker sees EOF before any frame and exits.
+ */
+function isSocketLive(p, timeoutMs = 500) {
+  return new Promise((resolve) => {
+    const sock = net.connect(p);
+    let settled = false;
+    const timer = setTimeout(() => done(false), timeoutMs);
+    function done(live) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      sock.destroy();
+      resolve(live);
+    }
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+  });
+}
+
+/**
+ * Poll until one of the app's candidate IPC sockets is *live*, and return that
+ * path. The app's IPC server binds during Tauri's setup hook, which can lag a
+ * freshly-created WebDriver session on a cold runner — without this gate the first
+ * `notey add` races the bind and fails exit-2 ("not running"). Liveness (not mere
+ * file existence) is checked so a leftover stale socket never wins over the path
+ * the app actually bound. Returns null after the deadline, leaving the CLI's own
+ * connect timeout to report a genuine absence.
+ */
+async function waitForAppSocket(timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (sock && fs.existsSync(sock)) return;
+    for (const c of appSocketCandidates()) {
+      if (fs.existsSync(c) && (await isSocketLive(c))) return c;
+    }
     await pause(150);
   }
+  return null;
 }
 
 // --- Setup ---
@@ -488,6 +534,20 @@ async function purgeCliNote(marker) {
 async function cliLiveSyncTests() {
   console.log('\nP1-E2E-003: CLI Live Sync');
 
+  // A modern WebKitWebDriver resets the test app's env, forcing it onto the
+  // default `$XDG_RUNTIME_DIR/notey.sock` — the same endpoint a real desktop notey
+  // uses. If a real instance was already listening there before we launched, the
+  // CLI would talk to IT (polluting the real DB) instead of the test app. Skip
+  // rather than hijack; CI never trips this (no real instance, env survives).
+  if (realInstancePresent) {
+    console.log(
+      '  ⚠ skipped: a running notey instance owns the default IPC socket. ' +
+        'Close it to run the live-sync suite locally — this WebKitWebDriver build ' +
+        'resets the app env, preventing per-run socket isolation.',
+    );
+    return;
+  }
+
   // Unique per run so the marker note is identifiable in a non-isolated dev DB.
   const marker = `E2E-CLISYNC-${Date.now()}`;
   let addSucceeded = false;
@@ -502,7 +562,12 @@ async function cliLiveSyncTests() {
     });
 
     await test('notey add (CLI, separate process) exits 0', async () => {
-      await waitForSocket(); // let the app's IPC server finish binding before connecting
+      // Discover where the app actually bound (its env may not survive the
+      // WebDriver launch) and point the CLI at that exact socket. The CLI reads
+      // NOTEY_SOCKET_PATH at spawn, so updating it here steers `runCli` below.
+      const appSocket = await waitForAppSocket();
+      assert(appSocket, `app IPC socket never came up; tried: ${appSocketCandidates().join(', ')}`);
+      process.env.NOTEY_SOCKET_PATH = appSocket;
       const res = await runCli(['add', marker]);
       assert(res.code === 0, `CLI exited ${res.code}; stderr: "${res.stderr.trim()}"`);
       addSucceeded = true;
@@ -525,6 +590,13 @@ async function cliLiveSyncTests() {
 // --- Main ---
 
 async function main() {
+  // Detect a real notey instance on the default socket BEFORE launching the test
+  // app (which, under a modern WebKitWebDriver, binds that same default path). Once
+  // the test app is up we can't tell its socket apart from a pre-existing one.
+  const xdg = process.env.XDG_RUNTIME_DIR;
+  const defaultSock = xdg ? path.join(xdg, 'notey.sock') : null;
+  realInstancePresent = !!(defaultSock && fs.existsSync(defaultSock) && (await isSocketLive(defaultSock)));
+
   console.log('Starting tauri-driver...');
   await startDriver();
 
