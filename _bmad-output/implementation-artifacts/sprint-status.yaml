@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-15 # epic-6-retro item 5 (DW-85 IPC worker budget + watchdog) → done (spec-dw-85-ipc-worker-budget.md); items 1 (E2E) + 2 (singleflight) previously → done
+last_updated: 2026-06-16 # epic-6-retro item-1 (E2E) note corrected + local live-sync E2E fixed (DW-95; 16/16 local); item 5 (DW-85) → done; items 1+2 previously → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -191,7 +191,7 @@ development_status:
   epic-5-retro-item-4-permission-toml-auto-gen-check: done # MOOT at Epic 6 retro — Epic 6 added no new Tauri commands (IPC delegates to existing services), gotcha did not recur
 
   # Epic 6 Retro Items (2026-06-14):
-  epic-6-retro-item-1-first-feature-e2e: done # HIGH — trash-lifecycle feature E2E GENUINELY GREEN ON CI: run 27527258028 (HEAD 5be24c7), Linux job success incl. "Build debug binary (Linux)" AND "E2E tests (Linux)". The 2.11 stack alignment fixed the prior "Build debug binary (Linux)" failure; CI's WebKit software-rendering env (WEBKIT_DISABLE_COMPOSITING_MODE/DMABUF + LIBGL_ALWAYS_SOFTWARE) runs the suite that crashes under local xvfb. spec-6-retro-1-first-feature-e2e.md status done. CLI live-sync + export-dialog E2E deferred (DW-91/DW-92 logged). Pinkyd-owned.
+  epic-6-retro-item-1-first-feature-e2e: done # HIGH — feature E2E green on CI at HEAD 3a76bac (run 27566817463, Linux job): 16/16 incl. trash-lifecycle (P1-E2E-002) AND CLI live-sync (P1-E2E-003). [Corrected 2026-06-16: the earlier note cited HEAD 5be24c7 as the green run, but that commit's CI is FAILURE and predates the live-sync suite (added in 322e570); and the live-sync suite shipped — it was never "deferred". DW-91/DW-92 are trash-suite hygiene follow-ups, not a live-sync deferral.] Specs spec-6-retro-1-first-feature-e2e.md + spec-cli-live-sync-e2e.md status done. Local verification 2026-06-16: 16/16 under xvfb after fixing a modern-WebKitWebDriver socket-rendezvous bug (env-reset; see DW-95) — the suite no longer "crashes under local xvfb". Export-dialog E2E remains the one unbuilt path. Pinkyd-owned.
   epic-6-retro-item-2-singleflight-guard-helper: done # HIGH — shared singleflight helper extracted (src/lib/singleflight.ts) + all 7 hand-rolled guards migrated (realtimeSync refreshInFlight/refreshQueued, command-palette isCreatingNote/isTrashingNote/isTogglingTheme/isTogglingLayoutMode, export isExporting); spec-singleflight-guard-helper.md status done, merged b6a0c06/86f2ff4. Verified 2026-06-15: acceptance grep clean (zero legacy-guard hits outside singleflight.ts), tsc clean, 572 FE tests pass. Absorbs epic-5-retro-item-2. Pinkyd-owned.
   epic-6-retro-item-3-per-story-dw-logging: backlog # MEDIUM — log every real out-of-scope review dismissal to deferred-work.md PER STORY as part of the coding-assistant workflow (not swept at retro)
   epic-6-retro-item-4-close-out-tracking-discipline: done # MEDIUM — reconcile status on close-out not at next retro; Epic 5 items 1/2/4 reconciled this retro
