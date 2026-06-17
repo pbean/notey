@@ -120,7 +120,11 @@ async function waitForCss(selector, timeoutMs = 5000) {
  * overlay/panel was actually removed from the DOM rather than trusting an implicit
  * close. Fails visibly at the deadline (DW-92).
  */
-async function waitForCssGone(selector, timeoutMs = 5000) {
+async function waitForCssGone(
+  selector,
+  timeoutMs = 5000,
+  timeoutMessage = `Timed out waiting for ${selector} to disappear`,
+) {
   const deadline = Date.now() + timeoutMs;
   let lastErr;
   while (Date.now() < deadline) {
@@ -134,7 +138,8 @@ async function waitForCssGone(selector, timeoutMs = 5000) {
     }
     await pause(150);
   }
-  throw lastErr || new Error(`Timed out waiting for ${selector} to disappear`);
+  const detail = lastErr?.message ? ` (last WebDriver error: ${lastErr.message})` : '';
+  throw new Error(`${timeoutMessage}${detail}`);
 }
 
 /**
@@ -180,7 +185,7 @@ async function selectAllWorkspaces() {
       'return (document.querySelector(arguments[0]) || {}).textContent || "";',
       ['[data-testid="workspace-name"]'],
     );
-    if (label.startsWith('All Workspaces')) return;
+    if (label.startsWith('All Workspaces · ')) return;
     await pause(150);
   }
   throw new Error(`All-Workspaces switch did not take effect; selector reads "${label}"`);
@@ -560,7 +565,11 @@ async function trashLifecycleTests() {
     // DW-92: assert the overlay is actually gone before re-trashing, rather than
     // trusting the implicit ESCAPE close — a stacked overlay would otherwise fail
     // opaquely if the overlay-coordination contract ever changes.
-    await waitForCssGone('[data-testid="trash-panel"]');
+    await waitForCssGone(
+      '[data-testid="trash-panel"]',
+      5000,
+      'trash panel still visible after ESCAPE',
+    );
   });
 
   await test('re-trash the restored note via the note list', async () => {

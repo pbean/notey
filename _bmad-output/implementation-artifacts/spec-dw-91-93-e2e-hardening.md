@@ -67,6 +67,11 @@ baseline_commit: '0d3392a37440f2694da61461c7cb1c2f74b7ec37'
 - Given the `WorkspaceSelector` renders, when E2E targets the All Workspaces item, then it is selectable via `data-testid="workspace-all"` and existing `WorkspaceSelector.test.tsx` cases still pass.
 - Given a full E2E run on Linux/xvfb, when it executes, then all suites stay green (no regression in trash-lifecycle, CLI live-sync, export, or capture-loop).
 
+### Review Findings
+
+- [x] [Review][Patch] All-Workspaces verification can false-pass on matching workspace labels [e2e/run.mjs:188]
+- [x] [Review][Patch] Trash-panel timeout message is not the actionable invariant the spec requires [e2e/run.mjs:142]
+
 ## Design Notes
 
 The window is hidden (`visible:false`), so `clickCss` uses a programmatic DOM `.click()` (see `e2e/run.mjs:124`). The Base UI dropdown menu does **not** open on a programmatic `.click()`/`PointerEvent`, and `Enter` after opening does **not** select (focus lands on the popup container, not item 0) — both surfaced as live E2E failures. `selectAllWorkspaces()` therefore: focuses the trigger, presses `Enter` to open (portal mounts the items), `clickCss` the item to fire its React `onClick` (`setAllWorkspaces`), then polls the trigger label until it reads "All Workspaces · …". That final poll is essential: without it the prior step silently failed yet the suite still passed because the CLI's cwd workspace happened to match the desktop's — the exact false pass DW-93 must prevent. The `note-created` refresh respects the filter (`store.ts:108-110`: `workspaceId = isAllWorkspaces ? null : activeWorkspaceId`), so All-Workspaces makes the assertion strictly more inclusive without bypassing the cross-process seam under test.
