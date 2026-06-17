@@ -1,25 +1,23 @@
 //! Cross-platform abstraction over OS-specific behavior: standard paths, global
-//! hotkey registration (with a Wayland fallback on Linux), auto-start, and the
-//! macOS accessibility-permission flow.
-//!
-//! **RED-PHASE STUB (Epic 8 — Stories 8.2, 8.5, 8.6).** The [`Platform`] trait
-//! defines the contract; the per-OS implementations in [`linux`], [`macos`], and
-//! [`windows`] are unimplemented scaffolds (`todo!`). Acceptance tests live in
-//! `tests/platform_tests.rs`, marked `#[ignore = "red-phase: Story 8.x"]`.
-//!
-//! ## Green-phase wiring (do this when implementing)
-//! - Implement each `#[cfg(target_os = ...)]` struct against the real OS APIs.
-//! - Linux `register_hotkey`: try the standard Tauri global-shortcut plugin first;
-//!   on failure under Wayland, attempt the XDG GlobalShortcuts portal (verify the
-//!   current `ashpd` version on crates.io — do not pin from memory); if neither
-//!   works, return [`NoteyError::Config`] so the caller can notify the user (FR57).
+//! hotkey backend selection, auto-start, and the macOS accessibility-permission
+//! flow.
 //!
 //! **Story 8.5 (done):** `data_dir` and `socket_path` are implemented for all
 //! three targets via the shared resolvers below; the DB location (`lib.rs`) and
 //! `crate::ipc::socket_server::socket_path` route through this trait so per-user
-//! isolation has a single source of truth. `config_dir`, `log_dir`,
-//! `register_hotkey`, and the `autostart_*` methods remain Story 8.6 stubs (the
-//! live config path still resolves via `services::config::config_dir`).
+//! isolation has a single source of truth.
+//!
+//! **Story 8.6 (done):** `config_dir`, `log_dir`, and `register_hotkey` are
+//! implemented for all three targets. `services::config::config_dir` now
+//! delegates to this trait so config-path resolution has a single source of
+//! truth, and `lib.rs` consults `register_hotkey` to detect a compositor with no
+//! usable hotkey backend (pure Wayland without XWayland) and degrade gracefully
+//! (FR56/FR57/FR58). Still deferred: the native Wayland `ashpd` GlobalShortcuts
+//! portal (fast-follow, DW-96; `register_hotkey` returns `Err` on such sessions
+//! rather than `HotkeyBackend::WaylandPortal`), and routing the `autostart_*`
+//! methods through the trait (DW-97 — those remain `todo!` because auto-start is
+//! owned by `tauri-plugin-autostart` via the Tauri `AppHandle`, which the
+//! `&self`-only trait signature cannot reach; Story 8.4 already satisfies it).
 
 use std::path::{Path, PathBuf};
 
@@ -34,8 +32,8 @@ pub mod windows;
 
 /// Which mechanism satisfied a global-hotkey registration request.
 ///
-/// Distinguishing the path taken lets the UI explain a degraded experience on
-/// compositors where only the portal works (Story 8.6 / FR57).
+/// Distinguishing the path taken lets callers explain degraded hotkey support
+/// when a compositor cannot use the standard backend (Story 8.6 / FR57).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyBackend {
     /// The standard Tauri global-shortcut plugin (X11, macOS, Windows).
@@ -63,8 +61,9 @@ pub trait Platform: Send + Sync {
     fn socket_path(&self) -> PathBuf;
 
     /// Register the global capture hotkey, returning which backend served it.
-    /// Linux attempts [`HotkeyBackend::WaylandPortal`] when the standard plugin
-    /// fails under Wayland (FR57).
+    /// Linux returns [`HotkeyBackend::Standard`] when X11/XWayland is available
+    /// and [`NoteyError::Config`] on pure Wayland without XWayland. Native
+    /// [`HotkeyBackend::WaylandPortal`] support is deferred to DW-96.
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError>;
 
     /// Enable auto-start on login. Story 8.4 / FR41–FR43.
@@ -123,6 +122,21 @@ pub(crate) fn resolve_data_dir(namespace: &str) -> Result<PathBuf, NoteyError> {
         .map(|base| base.join(namespace))
         .ok_or_else(|| {
             NoteyError::Config("Could not determine platform data directory".to_string())
+        })
+}
+
+/// Resolve the per-user config directory, namespaced for this OS (Story 8.6).
+///
+/// `dirs::config_dir()` joined with `namespace` (`$XDG_CONFIG_HOME` / `%APPDATA%`
+/// / `~/Library/Application Support`). Pure resolver — the caller creates the
+/// directory. This is the single implementation behind both the [`Platform`]
+/// trait's `config_dir` and `services::config::config_dir`. Returns
+/// [`NoteyError::Config`] when no platform config directory can be determined.
+pub(crate) fn resolve_config_dir(namespace: &str) -> Result<PathBuf, NoteyError> {
+    dirs::config_dir()
+        .map(|base| base.join(namespace))
+        .ok_or_else(|| {
+            NoteyError::Config("Could not determine platform config directory".to_string())
         })
 }
 

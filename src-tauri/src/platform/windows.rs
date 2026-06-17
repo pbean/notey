@@ -1,4 +1,6 @@
-//! Windows [`Platform`] implementation. RED-PHASE STUB (Story 8.6).
+//! Windows [`Platform`] implementation. Paths + hotkey-backend selection are
+//! implemented (Stories 8.5/8.6); `autostart_*` is deferred (DW-97 — owned by
+//! tauri-plugin-autostart).
 
 use std::path::PathBuf;
 
@@ -26,11 +28,17 @@ impl Platform for WindowsPlatform {
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: %APPDATA%\\notey")
+        // %APPDATA%\notey, per-user (Story 8.6).
+        super::resolve_config_dir("notey")
     }
 
     fn log_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: %LOCALAPPDATA%\\notey\\logs")
+        // %LOCALAPPDATA%\notey\logs, per-user (Story 8.6).
+        dirs::data_local_dir()
+            .map(|base| base.join("notey").join("logs"))
+            .ok_or_else(|| {
+                NoteyError::Config("Could not determine local data directory for logs".to_string())
+            })
     }
 
     fn socket_path(&self) -> PathBuf {
@@ -38,22 +46,26 @@ impl Platform for WindowsPlatform {
         super::resolve_windows_socket()
     }
 
-    fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
-        todo!("Story 8.6: standard plugin registration for {accelerator}")
+    fn register_hotkey(&self, _accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
+        // Story 8.6: Windows has a single global-shortcut backend (the standard
+        // plugin). The actual registration happens in `lib.rs`; this only reports
+        // the backend.
+        Ok(HotkeyBackend::Standard)
     }
 
     fn autostart_enable(&self) -> Result<(), NoteyError> {
-        // Story 8.6 (platform capstone): Story 8.4 ships auto-start via
-        // tauri-plugin-autostart (app.autolaunch()), not this trait method.
-        todo!("Story 8.6: route autostart through the Platform trait")
+        // Deferred (DW-97): auto-start is owned by tauri-plugin-autostart via the
+        // Tauri AppHandle (Story 8.4). The `&self` trait signature cannot reach
+        // the handle. Not called today.
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.6: route autostart through the Platform trait")
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.6: route autostart through the Platform trait")
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {

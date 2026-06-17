@@ -3,10 +3,9 @@
 //! Permission Guidance), exercised through the [`tauri_app_lib::platform`]
 //! abstraction.
 //!
-//! Tests are `#[ignore = "red-phase: Story 8.x"]` against the unimplemented
-//! per-OS scaffolds. Assertions are `#[cfg(target_os = ...)]`-gated so each only
-//! compiles/runs on the platform it describes (the CI matrix covers all five
-//! targets). True cross-user isolation and real Wayland behavior are verified by
+//! Assertions are `#[cfg(target_os = ...)]`-gated so each only compiles/runs on
+//! the platform it describes (the CI matrix covers all five targets). True
+//! cross-user isolation and real Wayland portal behavior are verified by
 //! platform QA; these pin the automatable contract.
 //!
 //!   cargo test --test platform_tests <name> -- --ignored
@@ -17,6 +16,10 @@ use tauri_app_lib::platform;
 /// env var, so the override test cannot leak into the standard-path test when the
 /// harness runs them on parallel threads.
 static DATA_DIR_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Serializes tests that read/mutate process-global display env vars.
+#[cfg(target_os = "linux")]
+static HOTKEY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Restores a process env var to its prior value, including non-Unicode values.
 struct EnvVarGuard {
@@ -49,7 +52,6 @@ impl Drop for EnvVarGuard {
 
 /// AC 8.6: `current()` resolves to the implementation for the target OS.
 #[test]
-#[ignore = "red-phase: Story 8.6"]
 fn current_resolves_to_target_platform() {
     let expected = if cfg!(target_os = "linux") {
         "linux"
@@ -108,6 +110,79 @@ fn data_dir_honors_override_seam() {
     );
 }
 
+/// AC 8.6/FR58: the config directory is a per-user, platform-standard path using
+/// the same namespace convention as `services::config`.
+#[test]
+fn config_dir_is_user_scoped_and_standard() {
+    let dir = platform::current()
+        .config_dir()
+        .expect("config_dir must resolve");
+    let namespace = if cfg!(target_os = "macos") {
+        "com.notey.app"
+    } else {
+        "notey"
+    };
+    let expected = dirs::config_dir()
+        .expect("platform config dir must resolve")
+        .join(namespace);
+    assert_eq!(
+        dir, expected,
+        "config dir must be the platform config dir plus the Notey namespace"
+    );
+}
+
+/// AC 8.6/FR58: config-path resolution has a single source of truth — the live
+/// `services::config::config_dir` returns the same path as the trait method.
+#[test]
+fn config_dir_matches_services_config() {
+    let via_service =
+        tauri_app_lib::services::config::config_dir().expect("services config_dir must resolve");
+    let via_trait = platform::current()
+        .config_dir()
+        .expect("platform config_dir must resolve");
+    assert_eq!(
+        via_service, via_trait,
+        "services::config::config_dir must delegate to the Platform trait"
+    );
+}
+
+/// AC 8.6/FR58: the log directory is a per-user, platform-standard path.
+#[test]
+fn log_dir_is_user_scoped_and_standard() {
+    let dir = platform::current().log_dir().expect("log_dir must resolve");
+    #[cfg(target_os = "linux")]
+    let expected = dirs::state_dir()
+        .expect("platform state dir must resolve")
+        .join("notey")
+        .join("logs");
+    #[cfg(target_os = "macos")]
+    let expected = dirs::home_dir()
+        .expect("home dir must resolve")
+        .join("Library")
+        .join("Logs")
+        .join("com.notey.app");
+    #[cfg(target_os = "windows")]
+    let expected = dirs::data_local_dir()
+        .expect("local data dir must resolve")
+        .join("notey")
+        .join("logs");
+    assert_eq!(
+        dir, expected,
+        "log dir must be the platform-standard log path"
+    );
+}
+
+/// AC 8.6/FR56: macOS and Windows expose a single standard global-shortcut
+/// backend (no Wayland branch).
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn hotkey_uses_standard_backend() {
+    let backend = platform::current()
+        .register_hotkey("Ctrl+Shift+N")
+        .expect("hotkey backend must resolve");
+    assert_eq!(backend, platform::HotkeyBackend::Standard);
+}
+
 /// AC 8.5/FR51: the IPC socket path is user-scoped (no system-wide shared path).
 #[cfg(unix)]
 #[test]
@@ -131,22 +206,47 @@ fn socket_path_is_user_scoped() {
 /// standard plugin backend.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "red-phase: Story 8.6"]
 fn linux_hotkey_uses_standard_backend_on_x11() {
+    let _guard = HOTKEY_ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _display = EnvVarGuard::set("DISPLAY", ":99");
+    let _wayland_display = EnvVarGuard::unset("WAYLAND_DISPLAY");
+    let _session_type = EnvVarGuard::set("XDG_SESSION_TYPE", "x11");
+
     let backend = platform::current()
         .register_hotkey("Ctrl+Shift+N")
         .expect("hotkey registration must succeed on X11");
     assert_eq!(backend, platform::HotkeyBackend::Standard);
 }
 
+/// AC 8.6/FR57: pure Wayland without XWayland degrades gracefully instead of
+/// pretending the standard X11 backend is available.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_hotkey_errors_on_pure_wayland_without_xwayland() {
+    let _guard = HOTKEY_ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _display = EnvVarGuard::set("DISPLAY", "");
+    let _wayland_display = EnvVarGuard::set("WAYLAND_DISPLAY", "wayland-0");
+    let _session_type = EnvVarGuard::set("XDG_SESSION_TYPE", "wayland");
+
+    let error = platform::current()
+        .register_hotkey("Ctrl+Shift+N")
+        .expect_err("pure Wayland without XWayland must report no standard backend");
+    assert!(
+        error
+            .to_string()
+            .contains("Wayland compositor without XWayland"),
+        "unexpected pure-Wayland error: {error}"
+    );
+}
+
 /// AC 8.6/FR57: when the standard plugin fails under Wayland, registration falls
 /// back to the XDG GlobalShortcuts portal.
 ///
-/// NOTE: requires a Wayland session/harness to exercise the fallback path; until
-/// then this documents the expected backend selection.
+/// NOTE: native portal support is deferred to DW-96; this test remains ignored
+/// until the ashpd-backed implementation and a Wayland harness exist.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore = "red-phase: Story 8.6 (needs Wayland harness)"]
+#[ignore = "DW-96: native Wayland portal support needs a Wayland harness"]
 fn linux_hotkey_falls_back_to_wayland_portal() {
     let backend = platform::current()
         .register_hotkey("Ctrl+Shift+N")
