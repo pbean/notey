@@ -1,8 +1,10 @@
 //! Thin Tauri command handlers for auto-start on login (Story 8.4 / FR41–FR43).
 //!
 //! The OS launch agent is owned by `tauri-plugin-autostart` (registered with
-//! `MacosLauncher::LaunchAgent` in `lib.rs`) and reached via `app.autolaunch()`.
-//! The user's preference is the single source of truth at `config.toml`
+//! `MacosLauncher::LaunchAgent` in `lib.rs`) and reached through the
+//! [`crate::platform::Platform`] trait's `autostart_*` methods (DW-97), which
+//! delegate to `app.autolaunch()`. The user's preference is the single source of
+//! truth at `config.toml`
 //! `[general] auto_start`; [`set_autostart`] registers/unregisters the OS agent
 //! AND persists the preference atomically under the shared `Mutex<AppConfig>`,
 //! mirroring [`crate::commands::config::update_config`]'s lock discipline.
@@ -33,25 +35,18 @@ pub fn set_autostart(
 
     #[cfg(desktop)]
     let rollback_to = {
-        use tauri_plugin_autostart::ManagerExt;
-
-        let manager = app.autolaunch();
-        let currently_enabled = manager
-            .is_enabled()
-            .map_err(|e| NoteyError::Config(format!("Failed to query auto-start state: {e}")))?;
+        // Route the OS registration through the Platform trait (DW-97) rather than
+        // hitting `app.autolaunch()` directly, so the trait is the single source
+        // of truth for auto-start side effects.
+        let platform = crate::platform::current();
+        let currently_enabled = platform.autostart_is_enabled(&app)?;
 
         if enabled != currently_enabled {
-            let result = if enabled {
-                manager.enable()
+            if enabled {
+                platform.autostart_enable(&app)?;
             } else {
-                manager.disable()
-            };
-            result.map_err(|e| {
-                NoteyError::Config(format!(
-                    "Failed to {} auto-start: {e}",
-                    if enabled { "enable" } else { "disable" }
-                ))
-            })?;
+                platform.autostart_disable(&app)?;
+            }
             Some(currently_enabled)
         } else {
             None
@@ -64,13 +59,11 @@ pub fn set_autostart(
     if let Err(save_err) = services::config::save(&config_dir_state.0, &updated) {
         #[cfg(desktop)]
         if let Some(previously_enabled) = rollback_to {
-            use tauri_plugin_autostart::ManagerExt;
-
-            let manager = app.autolaunch();
+            let platform = crate::platform::current();
             let rollback = if previously_enabled {
-                manager.enable()
+                platform.autostart_enable(&app)
             } else {
-                manager.disable()
+                platform.autostart_disable(&app)
             };
             if let Err(rollback_err) = rollback {
                 eprintln!("warning: failed to roll back auto-start after config save failure: {rollback_err}");
@@ -92,10 +85,7 @@ pub fn set_autostart(
 pub fn get_autostart(#[allow(unused_variables)] app: tauri::AppHandle) -> Result<bool, NoteyError> {
     #[cfg(desktop)]
     {
-        use tauri_plugin_autostart::ManagerExt;
-        app.autolaunch()
-            .is_enabled()
-            .map_err(|e| NoteyError::Config(format!("Failed to query auto-start state: {e}")))
+        crate::platform::current().autostart_is_enabled(&app)
     }
     #[cfg(not(desktop))]
     {

@@ -227,16 +227,18 @@ pub fn run() {
             // a plugin failure must never block startup.
             #[cfg(desktop)]
             {
-                use tauri_plugin_autostart::ManagerExt;
-
+                // Route through the Platform trait (DW-97) so auto-start side
+                // effects have a single source of truth; the trait delegates to
+                // `tauri-plugin-autostart`.
                 let desired = config.general.auto_start;
-                let manager = app.autolaunch();
-                match manager.is_enabled() {
+                let platform = crate::platform::current();
+                let handle = app.handle();
+                match platform.autostart_is_enabled(handle) {
                     Ok(active) if active != desired => {
                         let outcome = if desired {
-                            manager.enable()
+                            platform.autostart_enable(handle)
                         } else {
-                            manager.disable()
+                            platform.autostart_disable(handle)
                         };
                         if let Err(e) = outcome {
                             eprintln!("warning: failed to reconcile auto-start to {desired}: {e}");

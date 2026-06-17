@@ -12,12 +12,18 @@
 //! delegates to this trait so config-path resolution has a single source of
 //! truth, and `lib.rs` consults `register_hotkey` to detect a compositor with no
 //! usable hotkey backend (pure Wayland without XWayland) and degrade gracefully
-//! (FR56/FR57/FR58). Still deferred: the native Wayland `ashpd` GlobalShortcuts
-//! portal (fast-follow, DW-96; `register_hotkey` returns `Err` on such sessions
-//! rather than `HotkeyBackend::WaylandPortal`), and routing the `autostart_*`
-//! methods through the trait (DW-97 — those remain `todo!` because auto-start is
-//! owned by `tauri-plugin-autostart` via the Tauri `AppHandle`, which the
-//! `&self`-only trait signature cannot reach; Story 8.4 already satisfies it).
+//! (FR56/FR57/FR58).
+//!
+//! **DW-97 (done):** the `autostart_*` methods are implemented for all three
+//! targets. Their signatures take the Tauri `AppHandle` so they can reach
+//! `tauri-plugin-autostart` (`app.autolaunch()`), which owns the per-OS
+//! launch-agent mechanism. Each per-OS impl delegates to the shared
+//! `autostart_*` helpers below (one place to call the plugin, no per-OS
+//! reimplementation), and `commands::autostart` + the `lib.rs` startup reconcile
+//! now route through this trait so auto-start side effects have a single source
+//! of truth. Still deferred: the native Wayland `ashpd` GlobalShortcuts portal
+//! (fast-follow, DW-96; `register_hotkey` returns `Err` on such sessions rather
+//! than `HotkeyBackend::WaylandPortal`).
 
 use std::path::{Path, PathBuf};
 
@@ -66,14 +72,22 @@ pub trait Platform: Send + Sync {
     /// [`HotkeyBackend::WaylandPortal`] support is deferred to DW-96.
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError>;
 
-    /// Enable auto-start on login. Story 8.4 / FR41–FR43.
-    fn autostart_enable(&self) -> Result<(), NoteyError>;
+    /// Enable auto-start on login (Story 8.4 / FR41–FR43, DW-97).
+    ///
+    /// Delegates to `tauri-plugin-autostart` via the Tauri [`AppHandle`], which
+    /// owns the per-OS launch-agent mechanism (plist / `.desktop` / registry).
+    ///
+    /// [`AppHandle`]: tauri::AppHandle
+    fn autostart_enable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError>;
 
-    /// Disable auto-start on login.
-    fn autostart_disable(&self) -> Result<(), NoteyError>;
+    /// Disable auto-start on login (DW-97). See [`autostart_enable`].
+    ///
+    /// [`autostart_enable`]: Platform::autostart_enable
+    fn autostart_disable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError>;
 
-    /// Whether auto-start on login is currently configured.
-    fn autostart_is_enabled(&self) -> Result<bool, NoteyError>;
+    /// Whether auto-start on login is currently registered at the OS level
+    /// (DW-97). Reports the live plugin state.
+    fn autostart_is_enabled(&self, app: &tauri::AppHandle) -> Result<bool, NoteyError>;
 
     /// Whether the OS has granted the accessibility permission required for the
     /// global hotkey. Non-macOS platforms return `Ok(true)` (no such gate).
@@ -99,6 +113,38 @@ pub fn current() -> Box<dyn Platform> {
     {
         Box::new(windows::WindowsPlatform::new())
     }
+}
+
+// ── Shared auto-start delegation (Story 8.4 / FR41–FR43 / DW-97) ─────────────
+//
+// Auto-start is platform-agnostic at this layer: `tauri-plugin-autostart` owns
+// the per-OS launch-agent mechanism (plist / `.desktop` / registry), so the
+// three per-OS `Platform::autostart_*` impls all delegate here. Centralizing the
+// `app.autolaunch()` calls in one place keeps the impls thin and removes the
+// cross-platform-divergence risk of reimplementing the plugin per OS.
+
+/// Register the OS launch agent so Notey starts on login.
+pub(crate) fn autostart_enable(app: &tauri::AppHandle) -> Result<(), NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .enable()
+        .map_err(|e| NoteyError::Config(format!("Failed to enable auto-start: {e}")))
+}
+
+/// Remove the OS launch agent so Notey no longer starts on login.
+pub(crate) fn autostart_disable(app: &tauri::AppHandle) -> Result<(), NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .disable()
+        .map_err(|e| NoteyError::Config(format!("Failed to disable auto-start: {e}")))
+}
+
+/// Report whether the OS launch agent is currently registered.
+pub(crate) fn autostart_is_enabled(app: &tauri::AppHandle) -> Result<bool, NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| NoteyError::Config(format!("Failed to query auto-start state: {e}")))
 }
 
 // ── Shared path resolvers (Story 8.5 / FR51 / FR58) ──────────────────────────
