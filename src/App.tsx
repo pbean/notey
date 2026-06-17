@@ -5,6 +5,7 @@ import { useWorkspaceStore } from './features/workspace/store';
 import { restoreSession, startSessionAutoSave } from './features/session/persistence';
 import { startNoteCreatedSync } from './features/note-list/realtimeSync';
 import { initOnboarding } from './features/onboarding/bootstrap';
+import { startHotkeyUnavailableNotice } from './features/hotkey/unavailableNotice';
 
 /** Application root — renders the main CaptureWindow and the toast overlay. */
 function App() {
@@ -18,6 +19,11 @@ function App() {
     // and record this session for the progressive command hint. Independent of
     // the workspace/session chain below — failures must not block startup.
     void initOnboarding();
+
+    // If no global-shortcut backend is available on this session, warn the user
+    // (via a persistent toast) that the hotkey will not work (FR57, DW-99).
+    // Best-effort and independent of the chain below.
+    void startHotkeyUnavailableNotice();
 
     // Attempt workspace init first, then restore the saved session. Auto-save
     // still starts if either step fails so session persistence keeps working.

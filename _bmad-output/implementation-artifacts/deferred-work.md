@@ -782,4 +782,5 @@ origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fall
 location: src/ (frontend toast/dialog) + src-tauri/src/lib.rs (global-shortcut setup)
 severity: low
 reason: FR57 / AC2 asks that the user be notified when no hotkey backend works on their compositor. Story 8.6 implements the backend detection (Platform::register_hotkey) and a clear startup warning log for the unavailable case, but the user-facing UI surface (toast/dialog + a typed event) is separable frontend work. Deferred to keep 8.6 backend-only and CI-verifiable; the backend signal it needs is in place.
-status: open
+status: done 2026-06-17
+resolution: 2026-06-17 (spec-dw-hotkey-unavailable-user-notification.md). The `register_hotkey` Err arm in lib.rs now records the outcome in managed `Mutex<HotkeyStatus>` state (new models/hotkey.rs); a thin sync command `get_hotkey_status` (commands/hotkey.rs, +ACL/perm) exposes it. Frontend `startHotkeyUnavailableNotice` pulls it at startup and raises a persistent, click-dismissable toast via the existing toast store when unavailable. Chose pull over the bundle-suggested setup-time event because the window is startup-hidden and the webview listener isn't attached when `setup` runs, so an event would be dropped (logged as a PREFERENCE escalation). Verified: cargo test, clippy -D warnings, vitest (627), tsc, eslint all green.

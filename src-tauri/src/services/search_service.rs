@@ -429,8 +429,8 @@ mod tests {
         );
 
         let existing = search_notes(&conn, "by_name_term_xyz", None).expect("search");
-        let by_name = search_notes_by_workspace_name(&conn, "by_name_term_xyz", None)
-            .expect("search");
+        let by_name =
+            search_notes_by_workspace_name(&conn, "by_name_term_xyz", None).expect("search");
         assert_eq!(
             serde_json::to_value(&by_name).expect("serialize by-name search"),
             serde_json::to_value(&existing).expect("serialize existing search"),
@@ -477,7 +477,11 @@ mod tests {
 
         let results =
             search_notes_by_workspace_name(&conn, "dup_term_qrs", Some("dup")).expect("search");
-        assert_eq!(results.len(), 2, "duplicate names match every sharing workspace");
+        assert_eq!(
+            results.len(),
+            2,
+            "duplicate names match every sharing workspace"
+        );
     }
 
     #[test]

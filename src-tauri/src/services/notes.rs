@@ -1210,7 +1210,12 @@ mod tests {
 
     /// Create a titled note in `workspace_id` and stamp a fixed `updated_at` so
     /// ordering is deterministic.
-    fn seed_note(conn: &Connection, title: &str, workspace_id: Option<i64>, updated_at: &str) -> i64 {
+    fn seed_note(
+        conn: &Connection,
+        title: &str,
+        workspace_id: Option<i64>,
+        updated_at: &str,
+    ) -> i64 {
         let note = create_note(conn, "markdown", workspace_id).expect("create note");
         conn.execute(
             "UPDATE notes SET title = ?1, updated_at = ?2 WHERE id = ?3",
@@ -1259,7 +1264,11 @@ mod tests {
         seed_note(&conn, "from-two", Some(ws2), "2026-06-12T00:00:00+00:00");
 
         let items = list_notes_with_workspace(&conn, Some("dup")).expect("list");
-        assert_eq!(items.len(), 2, "name filter must match both 'dup' workspaces");
+        assert_eq!(
+            items.len(),
+            2,
+            "name filter must match both 'dup' workspaces"
+        );
     }
 
     #[test]

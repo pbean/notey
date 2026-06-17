@@ -43,6 +43,7 @@
     "allow-rebuild-fts-index",
     "allow-search-notes",
     "allow-export-markdown",
-    "allow-export-json"
+    "allow-export-json",
+    "allow-get-hotkey-status"
   ]
 }

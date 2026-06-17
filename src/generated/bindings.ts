@@ -104,6 +104,14 @@ export const commands = {
 	 *  export service.
 	 */
 	exportJson: (filePath: string) => typedError<number, NoteyError>(__TAURI_INVOKE("export_json", { filePath })),
+	/**
+	 *  Return the global-shortcut backend status for the current session.
+	 * 
+	 *  Reads the value recorded during startup hotkey detection. A poisoned lock is
+	 *  recovered by cloning the inner value — the status is plain data with no
+	 *  transactional state to repair.
+	 */
+	getHotkeyStatus: () => __TAURI_INVOKE<HotkeyStatus>("get_hotkey_status"),
 };
 
 /** Events */
@@ -177,6 +185,21 @@ export type HotkeyConfig = {
  *  binding and completes onboarding. It is a marker event with no payload.
  */
 export type HotkeyPressed = null;
+
+/**
+ *  Availability of the global-shortcut backend for the current session.
+ * 
+ *  Wire shape (camelCase): `{ "available": false, "reason": "<message>" }`.
+ */
+export type HotkeyStatus = {
+	// `true` when a usable global-shortcut backend was found at startup.
+	available: boolean,
+	/**
+	 *  Human-readable reason the backend is unavailable, when `available` is
+	 *  `false`. `None` when the hotkey is available.
+	 */
+	reason: string | null,
+};
 
 export type Note = {
 	id: number,

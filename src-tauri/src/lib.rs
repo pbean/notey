@@ -53,6 +53,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::search::search_notes,
             commands::export::export_markdown,
             commands::export::export_json,
+            commands::hotkey::get_hotkey_status,
         ])
 }
 
@@ -249,6 +250,12 @@ pub fn run() {
             app.manage(Mutex::new(config));
             app.manage(ConfigDir(config_dir));
 
+            // Hotkey backend status (Story 8.6 / FR57, DW-99). Managed
+            // unconditionally so `get_hotkey_status` always resolves, including on
+            // builds where the desktop shortcut block below is compiled out.
+            // Defaults to available; the detection arm updates it on a backend miss.
+            app.manage(Mutex::new(models::hotkey::HotkeyStatus::available()));
+
             // --- Global shortcut ---
             #[cfg(desktop)]
             {
@@ -291,6 +298,11 @@ pub fn run() {
                 // summonable from the tray.
                 match crate::platform::current().register_hotkey(&shortcut_str) {
                     Ok(_backend) => {
+                        *app.state::<Mutex<models::hotkey::HotkeyStatus>>()
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                            models::hotkey::HotkeyStatus::available();
+
                         // Non-fatal: a saved shortcut that conflicts with another
                         // app must not brick startup. Log and continue — the
                         // window stays summonable via the tray and the user can
@@ -307,6 +319,14 @@ pub fn run() {
                             "Notice: global shortcut unavailable on this compositor ({e}); \
                              summon Notey from the tray icon instead."
                         );
+                        // Record the miss so the frontend can pull it on startup and
+                        // warn the user the hotkey will not work (Story 8.6 / FR57,
+                        // DW-99). The managed default is `available()`, so only the
+                        // unavailable case needs to overwrite it.
+                        *app.state::<Mutex<models::hotkey::HotkeyStatus>>()
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                            models::hotkey::HotkeyStatus::unavailable(e.to_string());
                     }
                 }
             }
