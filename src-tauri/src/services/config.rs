@@ -7,17 +7,12 @@ use crate::models::config::{AppConfig, Theme};
 /// Returns the platform-standard config directory for Notey.
 /// Linux: `$XDG_CONFIG_HOME/notey/`, macOS: `~/Library/Application Support/com.notey.app/`,
 /// Windows: `%APPDATA%\notey\`
+///
+/// Delegates to [`crate::platform::current`]'s `config_dir` so config-path
+/// resolution has a single source of truth in the `Platform` abstraction
+/// (Story 8.6 / FR58). The returned path is identical to the prior inline logic.
 pub fn config_dir() -> Result<PathBuf, NoteyError> {
-    let base = dirs::config_dir().ok_or_else(|| {
-        NoteyError::Config("Could not determine platform config directory".to_string())
-    })?;
-
-    #[cfg(target_os = "macos")]
-    let dir = base.join("com.notey.app");
-    #[cfg(not(target_os = "macos"))]
-    let dir = base.join("notey");
-
-    Ok(dir)
+    crate::platform::current().config_dir()
 }
 
 /// Returns the full path to config.toml within the config directory.

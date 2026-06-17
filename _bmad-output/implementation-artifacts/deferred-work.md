@@ -749,3 +749,35 @@ reason: The CLI live-sync suite originally pinned a unique per-run `NOTEY_SOCKET
 status: done 2026-06-16
 resolution: Added a permissive `--socket-path` parser to `socket_server::socket_path()` (precedence: CLI arg > `NOTEY_SOCKET_PATH` > default) with unit tests, and routed a per-run `--socket-path` through `tauri:options.args` in `e2e/run.mjs` (via `createSession(application, args)`); the live-sync suite now binds an isolated endpoint regardless of env stripping, so the `realInstancePresent` skip guard and multi-candidate socket discovery were removed.
 decision: 2026-06-16 App-level --socket-path arg — Add a --socket-path CLI arg to the desktop app that overrides the socket path, and route a per-run unique path through tauri:options.args in e2e/run.mjs so each E2E run binds an isolated endpoint independent of env propagation.
+
+### DW-96: Native Wayland global-shortcut portal via `ashpd` (fast-follow)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src-tauri/src/platform/linux.rs (register_hotkey WaylandPortal arm); test linux_hotkey_falls_back_to_wayland_portal (#[ignore])
+severity: medium
+reason: PRD (prd.md:144,323,423) and architecture.md (49,870) explicitly scope the native xdg-desktop-portal GlobalShortcuts integration as a post-v1 fast-follow gated on Tauri global-hotkey PR #162; v1's Wayland fallback is XWayland (epic-8 context "XWayland is the baseline fallback for v1"). The trait + HotkeyBackend::WaylandPortal enum already anticipate it; implementing the real ashpd D-Bus registration + activation-signal wiring needs a Wayland harness (un-CI-testable) and a new async dependency. Deferred from the 8.6 capstone to keep that story CI-verifiable.
+status: open
+
+### DW-97: Route auto-start through the `Platform` trait (autostart_enable/disable/is_enabled)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src-tauri/src/platform/{linux,macos,windows}.rs (autostart_* methods, currently todo!())
+severity: low
+reason: The trait's autostart_* methods take only &self with no Tauri AppHandle, but the real mechanism (tauri-plugin-autostart via app.autolaunch()) requires the handle and already fully satisfies FR41-43 from Story 8.4 (commands/autostart.rs + lib.rs reconcile). Routing through the trait would mean reimplementing the plugin's plist/.desktop/registry logic by hand — a refactor with no functional gain and real cross-platform risk. Needs a trait-signature redesign (pass the handle, or move autostart off the path-trait) before it is worth doing. The todo!() stubs are relabeled to point here.
+status: open
+
+### DW-98: CI release pipeline producing artifacts for all 5 targets (FR — AC4 of 8.6)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: .github/workflows/ (new release.yml; ci.yml currently runs tests + a Linux debug build only)
+severity: medium
+reason: AC4 of story 8.6 wants build artifacts for Windows x64, macOS x64, macOS ARM64, Linux x64, Linux ARM64 (via tauri-apps/tauri-action on tag push). This is a standalone ops/infra deliverable that cannot be exercised by this session's cargo test / clippy / vitest gate (it only runs on a release tag), so adding an unverifiable workflow here would give no confidence. Belongs in its own release-engineering PR.
+status: open
+
+### DW-99: User-facing notification when the global shortcut is unavailable on the compositor (FR57)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src/ (frontend toast/dialog) + src-tauri/src/lib.rs (global-shortcut setup)
+severity: low
+reason: FR57 / AC2 asks that the user be notified when no hotkey backend works on their compositor. Story 8.6 implements the backend detection (Platform::register_hotkey) and a clear startup warning log for the unavailable case, but the user-facing UI surface (toast/dialog + a typed event) is separable frontend work. Deferred to keep 8.6 backend-only and CI-verifiable; the backend signal it needs is in place.
+status: open

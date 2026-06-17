@@ -1,5 +1,6 @@
 //! macOS [`Platform`] implementation. Accessibility-permission methods (Story 8.2)
-//! are implemented; paths/hotkey/auto-start remain RED-PHASE stubs (Stories 8.4–8.6).
+//! and paths/hotkey-backend selection (Stories 8.5/8.6) are implemented;
+//! `autostart_*` is deferred (DW-97 — owned by tauri-plugin-autostart).
 
 use std::{io, path::PathBuf};
 
@@ -28,11 +29,18 @@ impl Platform for MacosPlatform {
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: ~/Library/Application Support/com.notey.app")
+        // ~/Library/Application Support/com.notey.app, per-user (Story 8.6).
+        super::resolve_config_dir("com.notey.app")
     }
 
     fn log_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: ~/Library/Logs/com.notey.app")
+        // ~/Library/Logs/com.notey.app, per-user (Story 8.6). `dirs` has no
+        // dedicated logs dir on macOS, so derive it from the home directory.
+        dirs::home_dir()
+            .map(|home| home.join("Library").join("Logs").join("com.notey.app"))
+            .ok_or_else(|| {
+                NoteyError::Config("Could not determine home directory for logs".to_string())
+            })
     }
 
     fn socket_path(&self) -> PathBuf {
@@ -41,22 +49,27 @@ impl Platform for MacosPlatform {
         super::resolve_unix_socket()
     }
 
-    fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
-        todo!("Story 8.6: standard plugin registration for {accelerator}")
+    fn register_hotkey(&self, _accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
+        // Story 8.6: macOS has a single global-shortcut backend (the standard
+        // plugin). The actual registration happens in `lib.rs`; this only reports
+        // the backend. (The Accessibility-permission gate is handled separately
+        // via `accessibility_permission_granted`, Story 8.2.)
+        Ok(HotkeyBackend::Standard)
     }
 
     fn autostart_enable(&self) -> Result<(), NoteyError> {
-        // Story 8.6 (platform capstone): Story 8.4 ships auto-start via
-        // tauri-plugin-autostart (MacosLauncher::LaunchAgent), not this trait.
-        todo!("Story 8.6: route autostart through the Platform trait")
+        // Deferred (DW-97): auto-start is owned by tauri-plugin-autostart
+        // (MacosLauncher::LaunchAgent) via the Tauri AppHandle (Story 8.4). The
+        // `&self` trait signature cannot reach the handle. Not called today.
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.6: route autostart through the Platform trait")
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.6: route autostart through the Platform trait")
+        todo!("DW-97: route autostart through the Platform trait")
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {

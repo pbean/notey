@@ -281,14 +281,33 @@ pub fn run() {
                         .build(),
                 )?;
 
-                // Non-fatal: a saved shortcut that conflicts with another app
-                // must not brick startup. Log and continue — the window stays
-                // summonable via the tray and the user can rebind in Settings.
-                if let Err(e) = app.global_shortcut().register(shortcut) {
-                    eprintln!(
-                        "Warning: failed to register global shortcut '{}': {}",
-                        shortcut_str, e
-                    );
+                // Story 8.6 / FR57: consult the Platform abstraction for the
+                // hotkey backend available on this session before registering.
+                // On a compositor with no usable backend (pure Wayland without
+                // XWayland — native portal support is a fast-follow, DW-96) it
+                // returns Err; notify the user and skip the initial registration.
+                // The plugin/handler above stays installed so a later rebind via
+                // update_config can still register, and the window remains
+                // summonable from the tray.
+                match crate::platform::current().register_hotkey(&shortcut_str) {
+                    Ok(_backend) => {
+                        // Non-fatal: a saved shortcut that conflicts with another
+                        // app must not brick startup. Log and continue — the
+                        // window stays summonable via the tray and the user can
+                        // rebind in Settings.
+                        if let Err(e) = app.global_shortcut().register(shortcut) {
+                            eprintln!(
+                                "Warning: failed to register global shortcut '{}': {}",
+                                shortcut_str, e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Notice: global shortcut unavailable on this compositor ({e}); \
+                             summon Notey from the tray icon instead."
+                        );
+                    }
                 }
             }
 
