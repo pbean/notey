@@ -7,12 +7,14 @@ import * as autoSave from '../editor/hooks/useAutoSave';
 import { useToastStore } from '../toast/store';
 import { useWorkspaceStore } from '../workspace/store';
 import { useSearchStore } from '../search/store';
+import { useSettingsStore } from '../settings/store';
 import {
   createNewNote,
   trashActiveNote,
   toggleTheme,
   toggleFormat,
   toggleLayoutMode,
+  toggleAutostart,
   openSearch,
   stubAction,
   applyStartupConfig,
@@ -1218,5 +1220,73 @@ describe('applyBootTheme', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+});
+
+describe('toggleAutostart', () => {
+  beforeEach(() => {
+    useSettingsStore.getState().resetSettings();
+  });
+
+  it('flips the live preference and persists via set_autostart', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: false } }));
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart')
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: true } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleAutostart();
+
+    expect(mockInvoke).toHaveBeenCalledWith('set_autostart', { enabled: true });
+    expect(useSettingsStore.getState().config?.general?.autoStart).toBe(true);
+  });
+
+  it('uses live OS state when it differs from the persisted preference', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: true } }));
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart')
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: true } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleAutostart();
+
+    expect(mockInvoke).toHaveBeenCalledWith('set_autostart', { enabled: true });
+  });
+
+  it('does not persist when getConfig fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') return Promise.reject({ type: 'Database' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await toggleAutostart();
+
+    expect(mockInvoke).not.toHaveBeenCalledWith('set_autostart', expect.anything());
+    consoleSpy.mockRestore();
+  });
+
+  it('coalesces concurrent invocations (singleflight)', async () => {
+    let getConfigCalls = 0;
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config') {
+        getConfigCalls += 1;
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: false } }));
+      }
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart')
+        return Promise.resolve(buildConfig({ general: { theme: 'dark', layoutMode: 'floating', autoStart: true } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await Promise.all([toggleAutostart(), toggleAutostart()]);
+
+    expect(getConfigCalls).toBe(1);
   });
 });

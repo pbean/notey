@@ -31,7 +31,7 @@ export function buildWorkspaceInfo(overrides: Partial<WorkspaceInfo> = {}): Work
 /** Build an AppConfig with sensible defaults. Override nested sections via the partial. */
 export function buildConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
-    general: { theme: 'system', layoutMode: 'floating' },
+    general: { theme: 'system', layoutMode: 'floating', autoStart: false },
     editor: { fontSize: 14, fontFamily: 'mono' },
     hotkey: { globalShortcut: 'Ctrl+Shift+N' },
     shortcuts: {

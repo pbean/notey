@@ -5,6 +5,7 @@ import {
   toggleTheme,
   toggleFormat,
   toggleLayoutMode,
+  toggleAutostart,
   trashActiveNote,
   stubAction,
 } from "../actions";
@@ -102,6 +103,13 @@ export function usePaletteCommands(): PaletteCommand[] {
       group: "Settings",
       shortcut: "",
       action: toggleFormat,
+    },
+    {
+      id: "toggle-autostart",
+      label: "Toggle Auto-Start on Login",
+      group: "Settings",
+      shortcut: "",
+      action: toggleAutostart,
     },
     {
       id: "open-settings",

@@ -19,6 +19,8 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-increment-onboarding-session",
     "allow-check-accessibility-permission",
     "allow-open-accessibility-settings",
+    "allow-set-autostart",
+    "allow-get-autostart",
     "allow-dismiss-window",
     "allow-apply-layout-mode",
     "allow-create-workspace",
