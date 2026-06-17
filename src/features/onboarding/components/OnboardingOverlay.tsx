@@ -1,17 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { events } from '../../../generated/bindings';
 import { useFocusTrap } from '../../../lib/useFocusTrap';
+import { checkAccessibilityPermission, openAccessibilitySettings } from '../api';
 import { useOnboardingStore } from '../store';
+
+/** How often to re-check the macOS accessibility grant while guidance is shown. */
+const ACCESSIBILITY_POLL_MS = 1500;
 
 /**
  * First-run onboarding overlay (Epic 8).
  *
- * Story 8.1 (this story) implements the complete visual shell and the first-run
- * flow: a centered accessible dialog that teaches the configured capture shortcut
- * as key caps, dismissing (and persisting completion) on Esc or a global-hotkey
- * press. It also renders — but does not wire the backends for — the Customize
- * capture state (Story 8.3) and the macOS accessibility-guidance state
- * (Story 8.2), which those stories activate.
+ * The overlay teaches the configured capture shortcut as key caps and dismisses
+ * (persisting completion) on Esc or a global-hotkey press (Story 8.1). It also
+ * renders the macOS accessibility-guidance state (Story 8.2) — a permission
+ * message, a working "Open System Settings" button, and a "Skip for now" control —
+ * auto-dismissing the guidance when a grant is detected. The Customize capture
+ * state (Story 8.3) is still an inert shell.
  */
 export function OnboardingOverlay() {
   const isVisible = useOnboardingStore((s) => s.isVisible);
@@ -70,6 +74,32 @@ export function OnboardingOverlay() {
     };
   }, [isVisible]);
 
+  // While the macOS accessibility guidance is shown, re-check the grant so the
+  // guidance auto-dismisses once the user enables the permission. macOS emits no
+  // change event, so we poll on an interval and on window focus (the user
+  // returning from System Settings). Guarded so a missing Tauri runtime (unit
+  // tests) cannot crash. Off macOS this branch never runs (guidance is not shown).
+  useEffect(() => {
+    if (!isVisible || !accessibilityNeeded) return;
+    let active = true;
+    const recheck = () => {
+      checkAccessibilityPermission()
+        .then((granted) => {
+          if (active && granted) {
+            useOnboardingStore.getState().setAccessibilityNeeded(false);
+          }
+        })
+        .catch((e) => console.error('accessibility re-check failed:', e));
+    };
+    const interval = window.setInterval(recheck, ACCESSIBILITY_POLL_MS);
+    window.addEventListener('focus', recheck);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', recheck);
+    };
+  }, [isVisible, accessibilityNeeded]);
+
   if (!isVisible) return null;
 
   const keyCaps = hotkey
@@ -125,8 +155,9 @@ export function OnboardingOverlay() {
             <button
               type="button"
               onClick={() => {
-                // TODO(Story 8.2): open System Settings > Privacy & Security >
-                // Accessibility via a platform command.
+                void openAccessibilitySettings().catch((e) =>
+                  console.error('openAccessibilitySettings failed:', e),
+                );
               }}
               style={onboardingButtonStyle}
             >
@@ -142,6 +173,22 @@ export function OnboardingOverlay() {
               You can skip this, but the shortcut may not work without this
               permission.
             </p>
+            <button
+              type="button"
+              onClick={() =>
+                useOnboardingStore.getState().setAccessibilityNeeded(false)
+              }
+              style={{
+                ...onboardingButtonStyle,
+                marginTop: 'var(--space-3, 12px)',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '12px',
+              }}
+            >
+              Skip for now
+            </button>
           </div>
         ) : customizing ? (
           <p ref={instructionRef} tabIndex={-1} style={{ margin: 0 }}>
