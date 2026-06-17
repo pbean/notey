@@ -42,15 +42,17 @@ impl Platform for LinuxPlatform {
     }
 
     fn autostart_enable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: write XDG autostart .desktop entry")
+        // Story 8.6 (platform capstone): Story 8.4 ships auto-start via
+        // tauri-plugin-autostart (app.autolaunch()), not this trait method.
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: remove XDG autostart .desktop entry")
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.4: check for the XDG autostart .desktop entry")
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {

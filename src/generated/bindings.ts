@@ -49,6 +49,15 @@ export const commands = {
 	 *  No-op off macOS.
 	 */
 	openAccessibilitySettings: () => typedError<null, NoteyError>(__TAURI_INVOKE("open_accessibility_settings")),
+	// Enable/disable auto-start via the plugin, persist atomically, and return committed config.
+	setAutostart: (enabled: boolean) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("set_autostart", { enabled })),
+	/**
+	 *  Whether auto-start on login is currently registered at the OS level.
+	 *  Reports the live platform state via the autostart plugin (the source of truth
+	 *  for the *active* registration), letting the UI reconcile its toggle with the
+	 *  real OS state. Off desktop there is no launch agent, so it reports `false`.
+	 */
+	getAutostart: () => typedError<boolean, NoteyError>(__TAURI_INVOKE("get_autostart")),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
 	/**
@@ -136,14 +145,19 @@ export type EditorConfig = {
 
 /**
  *  General application settings.
- * 
  *  `theme` is one of `system` (the default — follow the OS `prefers-color-scheme`
  *  until the user picks a theme), `dark`, or `light`. A saved manual `dark`/`light`
  *  preference overrides the OS setting on restart.
+ *  `auto_start` (serialized `[general] autoStart`) is the persisted auto-start-on-login
+ *  preference (Story 8.4 / FR41–FR43). It defaults to `false` and tolerates a missing
+ *  key on older config files via serde. The OS launch agent is managed by
+ *  `tauri-plugin-autostart`; this field is the single source of truth the app
+ *  reconciles the OS registration to on every startup.
  */
 export type GeneralConfig = {
 	theme: Theme,
 	layoutMode: string,
+	autoStart?: boolean,
 };
 
 // Hotkey bindings.

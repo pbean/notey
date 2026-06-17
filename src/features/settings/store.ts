@@ -54,6 +54,15 @@ interface SettingsActions {
   /** Set editor font family (mono/sans): snapshot + persist+apply live. */
   setFontFamily: (family: string) => void;
   /**
+   * Enable or disable auto-start on login (Story 8.4). Delegates to the
+   * `set_autostart` command, which registers/unregisters the OS launch agent via
+   * `tauri-plugin-autostart` AND persists `[general] auto_start`. Not optimistic:
+   * awaits the backend, then adopts the returned config so the toggle reflects
+   * what was actually persisted; toasts on success, keeps the prior state and
+   * toasts on failure. Resolves `true` on success, `false` on error.
+   */
+  setAutostart: (enabled: boolean) => Promise<boolean>;
+  /**
    * Set the global capture shortcut, conflict-checked. Unlike the live-apply
    * setters this is NOT optimistic: it awaits the backend, which registers the
    * new binding before committing. On success the snapshot is replaced with the
@@ -116,7 +125,22 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       return false;
     }
     closeOtherOverlays('settings');
-    set({ isOpen: true, config: result.data, bindings: bindingsFromConfig(result.data) });
+    const loadedConfig = result.data;
+    set({ isOpen: true, config: loadedConfig, bindings: bindingsFromConfig(loadedConfig) });
+    // Best-effort: reconcile the displayed auto-start toggle with the live OS
+    // state, which can drift from the persisted preference if changed outside the
+    // app. Failures are ignored — the toggle falls back to the persisted value.
+    try {
+      const os = await commands.getAutostart();
+      if (os.status === 'ok') {
+        const cfg = get().config;
+        if (cfg === loadedConfig && cfg.general && (cfg.general.autoStart ?? false) !== os.data) {
+          set({ config: { ...cfg, general: { ...cfg.general, autoStart: os.data } } });
+        }
+      }
+    } catch {
+      // ignore — best-effort reconciliation only
+    }
     return true;
   },
   close: () => set({ isOpen: false }),
@@ -168,6 +192,28 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
       });
     }
     void applyFontFamily(family);
+  },
+  setAutostart: async (enabled) => {
+    let result;
+    try {
+      result = await commands.setAutostart(enabled);
+    } catch (error) {
+      console.error('setAutostart threw:', error);
+      useToastStore.getState().addToast('Couldn’t change auto-start on login.', 5000);
+      return false;
+    }
+    if (result.status === 'error') {
+      console.error('setAutostart failed:', result.error);
+      useToastStore.getState().addToast('Couldn’t change auto-start on login.', 5000);
+      return false;
+    }
+    // Adopt the backend's committed config so the toggle reflects the persisted
+    // (and OS-registered) state, never an optimistic guess.
+    set({ config: result.data });
+    useToastStore
+      .getState()
+      .addToast(enabled ? 'Auto-start on login enabled' : 'Auto-start on login disabled');
+    return true;
   },
   setGlobalShortcut: async (shortcut) => {
     let result;

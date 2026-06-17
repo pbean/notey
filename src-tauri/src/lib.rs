@@ -40,6 +40,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::onboarding::increment_onboarding_session,
             commands::accessibility::check_accessibility_permission,
             commands::accessibility::open_accessibility_settings,
+            commands::autostart::set_autostart,
+            commands::autostart::get_autostart,
             commands::window::dismiss_window,
             commands::window::apply_layout_mode,
             commands::workspace::create_workspace,
@@ -158,6 +160,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Auto-start on login (Story 8.4). LaunchAgent is the macOS mechanism; no
+        // extra launch args. The plugin exposes app.autolaunch() (ManagerExt).
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             // Register typed tauri-specta events (e.g. `note-created`) into the
@@ -205,6 +213,34 @@ pub fn run() {
                     let _ = window.center();
                     let _ = window.show();
                     let _ = window.set_focus();
+                }
+            }
+
+            // --- Auto-start on login: reconcile OS registration to the saved
+            // preference (Story 8.4 / FR43). The persisted `[general] auto_start`
+            // is the source of truth; aligning the launch agent on every startup
+            // ensures a reboot relaunches Notey when enabled (and that an
+            // externally-removed agent is restored). Best-effort and non-fatal —
+            // a plugin failure must never block startup.
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+
+                let desired = config.general.auto_start;
+                let manager = app.autolaunch();
+                match manager.is_enabled() {
+                    Ok(active) if active != desired => {
+                        let outcome = if desired {
+                            manager.enable()
+                        } else {
+                            manager.disable()
+                        };
+                        if let Err(e) = outcome {
+                            eprintln!("warning: failed to reconcile auto-start to {desired}: {e}");
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("warning: failed to query auto-start state: {e}"),
                 }
             }
 

@@ -3,9 +3,9 @@ import { usePaletteCommands } from './usePaletteCommands';
 import { useSettingsStore } from '../../settings/store';
 
 describe('usePaletteCommands', () => {
-  it('returns 12 commands total', () => {
+  it('returns 13 commands total', () => {
     const commands = usePaletteCommands();
-    expect(commands).toHaveLength(12);
+    expect(commands).toHaveLength(13);
   });
 
   it('includes all three groups', () => {
@@ -35,14 +35,15 @@ describe('usePaletteCommands', () => {
     expect(nav.map((c) => c.label)).toEqual(['Open Note List', 'View Trash']);
   });
 
-  it('has 6 settings commands', () => {
+  it('has 7 settings commands', () => {
     const commands = usePaletteCommands();
     const settings = commands.filter((c) => c.group === 'Settings');
-    expect(settings).toHaveLength(6);
+    expect(settings).toHaveLength(7);
     expect(settings.map((c) => c.label)).toEqual([
       'Toggle Theme',
       'Toggle Layout Mode',
       'Toggle Format',
+      'Toggle Auto-Start on Login',
       'Open Settings',
       'Export to Markdown',
       'Export to JSON',

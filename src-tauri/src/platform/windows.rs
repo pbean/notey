@@ -41,15 +41,17 @@ impl Platform for WindowsPlatform {
     }
 
     fn autostart_enable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: add HKCU Run-key entry")
+        // Story 8.6 (platform capstone): Story 8.4 ships auto-start via
+        // tauri-plugin-autostart (app.autolaunch()), not this trait method.
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: remove HKCU Run-key entry")
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.4: check the HKCU Run-key entry")
+        todo!("Story 8.6: route autostart through the Platform trait")
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {

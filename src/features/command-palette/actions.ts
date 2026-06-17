@@ -421,6 +421,42 @@ export async function toggleTheme(): Promise<void> {
   });
 }
 
+/**
+ * Toggle auto-start on login (Story 8.4). Reads persisted config, reconciles to
+ * the live OS registration when available, then delegates to the settings store's
+ * `setAutostart` (plugin registration + persistence + toast). Guarded against
+ * concurrent invocations (e.g. key repeat) to avoid a lost-update race.
+ */
+export async function toggleAutostart(): Promise<void> {
+  await singleflight('toggle-autostart', async () => {
+    try {
+      const configResult = await withTimeout(commands.getConfig(), {
+        label: 'get_config',
+      });
+      if (configResult.status === 'error') {
+        console.error('getConfig failed:', configResult.error);
+        return;
+      }
+
+      let current = configResult.data.general?.autoStart ?? false;
+      const liveResult = await withTimeout(commands.getAutostart(), {
+        label: 'get_autostart',
+      });
+      if (liveResult.status === 'ok') {
+        current = liveResult.data;
+      } else {
+        console.error('getAutostart failed:', liveResult.error);
+      }
+
+      const next = !current;
+      await useSettingsStore.getState().setAutostart(next);
+    } catch (error) {
+      console.error('toggleAutostart threw:', error);
+      return;
+    }
+  });
+}
+
 /** Toggle editor format between markdown and plaintext. */
 export function toggleFormat(): void {
   const { format, setFormat } = useEditorStore.getState();

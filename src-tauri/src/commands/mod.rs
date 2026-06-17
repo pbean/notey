@@ -1,4 +1,5 @@
 pub mod accessibility;
+pub mod autostart;
 pub mod config;
 pub mod export;
 pub mod notes;

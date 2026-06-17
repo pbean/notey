@@ -57,6 +57,7 @@ export function SettingsPanel() {
   const setLayoutMode = useSettingsStore((s) => s.setLayoutMode);
   const setFontSize = useSettingsStore((s) => s.setFontSize);
   const setFontFamily = useSettingsStore((s) => s.setFontFamily);
+  const setAutostart = useSettingsStore((s) => s.setAutostart);
   const overlayRef = useRef<HTMLDivElement>(null);
   const firstControlRef = useRef<HTMLButtonElement>(null);
   useFocusTrap(overlayRef, true);
@@ -101,6 +102,7 @@ export function SettingsPanel() {
   const fontSize = clampFontSize(config?.editor?.fontSize ?? 14);
   const fontFamily = config?.editor?.fontFamily === 'sans' ? 'sans' : 'mono';
   const globalShortcut = config?.hotkey?.globalShortcut ?? 'Ctrl+Shift+N';
+  const autoStart = config?.general?.autoStart ?? false;
 
   return (
     <div
@@ -191,6 +193,28 @@ export function SettingsPanel() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div style={rowStyle}>
+            <span id="settings-autostart-label" style={labelStyle}>
+              Start on login
+            </span>
+            <button
+              type="button"
+              role="switch"
+              data-testid="autostart-toggle"
+              aria-checked={autoStart}
+              aria-labelledby="settings-autostart-label"
+              onClick={() => void setAutostart(!autoStart)}
+              style={{
+                ...controlBase,
+                background: autoStart ? 'var(--accent-muted)' : 'var(--bg-surface)',
+                color: autoStart ? 'var(--accent)' : 'var(--text-primary)',
+                fontWeight: autoStart ? 600 : 400,
+              }}
+            >
+              {autoStart ? 'On' : 'Off'}
+            </button>
           </div>
         </section>
 
