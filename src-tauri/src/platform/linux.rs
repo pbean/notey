@@ -1,5 +1,6 @@
 //! Linux [`Platform`] implementation (X11 + Wayland). Paths + hotkey backend
-//! selection are implemented (Stories 8.5/8.6); `autostart_*` is deferred (DW-97).
+//! selection (Stories 8.5/8.6) and `autostart_*` (DW-97, delegated to
+//! `tauri-plugin-autostart` via the shared helpers in [`super`]) are implemented.
 
 use std::path::PathBuf;
 
@@ -78,20 +79,17 @@ impl Platform for LinuxPlatform {
         Ok(HotkeyBackend::Standard)
     }
 
-    fn autostart_enable(&self) -> Result<(), NoteyError> {
-        // Deferred (DW-97): auto-start is owned by tauri-plugin-autostart via the
-        // Tauri AppHandle (Story 8.4: commands::autostart + lib.rs). The `&self`
-        // trait signature cannot reach the handle, so routing it through the trait
-        // is a no-gain refactor tracked in DW-97. Not called today.
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_enable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        // DW-97: delegate to the shared tauri-plugin-autostart helper (Story 8.4).
+        super::autostart_enable(app)
     }
 
-    fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_disable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        super::autostart_disable(app)
     }
 
-    fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_is_enabled(&self, app: &tauri::AppHandle) -> Result<bool, NoteyError> {
+        super::autostart_is_enabled(app)
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {

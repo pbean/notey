@@ -1,6 +1,6 @@
-//! macOS [`Platform`] implementation. Accessibility-permission methods (Story 8.2)
-//! and paths/hotkey-backend selection (Stories 8.5/8.6) are implemented;
-//! `autostart_*` is deferred (DW-97 — owned by tauri-plugin-autostart).
+//! macOS [`Platform`] implementation. Accessibility-permission methods (Story 8.2),
+//! paths/hotkey-backend selection (Stories 8.5/8.6), and `autostart_*` (DW-97 —
+//! delegated to `tauri-plugin-autostart`'s `LaunchAgent`) are implemented.
 
 use std::{io, path::PathBuf};
 
@@ -57,19 +57,18 @@ impl Platform for MacosPlatform {
         Ok(HotkeyBackend::Standard)
     }
 
-    fn autostart_enable(&self) -> Result<(), NoteyError> {
-        // Deferred (DW-97): auto-start is owned by tauri-plugin-autostart
-        // (MacosLauncher::LaunchAgent) via the Tauri AppHandle (Story 8.4). The
-        // `&self` trait signature cannot reach the handle. Not called today.
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_enable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        // DW-97: delegate to the shared tauri-plugin-autostart helper. The plugin
+        // is registered with MacosLauncher::LaunchAgent in lib.rs (Story 8.4).
+        super::autostart_enable(app)
     }
 
-    fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_disable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        super::autostart_disable(app)
     }
 
-    fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("DW-97: route autostart through the Platform trait")
+    fn autostart_is_enabled(&self, app: &tauri::AppHandle) -> Result<bool, NoteyError> {
+        super::autostart_is_enabled(app)
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {
