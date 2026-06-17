@@ -773,7 +773,8 @@ origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fall
 location: .github/workflows/ (new release.yml; ci.yml currently runs tests + a Linux debug build only)
 severity: medium
 reason: AC4 of story 8.6 wants build artifacts for Windows x64, macOS x64, macOS ARM64, Linux x64, Linux ARM64 (via tauri-apps/tauri-action on tag push). This is a standalone ops/infra deliverable that cannot be exercised by this session's cargo test / clippy / vitest gate (it only runs on a release tag), so adding an unverifiable workflow here would give no confidence. Belongs in its own release-engineering PR.
-status: open
+status: done 2026-06-17
+resolution: Added .github/workflows/release.yml — tag-push (`v*`) + workflow_dispatch trigger with explicit releaseTag input, tauri-action@v0 with a 5-entry fail-fast:false matrix (macos-latest ARM64, macos-15-intel x64, ubuntu-22.04, native ubuntu-22.04-arm, windows-latest), pinned nightly-2026-04-03 toolchain, draft GitHub Release. Validated with YAML parse; actionlint was unavailable in the review environment.
 
 ### DW-99: User-facing notification when the global shortcut is unavailable on the compositor (FR57)
 
