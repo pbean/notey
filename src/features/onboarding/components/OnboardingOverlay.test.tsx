@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import type { EventCallback } from '@tauri-apps/api/event';
+import { events, type HotkeyPressed } from '../../../generated/bindings';
 import { useOnboardingStore } from '../store';
+import { useSettingsStore } from '../../settings/store';
 import * as api from '../api';
 import { OnboardingOverlay } from './OnboardingOverlay';
 
@@ -82,6 +85,198 @@ describe('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
     expect(
       screen.getByText(/press your preferred shortcut/i),
     ).toBeInTheDocument();
+  });
+
+  it('live-previews a captured combination and enables Save (8.3)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    expect(screen.getByTestId('save-custom-hotkey')).toBeDisabled();
+
+    fireEvent.keyDown(window, {
+      code: 'KeyJ',
+      key: 'j',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    const preview = screen.getByTestId('hotkey-capture');
+    expect(preview).toHaveTextContent('Ctrl');
+    expect(preview).toHaveTextContent('Shift');
+    expect(preview).toHaveTextContent('J');
+    expect(screen.getByTestId('save-custom-hotkey')).toBeEnabled();
+  });
+
+  it('warns on an unbindable combination and leaves Save disabled (8.3)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    // No modifier — not a bindable global shortcut.
+    fireEvent.keyDown(window, { code: 'KeyJ', key: 'j' });
+
+    expect(screen.getByTestId('hotkey-warning')).toHaveTextContent(
+      /at least one modifier/i,
+    );
+    expect(screen.getByTestId('save-custom-hotkey')).toBeDisabled();
+  });
+
+  it('saves a captured shortcut via the shared path and shows the new caps (8.3)', async () => {
+    const setGlobalShortcut = vi
+      .spyOn(useSettingsStore.getState(), 'setGlobalShortcut')
+      .mockResolvedValue(true);
+    showOverlay('Ctrl+Shift+N');
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.keyDown(window, {
+      code: 'KeyJ',
+      key: 'j',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    fireEvent.click(screen.getByTestId('save-custom-hotkey'));
+
+    await waitFor(() =>
+      expect(useOnboardingStore.getState().customizing).toBe(false),
+    );
+    expect(setGlobalShortcut).toHaveBeenCalledWith('Ctrl+Shift+J');
+    expect(useOnboardingStore.getState().hotkey).toBe('Ctrl+Shift+J');
+    const caps = screen.getByTestId('hotkey-display');
+    expect(caps).toHaveTextContent('J');
+  });
+
+  it('warns and stays in capture when the shortcut conflicts (8.3)', async () => {
+    vi.spyOn(useSettingsStore.getState(), 'setGlobalShortcut').mockResolvedValue(
+      false,
+    );
+    showOverlay('Ctrl+Shift+N');
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.keyDown(window, {
+      code: 'KeyJ',
+      key: 'j',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    fireEvent.click(screen.getByTestId('save-custom-hotkey'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('hotkey-warning')).toHaveTextContent(
+        /unavailable/i,
+      ),
+    );
+    expect(useOnboardingStore.getState().customizing).toBe(true);
+    expect(useOnboardingStore.getState().hotkey).toBe('Ctrl+Shift+N');
+  });
+
+  it('does not submit duplicate saves while registration is pending (8.3)', async () => {
+    let resolveShortcut!: (value: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      resolveShortcut = resolve;
+    });
+    const applyCustomHotkey = vi
+      .spyOn(useOnboardingStore.getState(), 'applyCustomHotkey')
+      .mockReturnValue(pending);
+    showOverlay('Ctrl+Shift+N');
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.keyDown(window, {
+      code: 'KeyJ',
+      key: 'j',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    const save = screen.getByTestId('save-custom-hotkey');
+    fireEvent.click(save);
+    fireEvent.click(save);
+
+    expect(applyCustomHotkey).toHaveBeenCalledTimes(1);
+    expect(save).toBeDisabled();
+    expect(screen.getByTestId('cancel-custom-hotkey')).toBeDisabled();
+
+    resolveShortcut(false);
+    await waitFor(() =>
+      expect(screen.getByTestId('hotkey-warning')).toHaveTextContent(
+        /unavailable/i,
+      ),
+    );
+    expect(save).toBeDisabled();
+    expect(screen.getByTestId('cancel-custom-hotkey')).toBeEnabled();
+  });
+
+  it('lets focused capture controls receive Enter without treating it as a shortcut (8.3)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.keyDown(window, {
+      code: 'KeyJ',
+      key: 'j',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    const save = screen.getByTestId('save-custom-hotkey');
+    save.focus();
+
+    fireEvent.keyDown(save, { key: 'Enter', code: 'Enter' });
+
+    expect(screen.queryByTestId('hotkey-warning')).not.toBeInTheDocument();
+    expect(screen.getByTestId('hotkey-capture')).toHaveTextContent('J');
+  });
+
+  it('cancels capture without dismissing onboarding (8.3)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.click(screen.getByTestId('cancel-custom-hotkey'));
+
+    // Capture is abandoned and the overlay returns to the normal instruction;
+    // onboarding is NOT completed (still visible).
+    expect(useOnboardingStore.getState().customizing).toBe(false);
+    expect(useOnboardingStore.getState().isVisible).toBe(true);
+    expect(screen.getByText(/your capture shortcut is/i)).toBeInTheDocument();
+  });
+
+  it('Esc during capture cancels capture, not onboarding (8.3)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ customizing: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+
+    // Esc exits capture but leaves onboarding open (the Esc-dismiss handler is
+    // suppressed while customizing).
+    expect(useOnboardingStore.getState().customizing).toBe(false);
+    expect(useOnboardingStore.getState().isVisible).toBe(true);
+  });
+
+  it('ignores stale global-hotkey events after capture starts (8.3)', async () => {
+    let captured: EventCallback<HotkeyPressed> | null = null;
+    vi.spyOn(events.hotkeyPressed, 'listen').mockImplementation((cb) => {
+      captured = cb;
+      return Promise.resolve(vi.fn());
+    });
+    const dismiss = vi
+      .spyOn(useOnboardingStore.getState(), 'dismiss')
+      .mockResolvedValue();
+    showOverlay();
+    render(<OnboardingOverlay />);
+    await waitFor(() => expect(captured).not.toBeNull());
+
+    act(() => {
+      useOnboardingStore.setState({ isVisible: true, customizing: true });
+    });
+    expect(useOnboardingStore.getState().customizing).toBe(true);
+    dismiss.mockClear();
+    captured!({ event: 'hotkey-pressed', id: 1, payload: null });
+
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(useOnboardingStore.getState().isVisible).toBe(true);
   });
 
   it('shows macOS accessibility guidance with a settings link when required (8.2)', () => {

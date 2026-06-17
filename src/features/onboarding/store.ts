@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useSettingsStore } from '../settings/store';
 import { completeOnboarding, loadOnboardingState } from './api';
 
 /**
@@ -35,8 +36,16 @@ interface OnboardingActions {
   dismiss: () => Promise<void>;
   /** Enter hotkey capture mode (Story 8.3 "Customize"). */
   startCustomize: () => void;
-  /** Apply a captured shortcut and leave capture mode (Story 8.3). */
-  applyCustomHotkey: (combo: string) => void;
+  /** Leave hotkey capture mode without changing the shortcut (Story 8.3). */
+  cancelCustomize: () => void;
+  /**
+   * Register + persist a captured shortcut through the shared Epic 7 path and,
+   * on success, adopt it as the displayed hotkey and leave capture mode (Story
+   * 8.3). On a conflict/failure the previous shortcut stays registered and
+   * capture mode is kept so the user can retry. Resolves `true` on success,
+   * `false` on conflict/error.
+   */
+  applyCustomHotkey: (combo: string) => Promise<boolean>;
   /** Set whether macOS accessibility guidance should be shown (Story 8.2). */
   setAccessibilityNeeded: (needed: boolean) => void;
   /** Whether the early command-palette hint should still be shown. */
@@ -57,9 +66,10 @@ const INITIAL: OnboardingStateShape = {
 /**
  * Per-feature store for the first-run onboarding flow.
  *
- * RED-PHASE NOTE: the orchestration here is real; it delegates persistence to the
- * stubbed {@link import('./api')} bridge, which throws until the green phase. The
- * `describe.skip` tests in `store.test.ts` assert these transitions.
+ * Persistence is delegated to the {@link import('./api')} bridge (onboarding
+ * completion + session count) and, for hotkey customization (Story 8.3), to the
+ * shared Settings {@link useSettingsStore.setGlobalShortcut} register-before-commit
+ * path. The transitions are asserted by `store.test.ts`.
  */
 export const useOnboardingStore = create<
   OnboardingStateShape & OnboardingActions
@@ -84,7 +94,17 @@ export const useOnboardingStore = create<
     }
   },
   startCustomize: () => set({ customizing: true }),
-  applyCustomHotkey: (combo) => set({ hotkey: combo, customizing: false }),
+  cancelCustomize: () => set({ customizing: false }),
+  applyCustomHotkey: async (combo) => {
+    // Reuse Settings' register-before-commit path (Epic 7): it validates,
+    // registers the new shortcut, unregisters the old, persists, and reports a
+    // conflict by resolving `false` — so onboarding never reimplements that logic.
+    const ok = await useSettingsStore.getState().setGlobalShortcut(combo);
+    if (ok) {
+      set({ hotkey: combo, customizing: false });
+    }
+    return ok;
+  },
   setAccessibilityNeeded: (needed) => set({ accessibilityNeeded: needed }),
   shouldShowCommandHint: () =>
     get().initialized && get().sessionsSeen < COMMAND_HINT_SESSION_LIMIT,
