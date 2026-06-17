@@ -20,12 +20,25 @@ async function request(method, path, body) {
   return json.value;
 }
 
-export async function createSession(application) {
+/**
+ * Create a WebDriver session that launches the Tauri app.
+ *
+ * @param {string} application - Absolute path to the app binary.
+ * @param {string[]} [args] - Command-line arguments forwarded to the launched
+ *   binary via `tauri:options.args` (tauri-driver passes them through as process
+ *   args). Used to route a per-run `--socket-path`, which survives a modern
+ *   WebKitWebDriver resetting the app's environment. Omitted from the capability
+ *   when empty.
+ * @returns {Promise<string>} The created session id.
+ */
+export async function createSession(application, args = []) {
+  const tauriOptions = { application };
+  if (args.length > 0) tauriOptions.args = args;
   const value = await request('POST', '/session', {
     capabilities: {
       alwaysMatch: {
         browserName: 'wry',
-        'tauri:options': { application },
+        'tauri:options': tauriOptions,
       },
     },
   });
