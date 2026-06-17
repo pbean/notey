@@ -1,6 +1,7 @@
 pub mod config;
 pub mod export;
 pub mod notes;
+pub mod onboarding;
 pub mod search;
 pub mod system;
 pub mod window;

@@ -18,32 +18,38 @@ use crate::commands::config::ConfigDir;
 
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
-        .events(collect_events![ipc::events::NoteCreated])
+        .events(collect_events![
+            ipc::events::NoteCreated,
+            ipc::events::HotkeyPressed
+        ])
         .commands(collect_commands![
-        commands::notes::create_note,
-        commands::notes::get_note,
-        commands::notes::update_note,
-        commands::notes::trash_note,
-        commands::notes::restore_note,
-        commands::notes::list_trashed_notes,
-        commands::notes::delete_note_permanently,
-        commands::notes::list_notes,
-        commands::notes::reassign_note_workspace,
-        commands::notes::rebuild_fts_index,
-        commands::config::get_config,
-        commands::config::update_config,
-        commands::window::dismiss_window,
-        commands::window::apply_layout_mode,
-        commands::workspace::create_workspace,
-        commands::workspace::list_workspaces,
-        commands::workspace::get_workspace,
-        commands::workspace::detect_workspace,
-        commands::workspace::resolve_workspace,
-        commands::system::get_current_dir,
-        commands::search::search_notes,
-        commands::export::export_markdown,
-        commands::export::export_json,
-    ])
+            commands::notes::create_note,
+            commands::notes::get_note,
+            commands::notes::update_note,
+            commands::notes::trash_note,
+            commands::notes::restore_note,
+            commands::notes::list_trashed_notes,
+            commands::notes::delete_note_permanently,
+            commands::notes::list_notes,
+            commands::notes::reassign_note_workspace,
+            commands::notes::rebuild_fts_index,
+            commands::config::get_config,
+            commands::config::update_config,
+            commands::onboarding::get_onboarding_state,
+            commands::onboarding::complete_onboarding,
+            commands::onboarding::increment_onboarding_session,
+            commands::window::dismiss_window,
+            commands::window::apply_layout_mode,
+            commands::workspace::create_workspace,
+            commands::workspace::list_workspaces,
+            commands::workspace::get_workspace,
+            commands::workspace::detect_workspace,
+            commands::workspace::resolve_workspace,
+            commands::system::get_current_dir,
+            commands::search::search_notes,
+            commands::export::export_markdown,
+            commands::export::export_json,
+        ])
 }
 
 /// Toggles the main window: shows + centers + focuses if hidden, hides if visible.
@@ -186,6 +192,20 @@ pub fn run() {
                 }
             }
 
+            // --- First-run onboarding: reveal the window so the overlay shows ---
+            // The main window is created hidden and is normally summoned via the
+            // global shortcut. On first run (onboarding not yet completed) we show
+            // it at startup so the OnboardingOverlay greets the user. A read failure
+            // is non-fatal — fall back to the default hidden-until-summoned behavior.
+            let first_run = !services::onboarding::is_complete(&config_dir).unwrap_or(false);
+            if first_run {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.center();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
             app.manage(Mutex::new(config));
             app.manage(ConfigDir(config_dir));
 
@@ -200,8 +220,7 @@ pub fn run() {
                         "Warning: invalid shortcut '{}', falling back to {}",
                         shortcut_str, default_shortcut
                     );
-                    parse_shortcut(&default_shortcut)
-                        .expect("platform default shortcut must parse")
+                    parse_shortcut(&default_shortcut).expect("platform default shortcut must parse")
                 });
 
                 let app_handle = app.handle().clone();
@@ -213,6 +232,10 @@ pub fn run() {
                             // value when the hotkey is re-registered via update_config.
                             if event.state() == ShortcutState::Pressed {
                                 toggle_main_window(&app_handle);
+                                // Notify the webview so the first-run onboarding overlay
+                                // can complete on hotkey press (Story 8.1). Best-effort:
+                                // a failed emit must not affect window toggling.
+                                let _ = ipc::events::HotkeyPressed.emit(&app_handle);
                             }
                         })
                         .build(),
@@ -285,8 +308,7 @@ pub fn run() {
                     std::sync::Arc::new(move |raw: &[u8]| {
                         let response = {
                             let state = app_handle.state::<Mutex<rusqlite::Connection>>();
-                            let conn =
-                                state.lock().unwrap_or_else(commands::recover_poisoned_db);
+                            let conn = state.lock().unwrap_or_else(commands::recover_poisoned_db);
                             ipc::protocol::handle_request(&conn, raw)
                             // conn guard dropped here, before emitting.
                         };
@@ -349,7 +371,15 @@ mod tests {
     #[test]
     fn parse_shortcut_accepts_modifier_aliases() {
         // Each spelling of a modifier resolves; same combo parses every way.
-        for s in ["Ctrl+N", "Control+N", "Cmd+N", "Command+N", "Super+N", "Meta+N", "Alt+N"] {
+        for s in [
+            "Ctrl+N",
+            "Control+N",
+            "Cmd+N",
+            "Command+N",
+            "Super+N",
+            "Meta+N",
+            "Alt+N",
+        ] {
             assert!(parse_shortcut(s).is_some(), "expected '{s}' to parse");
         }
     }
