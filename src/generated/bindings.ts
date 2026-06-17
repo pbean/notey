@@ -33,6 +33,12 @@ export const commands = {
 	 *  cannot clobber each other from stale snapshots.
 	 */
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
+	// Returns the persisted onboarding state (completion flag + session count).
+	getOnboardingState: () => typedError<OnboardingState, NoteyError>(__TAURI_INVOKE("get_onboarding_state")),
+	// Marks onboarding complete and persists it. Idempotent.
+	completeOnboarding: () => typedError<null, NoteyError>(__TAURI_INVOKE("complete_onboarding")),
+	// Increments the persisted session counter and returns the new count.
+	incrementOnboardingSession: () => typedError<number, NoteyError>(__TAURI_INVOKE("increment_onboarding_session")),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
 	/**
@@ -83,6 +89,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	hotkeyPressed: makeEvent<HotkeyPressed>("hotkey-pressed"),
 	noteCreated: makeEvent<NoteCreated>("note-created"),
 };
 
@@ -134,6 +141,19 @@ export type HotkeyConfig = {
 	globalShortcut: string,
 };
 
+/**
+ *  The `hotkey-pressed` event — emitted whenever the registered global capture
+ *  shortcut fires.
+ * 
+ *  First-run onboarding (Story 8.1) dismisses its overlay when the user presses
+ *  the hotkey, but the OS-level shortcut hides the window without reloading the
+ *  webview, and a registered global shortcut does not reliably deliver a keydown
+ *  to the focused page across platforms. The shortcut handler emits this typed
+ *  event; the visible overlay listens via the generated `events.hotkeyPressed`
+ *  binding and completes onboarding. It is a marker event with no payload.
+ */
+export type HotkeyPressed = null;
+
 export type Note = {
 	id: number,
 	title: string,
@@ -165,6 +185,26 @@ export type NoteCreatedData = {
 };
 
 export type NoteyError = { type: "Database" } | { type: "NotFound" } | { type: "Workspace" } | { type: "Io" } | { type: "Validation"; message: string } | { type: "Config"; message: string };
+
+/**
+ *  Persisted first-run onboarding state.
+ * 
+ *  Serialized to `onboarding.toml`. `complete` gates the one-time onboarding
+ *  overlay; `sessions_seen` counts app launches so the early command hint can
+ *  retire itself after [`COMMAND_HINT_SESSION_LIMIT`] sessions.
+ */
+export type OnboardingState = {
+	/**
+	 *  `true` once the user has dismissed the onboarding overlay (by pressing the
+	 *  hotkey or Esc). The overlay is never shown again once this is set.
+	 */
+	complete?: boolean,
+	/**
+	 *  How many sessions the user has started. Drives the progressive
+	 *  command-palette hint in the status bar.
+	 */
+	sessionsSeen?: number,
+};
 
 // Partial config for updates — all fields optional.
 export type PartialAppConfig = {

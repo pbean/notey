@@ -1,16 +1,13 @@
 /**
  * Backend bridge for first-run onboarding state (Epic 8 — Stories 8.1 & 8.3).
  *
- * **RED-PHASE STUB.** These functions are the minimal green-phase surface: the
- * onboarding store ({@link import('./store')}) orchestrates against them, and the
- * `describe.skip` tests assert that orchestration. Each throws until implemented.
- *
- * Green-phase wiring: replace the throws with calls to the generated tauri-specta
- * bindings — `commands.getOnboardingState()` and `commands.completeOnboarding()`
- * (add those Tauri commands + permissions first; see
- * `src-tauri/src/services/onboarding.rs`). Per project rules, NEVER use raw
- * `invoke()` — only generated `commands.*`.
+ * Wraps the generated tauri-specta `commands.*` bindings (never raw `invoke()`),
+ * unwrapping their `Result` shape into plain values / throws so the onboarding
+ * store ({@link import('./store')}) can orchestrate against a simple Promise API.
+ * The backend lives in `src-tauri/src/services/onboarding.rs`.
  */
+
+import { commands } from '../../generated/bindings';
 
 /** Mirror of the backend `OnboardingState` (camelCase IPC contract). */
 export interface OnboardingState {
@@ -20,22 +17,33 @@ export interface OnboardingState {
   sessionsSeen: number;
 }
 
-const NOT_IMPLEMENTED = 'not implemented: Epic 8 green phase';
-
 /** Load persisted onboarding state from the backend. */
 export async function loadOnboardingState(): Promise<OnboardingState> {
-  // Green phase: const r = await commands.getOnboardingState(); return r...;
-  throw new Error(NOT_IMPLEMENTED);
+  const result = await commands.getOnboardingState();
+  if (result.status === 'error') {
+    throw new Error(`getOnboardingState failed: ${String(result.error)}`);
+  }
+  // The generated type marks fields optional (serde defaults); normalize to the
+  // strict frontend contract.
+  return {
+    complete: result.data.complete ?? false,
+    sessionsSeen: result.data.sessionsSeen ?? 0,
+  };
 }
 
 /** Mark onboarding complete (persists `complete = true`). */
 export async function completeOnboarding(): Promise<void> {
-  // Green phase: await commands.completeOnboarding();
-  throw new Error(NOT_IMPLEMENTED);
+  const result = await commands.completeOnboarding();
+  if (result.status === 'error') {
+    throw new Error(`completeOnboarding failed: ${String(result.error)}`);
+  }
 }
 
 /** Increment and return the persisted session counter. */
 export async function incrementSession(): Promise<number> {
-  // Green phase: return (await commands.incrementOnboardingSession());
-  throw new Error(NOT_IMPLEMENTED);
+  const result = await commands.incrementOnboardingSession();
+  if (result.status === 'error') {
+    throw new Error(`incrementOnboardingSession failed: ${String(result.error)}`);
+  }
+  return result.data;
 }

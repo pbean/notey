@@ -2,6 +2,7 @@ import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
 import { SaveIndicator } from './SaveIndicator';
 import { WorkspaceSelector } from '../../workspace/components/WorkspaceSelector';
+import { useOnboardingStore } from '../../onboarding/store';
 import type { NoteFormat } from '../store';
 
 /**
@@ -12,6 +13,9 @@ export function StatusBar() {
   const format = useEditorStore((s) => s.format);
   const activeNoteId = useEditorStore((s) => s.activeNoteId);
   const setFormat = useEditorStore((s) => s.setFormat);
+  // Progressive disclosure (Story 8.1): show a "Ctrl+P for commands" hint during
+  // the user's first 5 sessions, then retire it permanently.
+  const showCommandHint = useOnboardingStore((s) => s.shouldShowCommandHint());
 
   async function handleFormatToggle() {
     const newFormat: NoteFormat = format === 'markdown' ? 'plaintext' : 'markdown';
@@ -43,6 +47,18 @@ export function StatusBar() {
     >
       <WorkspaceSelector />
       <div style={{ display: 'flex', alignItems: 'center' }}>
+        {showCommandHint && (
+          <span
+            data-testid="command-hint"
+            style={{
+              color: 'var(--text-muted)',
+              fontSize: '11px',
+              marginRight: 'var(--space-3)',
+            }}
+          >
+            Ctrl+P for commands
+          </span>
+        )}
         <SaveIndicator />
         <button
           onClick={() => void handleFormatToggle()}

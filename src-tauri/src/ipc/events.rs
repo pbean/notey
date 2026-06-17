@@ -47,9 +47,27 @@ impl NoteCreated {
     }
 }
 
+/// The `hotkey-pressed` event — emitted whenever the registered global capture
+/// shortcut fires.
+///
+/// First-run onboarding (Story 8.1) dismisses its overlay when the user presses
+/// the hotkey, but the OS-level shortcut hides the window without reloading the
+/// webview, and a registered global shortcut does not reliably deliver a keydown
+/// to the focused page across platforms. The shortcut handler emits this typed
+/// event; the visible overlay listens via the generated `events.hotkeyPressed`
+/// binding and completes onboarding. It is a marker event with no payload.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct HotkeyPressed;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hotkey_pressed_event_name_is_kebab_case() {
+        assert_eq!(HotkeyPressed::NAME, "hotkey-pressed");
+    }
 
     #[test]
     fn note_created_serializes_camel_case_shape() {
@@ -58,7 +76,10 @@ mod tests {
         assert_eq!(value["data"]["noteId"].as_i64(), Some(42));
         // Timestamp is present and non-empty (an RFC 3339 string).
         let ts = value["timestamp"].as_str().expect("timestamp string");
-        assert!(!ts.is_empty(), "timestamp must be a non-empty ISO 8601 string");
+        assert!(
+            !ts.is_empty(),
+            "timestamp must be a non-empty ISO 8601 string"
+        );
         // No snake_case leakage.
         assert!(value["data"].get("note_id").is_none());
     }

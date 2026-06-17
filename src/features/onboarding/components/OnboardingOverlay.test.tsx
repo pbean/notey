@@ -11,7 +11,7 @@ import { OnboardingOverlay } from './OnboardingOverlay';
  * switching `describe.skip` → `describe` once `OnboardingOverlay` renders the
  * required markup (TEA data-testid: `onboarding-overlay`, `hotkey-display`).
  */
-describe.skip('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
+describe('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
   beforeEach(() => {
     useOnboardingStore.getState().reset();
     vi.restoreAllMocks();
@@ -45,6 +45,13 @@ describe.skip('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
     expect(screen.getByText(/press it now to try/i)).toBeInTheDocument();
   });
 
+  it('moves focus to the onboarding instruction when opened (8.1)', () => {
+    showOverlay();
+    render(<OnboardingOverlay />);
+
+    expect(screen.getByText(/your capture shortcut is/i)).toHaveFocus();
+  });
+
   it('renders nothing once onboarding is dismissed (8.1)', () => {
     useOnboardingStore.setState({ isVisible: false });
     render(<OnboardingOverlay />);
@@ -52,11 +59,15 @@ describe.skip('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
   });
 
   it('dismisses and persists completion on Esc (8.1)', () => {
-    const dismiss = vi.spyOn(useOnboardingStore.getState(), 'dismiss').mockResolvedValue();
+    const dismiss = vi
+      .spyOn(useOnboardingStore.getState(), 'dismiss')
+      .mockResolvedValue();
     showOverlay();
     render(<OnboardingOverlay />);
 
-    fireEvent.keyDown(screen.getByTestId('onboarding-overlay'), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByTestId('onboarding-overlay'), {
+      key: 'Escape',
+    });
 
     expect(dismiss).toHaveBeenCalledOnce();
   });
@@ -68,19 +79,30 @@ describe.skip('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
     fireEvent.click(screen.getByRole('button', { name: /customize/i }));
 
     expect(useOnboardingStore.getState().customizing).toBe(true);
-    expect(screen.getByText(/press your preferred shortcut/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/press your preferred shortcut/i),
+    ).toBeInTheDocument();
   });
 
   it('shows macOS accessibility guidance with a settings link when required (8.2)', () => {
-    vi.spyOn(api, 'loadOnboardingState').mockResolvedValue({ complete: false, sessionsSeen: 0 });
+    vi.spyOn(api, 'loadOnboardingState').mockResolvedValue({
+      complete: false,
+      sessionsSeen: 0,
+    });
     showOverlay();
     useOnboardingStore.setState({ accessibilityNeeded: true });
     render(<OnboardingOverlay />);
 
     expect(
-      screen.getByText(/needs accessibility permission for the global shortcut/i),
+      screen.getByText(
+        /needs accessibility permission for the global shortcut/i,
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /system settings/i })).toBeInTheDocument();
-    expect(screen.getByText(/shortcut may not work without this permission/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /system settings/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/shortcut may not work without this permission/i),
+    ).toBeInTheDocument();
   });
 });

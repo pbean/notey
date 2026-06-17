@@ -20,6 +20,8 @@ interface OnboardingStateShape {
   accessibilityNeeded: boolean;
   /** Persisted session count, used to retire the command hint. */
   sessionsSeen: number;
+  /** Whether persisted onboarding state has been loaded for this session. */
+  initialized: boolean;
 }
 
 /** Onboarding actions. */
@@ -49,6 +51,7 @@ const INITIAL: OnboardingStateShape = {
   customizing: false,
   accessibilityNeeded: false,
   sessionsSeen: 0,
+  initialized: false,
 };
 
 /**
@@ -58,25 +61,32 @@ const INITIAL: OnboardingStateShape = {
  * stubbed {@link import('./api')} bridge, which throws until the green phase. The
  * `describe.skip` tests in `store.test.ts` assert these transitions.
  */
-export const useOnboardingStore = create<OnboardingStateShape & OnboardingActions>(
-  (set, get) => ({
-    ...INITIAL,
-    init: async (hotkey) => {
-      const state = await loadOnboardingState();
-      set({
-        hotkey,
-        sessionsSeen: state.sessionsSeen,
-        isVisible: !state.complete,
-      });
-    },
-    dismiss: async () => {
+export const useOnboardingStore = create<
+  OnboardingStateShape & OnboardingActions
+>((set, get) => ({
+  ...INITIAL,
+  init: async (hotkey) => {
+    const state = await loadOnboardingState();
+    set({
+      hotkey,
+      sessionsSeen: state.sessionsSeen,
+      isVisible: !state.complete,
+      initialized: true,
+    });
+  },
+  dismiss: async () => {
+    try {
       await completeOnboarding();
+    } catch (e) {
+      console.error('completeOnboarding failed during dismiss:', e);
+    } finally {
       set({ isVisible: false, customizing: false });
-    },
-    startCustomize: () => set({ customizing: true }),
-    applyCustomHotkey: (combo) => set({ hotkey: combo, customizing: false }),
-    setAccessibilityNeeded: (needed) => set({ accessibilityNeeded: needed }),
-    shouldShowCommandHint: () => get().sessionsSeen < COMMAND_HINT_SESSION_LIMIT,
-    reset: () => set({ ...INITIAL }),
-  }),
-);
+    }
+  },
+  startCustomize: () => set({ customizing: true }),
+  applyCustomHotkey: (combo) => set({ hotkey: combo, customizing: false }),
+  setAccessibilityNeeded: (needed) => set({ accessibilityNeeded: needed }),
+  shouldShowCommandHint: () =>
+    get().initialized && get().sessionsSeen < COMMAND_HINT_SESSION_LIMIT,
+  reset: () => set({ ...INITIAL }),
+}));
