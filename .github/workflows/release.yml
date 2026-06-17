@@ -1,0 +1,97 @@
+name: Release
+
+# Builds and uploads Notey bundles for all five targets required by AC4 of
+# story 8.6 — Windows x64, macOS x64, macOS ARM64, Linux x64, Linux ARM64 —
+# to a draft GitHub Release from a release tag.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      releaseTag:
+        description: 'Existing release tag to build, e.g. v1.2.3'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    permissions:
+      contents: write # required to create the GitHub Release and upload assets
+    strategy:
+      fail-fast: false # one target failing must not cancel the others
+      matrix:
+        include:
+          - platform: macos-latest # macOS ARM64 (Apple Silicon)
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-15-intel # macOS x64 (Intel)
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04 # Linux x64
+            args: ''
+          - platform: ubuntu-22.04-arm # Linux ARM64 (native GitHub-hosted ARM runner)
+            args: ''
+          - platform: windows-latest # Windows x64
+            args: ''
+
+    name: ${{ matrix.platform }} ${{ matrix.args }}
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Validate manual release tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.releaseTag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v.+ ]]; then
+            echo "releaseTag must match the release tag pattern v*"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.releaseTag || github.ref }}
+
+      - name: Install system dependencies (Linux)
+        if: startsWith(matrix.platform, 'ubuntu-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        # Pinned nightly required by specta =2.0.0-rc.24 (see rust-toolchain.toml).
+        # On macOS, install both apple-darwin targets so each matrix job can
+        # cross-build its single architecture via the --target arg.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-04-03
+          targets: ${{ startsWith(matrix.platform, 'macos-') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build and release Notey
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.releaseTag || github.ref_name }}
+          releaseName: Notey ${{ github.event_name == 'workflow_dispatch' && inputs.releaseTag || github.ref_name }}
+          releaseBody: 'See the assets below to download and install this version.'
+          releaseDraft: true # artifacts are unsigned (v1) — a human publishes after review
+          prerelease: false
+          args: ${{ matrix.args }}
