@@ -22,7 +22,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn data_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.5: $XDG_DATA_HOME/notey (per-user)")
+        // $XDG_DATA_HOME/notey (or ~/.local/share/notey), per-user (Story 8.5).
+        super::resolve_data_dir("notey")
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
@@ -34,7 +35,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn socket_path(&self) -> PathBuf {
-        todo!("Story 8.5: $XDG_RUNTIME_DIR/notey.sock (per-user, 0600)")
+        // $XDG_RUNTIME_DIR/notey.sock (per-user; bound 0600 by socket_server). 8.5.
+        super::resolve_unix_socket()
     }
 
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {

@@ -144,9 +144,9 @@ fn socket_path_arg() -> Option<PathBuf> {
 /// Precedence: an explicit `--socket-path` CLI argument wins (the channel the
 /// E2E harness routes through `tauri:options.args`, since it survives a launcher
 /// that resets the environment), then the `NOTEY_SOCKET_PATH` env override (the
-/// testability seam). Otherwise, on Unix, prefers `$XDG_RUNTIME_DIR/notey.sock`,
-/// falling back to a user-scoped temp-dir path; on Windows, returns a
-/// user-scoped namespaced pipe name.
+/// testability seam). Otherwise it delegates to the platform abstraction's
+/// [`crate::platform::Platform::socket_path`], the single source of truth for the
+/// default per-user path (Story 8.5).
 pub fn socket_path() -> PathBuf {
     if let Some(custom) = socket_path_arg() {
         return custom;
@@ -156,49 +156,7 @@ pub fn socket_path() -> PathBuf {
         return PathBuf::from(custom);
     }
 
-    #[cfg(unix)]
-    {
-        if let Some(dir) = dirs::runtime_dir() {
-            return dir.join("notey.sock");
-        }
-        let file_name = user_scope_token()
-            .map(|token| format!("notey-{token}.sock"))
-            .unwrap_or_else(|| "notey.sock".to_string());
-        std::env::temp_dir().join(file_name)
-    }
-
-    #[cfg(windows)]
-    {
-        PathBuf::from(
-            user_scope_token()
-                .map(|token| format!("notey-{token}"))
-                .unwrap_or_else(|| "notey".to_string()),
-        )
-    }
-}
-
-fn user_scope_token() -> Option<String> {
-    dirs::home_dir()
-        .as_deref()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-        .map(str::to_owned)
-        .or_else(|| std::env::var("USER").ok())
-        .or_else(|| std::env::var("USERNAME").ok())
-        .and_then(|candidate| {
-            let sanitized: String = candidate
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() {
-                        c.to_ascii_lowercase()
-                    } else {
-                        '-'
-                    }
-                })
-                .collect();
-            let trimmed = sanitized.trim_matches('-');
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })
+    crate::platform::current().socket_path()
 }
 
 /// Build the transport `Name` for `path`: a filesystem socket on Unix, a

@@ -173,10 +173,12 @@ pub fn run() {
             builder.mount_events(app);
 
             // --- Database ---
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data dir");
+            // Resolve the per-user data directory through the Platform abstraction
+            // (Story 8.5) so data-path isolation has a single source of truth
+            // rather than Tauri's bundle-id-based default.
+            let data_dir = crate::platform::current()
+                .data_dir()
+                .expect("Failed to resolve data dir");
             let conn = db::init_db(data_dir).expect("Failed to initialize database");
             app.manage(Mutex::new(conn));
 

@@ -35,6 +35,35 @@ struct TestServer {
 static SOCKET_SEQ: AtomicUsize = AtomicUsize::new(0);
 static SOCKET_PATH_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+/// Restores a process env var to its prior value, including non-Unicode values.
+struct EnvVarGuard {
+    key: &'static str,
+    prior: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, prior }
+    }
+
+    fn unset(key: &'static str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, prior }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.prior {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
 /// Serializes EVERY `IpcServer::start` in this suite. `IpcServer::start` reads the
 /// process-global `NOTEY_IPC_*` env vars on every start, so an env-setting test's
 /// "set env → start → clear env" window must not overlap any other server start —
@@ -208,18 +237,20 @@ fn int_002_008_socket_path_is_user_scoped() {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     // Override seam works (the testability ASR).
-    std::env::set_var("NOTEY_SOCKET_PATH", "/tmp/notey-override.sock");
-    assert_eq!(
-        socket_server::socket_path(),
-        PathBuf::from("/tmp/notey-override.sock")
-    );
-    std::env::remove_var("NOTEY_SOCKET_PATH");
+    {
+        let _env = EnvVarGuard::set("NOTEY_SOCKET_PATH", "/tmp/notey-override.sock");
+        assert_eq!(
+            socket_server::socket_path(),
+            PathBuf::from("/tmp/notey-override.sock")
+        );
+    }
 
     // Default resolves under the per-user runtime dir (itself 0700) on Linux,
     // which — together with the 0600 file mode — is the automatable slice of
     // cross-user isolation. True multi-uid access is manual QA (RISK-E6-007).
     #[cfg(target_os = "linux")]
     if let Some(runtime) = dirs::runtime_dir() {
+        let _env = EnvVarGuard::unset("NOTEY_SOCKET_PATH");
         let resolved = socket_server::socket_path();
         assert!(
             resolved.starts_with(&runtime),
@@ -227,6 +258,23 @@ fn int_002_008_socket_path_is_user_scoped() {
         );
         assert_eq!(resolved.file_name().unwrap(), "notey.sock");
     }
+}
+
+// ── 8.5: socket_server default delegates to the Platform abstraction ──────────
+
+#[test]
+fn socket_server_default_matches_platform() {
+    let _guard = SOCKET_PATH_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env = EnvVarGuard::unset("NOTEY_SOCKET_PATH");
+
+    // With no override seam set, socket_server must defer to the single source of
+    // truth in the platform abstraction (Story 8.5).
+    let from_server = socket_server::socket_path();
+    let from_platform = tauri_app_lib::platform::current().socket_path();
+
+    assert_eq!(from_server, from_platform);
 }
 
 // ── 6.2-INT-003: protocol robustness — malformed / unknown, no panic ──────────

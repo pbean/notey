@@ -23,7 +23,8 @@ impl Platform for MacosPlatform {
     }
 
     fn data_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.5: ~/Library/Application Support/com.notey.app (per-user)")
+        // ~/Library/Application Support/com.notey.app, per-user (Story 8.5).
+        super::resolve_data_dir("com.notey.app")
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
@@ -35,7 +36,9 @@ impl Platform for MacosPlatform {
     }
 
     fn socket_path(&self) -> PathBuf {
-        todo!("Story 8.5: user-scoped temp-dir socket (per-user, 0600)")
+        // $XDG_RUNTIME_DIR/notey.sock or user-scoped temp fallback; bound 0600
+        // by socket_server (Story 8.5).
+        super::resolve_unix_socket()
     }
 
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
