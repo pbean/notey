@@ -765,6 +765,7 @@ location: src-tauri/src/platform/{linux,macos,windows}.rs (autostart_* methods, 
 severity: low
 reason: The trait's autostart_* methods take only &self with no Tauri AppHandle, but the real mechanism (tauri-plugin-autostart via app.autolaunch()) requires the handle and already fully satisfies FR41-43 from Story 8.4 (commands/autostart.rs + lib.rs reconcile). Routing through the trait would mean reimplementing the plugin's plist/.desktop/registry logic by hand — a refactor with no functional gain and real cross-platform risk. Needs a trait-signature redesign (pass the handle, or move autostart off the path-trait) before it is worth doing. The todo!() stubs are relabeled to point here.
 status: open
+decision: 2026-06-17 Redesign trait + route — Redesign the Platform trait's autostart_* signatures to accept the Tauri AppHandle (or move autostart off the path-trait into a dedicated abstraction), then implement autostart_enable/disable/is_enabled on each platform by delegating to tauri-plugin-autostart's autolaunch(), and switch commands/autostart.rs to call through the trait.
 
 ### DW-98: CI release pipeline producing artifacts for all 5 targets (FR — AC4 of 8.6)
 
