@@ -402,7 +402,10 @@ mod tests {
             .to_string();
         let filtered = handle_request(
             &conn,
-            &request("list_notes", serde_json::json!({ "workspaceName": ws_name })),
+            &request(
+                "list_notes",
+                serde_json::json!({ "workspaceName": ws_name }),
+            ),
         );
         assert!(filtered.success);
         let rows = filtered.data.unwrap();
@@ -414,7 +417,10 @@ mod tests {
         // A non-existent workspace name → empty.
         let none = handle_request(
             &conn,
-            &request("list_notes", serde_json::json!({ "workspaceName": "no-such-ws" })),
+            &request(
+                "list_notes",
+                serde_json::json!({ "workspaceName": "no-such-ws" }),
+            ),
         );
         assert!(none.success);
         assert!(none.data.unwrap().as_array().unwrap().is_empty());
@@ -499,7 +505,10 @@ mod tests {
         let resp = IpcResponse::ok(serde_json::json!({ "title": "x" }));
         assert_eq!(created_note_id(&raw, &resp), None);
         // Unparseable request bytes never panic.
-        assert_eq!(created_note_id(b"{not json", &IpcResponse::ok(Value::Null)), None);
+        assert_eq!(
+            created_note_id(b"{not json", &IpcResponse::ok(Value::Null)),
+            None
+        );
     }
 
     #[test]

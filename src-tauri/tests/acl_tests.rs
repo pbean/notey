@@ -34,6 +34,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-search-notes",
     "allow-export-markdown",
     "allow-export-json",
+    "allow-get-hotkey-status",
 ];
 
 // P0-INT-006: Tauri ACL rejects unauthorized commands

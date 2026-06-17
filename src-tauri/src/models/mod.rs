@@ -1,4 +1,5 @@
 pub mod config;
+pub mod hotkey;
 pub mod workspace;
 
 use serde::{Deserialize, Serialize};

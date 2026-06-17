@@ -46,9 +46,9 @@ fn restore_shortcut_registrations(
         .map_err(|e| NoteyError::Config(format!("Failed to reset shortcut registrations: {e}")))?;
 
     if let Some(shortcut) = desired_active {
-        app.global_shortcut()
-            .register(shortcut)
-            .map_err(|e| NoteyError::Config(format!("Failed to restore shortcut registration: {e}")))?;
+        app.global_shortcut().register(shortcut).map_err(|e| {
+            NoteyError::Config(format!("Failed to restore shortcut registration: {e}"))
+        })?;
     }
 
     Ok(())
@@ -131,9 +131,7 @@ pub fn update_config(
         // unchanged persisted config.
         #[cfg(desktop)]
         if registered_new {
-            if let Err(recovery_error) =
-                restore_shortcut_registrations(&app, old_active_shortcut)
-            {
+            if let Err(recovery_error) = restore_shortcut_registrations(&app, old_active_shortcut) {
                 return Err(NoteyError::Config(format!(
                     "{} (original save error: {})",
                     match recovery_error {
@@ -155,16 +153,15 @@ pub fn update_config(
         if let Some(new_shortcut) = parsed_new_shortcut {
             if let Some(old_shortcut) = old_active_shortcut {
                 if old_shortcut != new_shortcut {
-                    if let Err(unregister_error) =
-                        app.global_shortcut().unregister(old_shortcut)
-                    {
-                        restore_shortcut_registrations(&app, Some(new_shortcut))
-                            .map_err(|recovery_error| {
+                    if let Err(unregister_error) = app.global_shortcut().unregister(old_shortcut) {
+                        restore_shortcut_registrations(&app, Some(new_shortcut)).map_err(
+                            |recovery_error| {
                                 NoteyError::Config(format!(
                                     "Failed to retire previous shortcut: {} (recovery: {})",
                                     unregister_error, recovery_error
                                 ))
-                            })?;
+                            },
+                        )?;
                     }
                 }
             }
