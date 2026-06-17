@@ -3,6 +3,7 @@ import { commands } from '../../generated/bindings';
 import type { WorkspaceInfo, Note } from '../../generated/bindings';
 import { useSearchStore } from '../search/store';
 import { useTabStore } from '../tabs/store';
+import { withTimeout } from '../../lib/withTimeout';
 
 /** Workspace state for tracking the active workspace context. */
 interface WorkspaceState {
@@ -91,13 +92,21 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   },
 
   trashNote: async (noteId) => {
-    const result = await commands.trashNote(noteId);
-    if (result.status === 'ok') {
-      useTabStore.getState().closeTabByNoteId(noteId);
-      await get().loadFilteredNotes();
-      return result.data;
-    } else {
-      console.error('trashNote failed:', result.error);
+    try {
+      const result = await withTimeout(commands.trashNote(noteId), {
+        label: 'trash_note',
+      });
+      if (result.status === 'ok') {
+        useTabStore.getState().closeTabByNoteId(noteId);
+        await get().loadFilteredNotes();
+        return result.data;
+      } else {
+        console.error('trashNote failed:', result.error);
+        set({ notesError: 'Failed to move note to trash' });
+        return null;
+      }
+    } catch (error) {
+      console.error('trashNote threw:', error);
       set({ notesError: 'Failed to move note to trash' });
       return null;
     }
@@ -107,12 +116,20 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     set({ isLoadingNotes: true, notesError: null });
     const { activeWorkspaceId, isAllWorkspaces } = get();
     const workspaceId = isAllWorkspaces ? null : activeWorkspaceId;
-    const result = await commands.listNotes(workspaceId);
-    if (result.status === 'ok') {
-      set({ filteredNotes: result.data, isLoadingNotes: false, notesError: null });
-    } else {
-      console.error('listNotes failed:', result.error);
+    try {
+      const result = await withTimeout(commands.listNotes(workspaceId), {
+        label: 'list_notes',
+      });
+      if (result.status === 'ok') {
+        set({ filteredNotes: result.data, isLoadingNotes: false, notesError: null });
+      } else {
+        console.error('listNotes failed:', result.error);
+        set({ isLoadingNotes: false, notesError: 'Failed to load notes \u2014 switch workspace to retry' });
+      }
+    } catch (error) {
+      console.error('listNotes threw:', error);
       set({ isLoadingNotes: false, notesError: 'Failed to load notes \u2014 switch workspace to retry' });
+      return;
     }
   },
 

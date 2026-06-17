@@ -2,6 +2,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../generated/bindings";
 import { useToastStore } from "../toast/store";
 import { singleflight, resetSingleflight } from "../../lib/singleflight";
+import { withTimeout, EXPORT_IPC_TIMEOUT_MS } from "../../lib/withTimeout";
 
 /** Auto-dismiss duration for the final "Exported N notes" toast. */
 const RESULT_TOAST_DURATION_MS = 5000;
@@ -29,7 +30,10 @@ export async function exportToJson(): Promise<void> {
       // Cancelled dialog → null.
       if (path === null) return;
 
-      const result = await commands.exportJson(path);
+      const result = await withTimeout(commands.exportJson(path), {
+        timeoutMs: EXPORT_IPC_TIMEOUT_MS,
+        label: "export_json",
+      });
 
       if (result.status === "ok") {
         useToastStore
