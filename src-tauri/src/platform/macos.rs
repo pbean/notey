@@ -1,6 +1,7 @@
-//! macOS [`Platform`] implementation. RED-PHASE STUB (Stories 8.2, 8.6).
+//! macOS [`Platform`] implementation. Accessibility-permission methods (Story 8.2)
+//! are implemented; paths/hotkey/auto-start remain RED-PHASE stubs (Stories 8.4–8.6).
 
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use crate::errors::NoteyError;
 use crate::platform::{HotkeyBackend, Platform};
@@ -54,12 +55,34 @@ impl Platform for MacosPlatform {
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.2: query AXIsProcessTrusted()")
+        // `AXIsProcessTrusted` reports whether the app is allowed to use the
+        // Accessibility APIs the global hotkey depends on (Story 8.2 / FR54). It
+        // returns CoreFoundation's `Boolean` (an `unsigned char`), so bind it as
+        // `u8` and compare — a Rust `bool` would be UB for any byte other than
+        // 0/1. The call is side-effect-free and never blocks.
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrusted() -> u8;
+        }
+        Ok(unsafe { AXIsProcessTrusted() } != 0)
     }
 
     fn open_accessibility_settings(&self) -> Result<(), NoteyError> {
-        todo!(
-            "Story 8.2: open x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        )
+        // Deep-link straight to System Settings > Privacy & Security >
+        // Accessibility. `open` hands the URL to LaunchServices and exits
+        // quickly; wait for that short-lived helper so failures are reported and
+        // the child process is reaped.
+        let status = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .status()
+            .map_err(NoteyError::Io)?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(NoteyError::Io(io::Error::other(format!(
+                "open accessibility settings exited with {status}"
+            ))))
+        }
     }
 }

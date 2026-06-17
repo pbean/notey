@@ -39,6 +39,16 @@ export const commands = {
 	completeOnboarding: () => typedError<null, NoteyError>(__TAURI_INVOKE("complete_onboarding")),
 	// Increments the persisted session counter and returns the new count.
 	incrementOnboardingSession: () => typedError<number, NoteyError>(__TAURI_INVOKE("increment_onboarding_session")),
+	/**
+	 *  Whether the OS has granted the accessibility permission the global hotkey
+	 *  depends on. Always `Ok(true)` off macOS (no such gate).
+	 */
+	checkAccessibilityPermission: () => typedError<boolean, NoteyError>(__TAURI_INVOKE("check_accessibility_permission")),
+	/**
+	 *  Open the OS settings pane where the user grants accessibility permission.
+	 *  No-op off macOS.
+	 */
+	openAccessibilitySettings: () => typedError<null, NoteyError>(__TAURI_INVOKE("open_accessibility_settings")),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
 	/**

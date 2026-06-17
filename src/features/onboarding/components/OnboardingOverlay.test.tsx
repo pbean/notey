@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { useOnboardingStore } from '../store';
 import * as api from '../api';
 import { OnboardingOverlay } from './OnboardingOverlay';
@@ -104,5 +104,45 @@ describe('OnboardingOverlay (red-phase: Stories 8.1, 8.2, 8.3)', () => {
     expect(
       screen.getByText(/shortcut may not work without this permission/i),
     ).toBeInTheDocument();
+  });
+
+  it('opens the accessibility settings pane from the guidance button (8.2)', () => {
+    const open = vi
+      .spyOn(api, 'openAccessibilitySettings')
+      .mockResolvedValue();
+    showOverlay();
+    useOnboardingStore.setState({ accessibilityNeeded: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.click(screen.getByRole('button', { name: /system settings/i }));
+
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('lets the user skip the accessibility guidance and continue (8.2)', () => {
+    showOverlay();
+    useOnboardingStore.setState({ accessibilityNeeded: true });
+    render(<OnboardingOverlay />);
+
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+
+    expect(useOnboardingStore.getState().accessibilityNeeded).toBe(false);
+    // Onboarding continues: the normal hotkey instruction is now shown.
+    expect(screen.getByText(/your capture shortcut is/i)).toBeInTheDocument();
+  });
+
+  it('auto-dismisses the guidance when the grant is detected (8.2)', async () => {
+    vi.spyOn(api, 'checkAccessibilityPermission').mockResolvedValue(true);
+    showOverlay();
+    useOnboardingStore.setState({ accessibilityNeeded: true });
+    render(<OnboardingOverlay />);
+
+    // Simulate the user returning from System Settings after granting.
+    fireEvent.focus(window);
+
+    await waitFor(() =>
+      expect(useOnboardingStore.getState().accessibilityNeeded).toBe(false),
+    );
+    expect(screen.getByText(/your capture shortcut is/i)).toBeInTheDocument();
   });
 });

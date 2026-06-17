@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-17 # story 8-1 → done (epic-8 in-progress)
+last_updated: 2026-06-17 # story 8-2 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -134,7 +134,7 @@ development_status:
   # Epic 8: Onboarding & Platform Integration
   epic-8: in-progress
   8-1-first-run-detection-onboarding-overlay: done
-  8-2-macos-accessibility-permission-guidance: backlog
+  8-2-macos-accessibility-permission-guidance: done
   8-3-hotkey-customization-during-onboarding: backlog
   8-4-auto-start-on-login: backlog
   8-5-per-user-data-isolation: backlog

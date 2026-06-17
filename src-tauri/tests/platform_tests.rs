@@ -35,7 +35,10 @@ fn data_dir_is_user_scoped_and_standard() {
         .data_dir()
         .expect("data_dir must resolve");
     let s = dir.to_string_lossy();
-    assert!(s.contains("notey"), "data dir must be namespaced to notey: {s}");
+    assert!(
+        s.contains("notey"),
+        "data dir must be namespaced to notey: {s}"
+    );
 
     #[cfg(unix)]
     {
@@ -54,7 +57,10 @@ fn data_dir_is_user_scoped_and_standard() {
 fn socket_path_is_user_scoped() {
     let path = platform::current().socket_path();
     let s = path.to_string_lossy();
-    assert!(s.contains("notey"), "socket path must be namespaced to notey: {s}");
+    assert!(
+        s.contains("notey"),
+        "socket path must be namespaced to notey: {s}"
+    );
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_default();
     if !runtime.is_empty() {
         assert!(
@@ -94,7 +100,6 @@ fn linux_hotkey_falls_back_to_wayland_portal() {
 /// AC 8.2/FR54: on macOS the accessibility permission is queried during onboarding.
 #[cfg(target_os = "macos")]
 #[test]
-#[ignore = "red-phase: Story 8.2"]
 fn macos_reports_accessibility_permission() {
     // Must not panic and must return a definite grant state.
     let _granted = platform::current()
@@ -105,7 +110,6 @@ fn macos_reports_accessibility_permission() {
 /// AC 8.2: opening the accessibility settings pane is available on macOS.
 #[cfg(target_os = "macos")]
 #[test]
-#[ignore = "red-phase: Story 8.2"]
 fn macos_can_open_accessibility_settings() {
     platform::current()
         .open_accessibility_settings()
@@ -116,7 +120,6 @@ fn macos_can_open_accessibility_settings() {
 /// skipped entirely" — non-macOS platforms always report the permission as granted.
 #[cfg(not(target_os = "macos"))]
 #[test]
-#[ignore = "red-phase: Story 8.2"]
 fn non_macos_skips_accessibility_gate() {
     assert!(
         platform::current()

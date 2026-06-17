@@ -1,6 +1,6 @@
 import { commands } from '../../generated/bindings';
 import { platformDefaultShortcut } from '../settings/shortcut';
-import { incrementSession } from './api';
+import { checkAccessibilityPermission, incrementSession } from './api';
 import { useOnboardingStore } from './store';
 
 /**
@@ -43,6 +43,19 @@ export async function initOnboarding(): Promise<void> {
     await useOnboardingStore.getState().init(hotkey);
   } catch (e) {
     console.error('initOnboarding: store init failed:', e);
+  }
+
+  // First-run only: detect a missing macOS accessibility grant so the overlay can
+  // show its guidance (Story 8.2). Best-effort — a failed check is treated as
+  // "granted" so onboarding is never blocked. Off macOS the backend reports
+  // granted, so this is a no-op and the step is skipped entirely.
+  if (useOnboardingStore.getState().isVisible) {
+    try {
+      const granted = await checkAccessibilityPermission();
+      useOnboardingStore.getState().setAccessibilityNeeded(!granted);
+    } catch (e) {
+      console.error('initOnboarding: accessibility check failed:', e);
+    }
   }
 
   if (!sessionRecorded) {

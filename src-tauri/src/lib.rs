@@ -38,6 +38,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::onboarding::get_onboarding_state,
             commands::onboarding::complete_onboarding,
             commands::onboarding::increment_onboarding_session,
+            commands::accessibility::check_accessibility_permission,
+            commands::accessibility::open_accessibility_settings,
             commands::window::dismiss_window,
             commands::window::apply_layout_mode,
             commands::workspace::create_workspace,
