@@ -713,21 +713,24 @@ status: open
 origin: code review of spec-6-retro-1-first-feature-e2e.md (blind + edge-case review), 2026-06-14
 location: e2e/run.mjs (trashLifecycleTests)
 reason: The trash-lifecycle suite self-cleans only via its final permanent-delete test. If an intermediate assertion throws (the `test()` wrapper records the failure and continues), the per-run marker note is left in trash or the active list. Because the dev DB has no test-isolation seam (Linux `data_dir()` is still a `todo!()`), these orphans accumulate across runs. The unique `E2E-TRASH-${Date.now()}` marker prevents cross-run assertion contamination, so this is hygiene, not correctness. Proper fix is either a try/finally that purges the marker note regardless of outcome, or a real app-data-dir override seam for hermetic E2E (the latter is the better long-term answer and pairs with the CLI-live-sync E2E follow-up).
-status: open
+status: done 2026-06-15
+resolution: 2026-06-16 (ledger reconcile). Already fixed in commit f660f42 — `trashLifecycleTests` wraps its steps in a `try { ... } finally { await purgeMarkerFromTrash(marker); }` so a mid-run failure before the happy-path permanent-delete still purges the marker note from the shared dev DB. The `status: open` was stale tracking drift (epic-6-retro-item-4). The deeper hermetic app-data-dir seam remains the longer-term answer but is out of scope here; the try/finally satisfies the hygiene concern this entry raised.
 
 ### DW-92: Trash E2E relies on implicit overlay auto-close rather than asserting panel state
 
 origin: code review of spec-6-retro-1-first-feature-e2e.md (edge-case review), 2026-06-14
 location: e2e/run.mjs (Restore + re-trash steps)
 reason: Between the restore and re-trash steps the suite sends a single ESCAPE to close the trash panel and then opens the note list / command palette. It works because the overlay stores call `closeOtherOverlays(...)` on open, but the test never asserts the trash panel is actually gone before acting — a belt-and-suspenders gap. If the overlay-coordination contract ever changes, the suite could act against a stacked overlay and fail opaquely. Add an explicit `waitForCssGone('[data-testid="trash-panel"]')`-style assertion at the transition rather than trusting implicit close.
-status: open
+status: done 2026-06-16
+resolution: 2026-06-16 (spec-dw-91-93-e2e-hardening.md). Added a `waitForCssGone(selector, timeoutMs)` helper (inverse of `waitForCss`, same poll/`isFatalSession` style) and asserted `waitForCssGone('[data-testid="trash-panel"]')` at the restore→re-trash transition, replacing the bare post-ESCAPE `pause(300)`. The transition now fails visibly if the overlay is still present instead of acting on a stacked overlay.
 
 ### DW-93: CLI-live-sync E2E assertion depends on un-asserted workspace alignment
 
 origin: code review of spec-cli-live-sync-e2e.md (blind + edge-case review), 2026-06-15
 location: e2e/run.mjs (cliLiveSyncTests, runCli `cwd: process.cwd()`)
 reason: The suite's core assertion — the CLI-added note appears in the desktop note list via the `note-created` event — only holds if the desktop's active workspace matches the workspace the CLI resolved from its cwd. Two un-asserted assumptions back this: (1) the tauri-driver-launched app process inherits the runner's cwd, so `getCurrentDir()`-resolved workspace == the CLI's `cwd: process.cwd()` workspace; (2) `App.tsx` runs `restoreSession()` → `restoreWorkspaceId(persisted)` AFTER cwd-based `initWorkspace()`, so a stale `localStorage` activeWorkspaceId from prior manual use could filter the list to a DIFFERENT workspace and time the assertion out. Holds in CI (clean localStorage) and in the actual suite flow (no workspace switching, persisted == cwd workspace), so the spec's frozen Boundaries deliberately chose the cwd mechanism with a documented "fails visibly" tradeoff rather than silent pass. Hardening (drive the note list to "All Workspaces" so the filter is null, or reset localStorage before the suite) would decouple the assertion from workspace state but deviates from the frozen approach — needs a spec renegotiation, not a silent patch. Hygiene/robustness, not a correctness regression.
-status: open
+status: done 2026-06-16
+resolution: 2026-06-16 (spec-dw-91-93-e2e-hardening.md). Renegotiation approved by Pinkyd: chose the "All Workspaces" approach over localStorage-reset. `cliLiveSyncTests` now drives the desktop into All-Workspaces mode at suite start (StatusBar selector → new `data-testid="workspace-all"` item) so the note-list filter is null (`listNotes(null)`); the CLI-added note then surfaces via the `note-created` seam regardless of which workspace the CLI resolved, removing both un-asserted assumptions (cwd-inheritance and stale persisted activeWorkspaceId). The `note-created` refresh respects the All-Workspaces filter, so the cross-process seam is exercised, not bypassed. The frozen `spec-cli-live-sync-e2e.md` is updated via its Spec Change Log to record the renegotiation.
 
 ### DW-94: Verify the DW-85 watchdog actually unblocks a stuck named-pipe read on Windows
 

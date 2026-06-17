@@ -116,6 +116,28 @@ async function waitForCss(selector, timeoutMs = 5000) {
 }
 
 /**
+ * Inverse of `waitForCss`: poll until no element matches `selector`, proving an
+ * overlay/panel was actually removed from the DOM rather than trusting an implicit
+ * close. Fails visibly at the deadline (DW-92).
+ */
+async function waitForCssGone(selector, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      await findElement(sessionId, 'css selector', selector);
+      // Still present — keep waiting for it to disappear.
+    } catch (e) {
+      if (isFatalSession(e)) throw e; // crash/hang — surface it, don't read as "gone"
+      if (/no such element/i.test(e.message)) return; // genuinely absent → it's gone
+      lastErr = e; // a transient driver error is NOT proof of removal — keep polling
+    }
+    await pause(150);
+  }
+  throw lastErr || new Error(`Timed out waiting for ${selector} to disappear`);
+}
+
+/**
  * Click the element matching `selector` by waiting for it to exist, then
  * dispatching a programmatic `.click()`. The capture window is hidden
  * (`visible:false`), so a W3C element-click would fail "element not
@@ -124,6 +146,44 @@ async function waitForCss(selector, timeoutMs = 5000) {
 async function clickCss(selector, timeoutMs = 5000) {
   await waitForCss(selector, timeoutMs);
   await executeScript(sessionId, 'document.querySelector(arguments[0]).click();', [selector]);
+}
+
+/**
+ * Switch the desktop to "All Workspaces" via the StatusBar selector (DW-93). The
+ * selector is a Base UI dropdown menu, which opens on keyboard activation and
+ * highlights its first item — more reliable in the hidden capture window than a
+ * synthetic pointer/`.click()`, which the menu does not treat as a real open. We
+ * focus the trigger, open with Enter, then fire the item's own `onClick`
+ * (`setAllWorkspaces`) with a programmatic `.click()` — Enter-to-activate does not
+ * select in Base UI (focus lands on the popup container, not item 0), but the
+ * item's React onClick is the direct seam. Finally assert the switch actually took
+ * effect so a missed open/click fails loudly instead of silently leaving the list
+ * workspace-scoped.
+ */
+async function selectAllWorkspaces() {
+  await waitForCss('[data-testid="workspace-name"]'); // StatusBar selector trigger
+  await executeScript(sessionId, 'document.querySelector(arguments[0]).focus();', [
+    '[data-testid="workspace-name"]',
+  ]);
+  await sendSpecialKey(sessionId, ENTER); // open the menu (portal mounts the items)
+  await clickCss('[data-testid="workspace-all"]'); // fire the item onClick → setAllWorkspaces()
+
+  // Confirm the mode flipped: the trigger relabels to "All Workspaces · N notes"
+  // only when isAllWorkspaces is true. Without this, a dropped activation Enter
+  // (e.g. a mid-open re-render from loadWorkspaces) would leave the list filtered
+  // and the suite would pass for the wrong reason — the false-pass DW-93 prevents.
+  const deadline = Date.now() + 5000;
+  let label = '';
+  while (Date.now() < deadline) {
+    label = await executeScript(
+      sessionId,
+      'return (document.querySelector(arguments[0]) || {}).textContent || "";',
+      ['[data-testid="workspace-name"]'],
+    );
+    if (label.startsWith('All Workspaces')) return;
+    await pause(150);
+  }
+  throw new Error(`All-Workspaces switch did not take effect; selector reads "${label}"`);
 }
 
 /** Poll the toast region until a toast containing `substring` appears (toasts auto-dismiss at 3s). */
@@ -497,7 +557,10 @@ async function trashLifecycleTests() {
     await waitForToast('restored');
     await waitForMarkerGoneFromTrash(marker);
     await sendSpecialKey(sessionId, ESCAPE); // close the trash panel
-    await pause(300);
+    // DW-92: assert the overlay is actually gone before re-trashing, rather than
+    // trusting the implicit ESCAPE close — a stacked overlay would otherwise fail
+    // opaquely if the overlay-coordination contract ever changes.
+    await waitForCssGone('[data-testid="trash-panel"]');
   });
 
   await test('re-trash the restored note via the note list', async () => {
@@ -579,6 +642,18 @@ async function cliLiveSyncTests() {
   let addSucceeded = false;
 
   try {
+    await test('switch the desktop to All Workspaces so the list is workspace-agnostic', async () => {
+      // DW-93: the live-sync assertion must not silently depend on the desktop's
+      // active workspace matching the CLI's cwd-resolved workspace. Driving to All
+      // Workspaces sets the note-list filter to null (listNotes(null)), so the
+      // CLI-added note surfaces via the note-created seam regardless of workspace.
+      // The note-created refresh respects this filter (workspace store:
+      // workspaceId = isAllWorkspaces ? null : activeWorkspaceId), so the
+      // cross-process seam under test is exercised, not bypassed.
+      await selectAllWorkspaces();
+      await pause(300); // let the filtered-notes refresh settle
+    });
+
     await test('note list panel opens with no pre-existing marker note', async () => {
       await sendChord(sessionId, CONTROL, 'b'); // open the note list
       await waitForCss('[data-testid="note-list-panel"]');

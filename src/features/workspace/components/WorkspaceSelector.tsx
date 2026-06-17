@@ -89,7 +89,7 @@ export function WorkspaceSelector() {
             {notesError}
           </div>
         )}
-        <DropdownMenuItem onClick={() => void setAllWorkspaces()} aria-current={isAllWorkspaces || undefined}>
+        <DropdownMenuItem data-testid="workspace-all" onClick={() => void setAllWorkspaces()} aria-current={isAllWorkspaces || undefined}>
           <span style={{ width: 12, display: 'inline-flex', flexShrink: 0 }}>
             {isAllWorkspaces && <Check size={12} />}
           </span>
