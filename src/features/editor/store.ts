@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { commands } from '../../generated/bindings';
+import { withTimeout } from '../../lib/withTimeout';
 
 /** Format of a note's content. */
 export type NoteFormat = 'markdown' | 'plaintext';
@@ -64,28 +65,36 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       isHydrating: false,
     }),
   loadNote: async (id) => {
-    const result = await commands.getNote(id);
-    if (result.status === 'error') {
-      console.error('loadNote failed:', result.error);
+    try {
+      const result = await withTimeout(commands.getNote(id), {
+        label: 'get_note',
+      });
+      if (result.status === 'error') {
+        console.error('loadNote failed:', result.error);
+        set({ saveStatus: 'failed', isHydrating: false });
+        return;
+      }
+      const note = result.data;
+      const validFormats: NoteFormat[] = ['markdown', 'plaintext'];
+      if (!validFormats.includes(note.format as NoteFormat)) {
+        console.warn(`loadNote: unknown format "${note.format}" for note ${note.id}, defaulting to markdown`);
+      }
+      const format = validFormats.includes(note.format as NoteFormat)
+        ? (note.format as NoteFormat)
+        : 'markdown';
+      set({
+        activeNoteId: note.id,
+        content: note.content,
+        format,
+        saveStatus: 'idle',
+        lastSavedAt: note.updatedAt,
+        isHydrating: true,
+      });
+    } catch (error) {
+      console.error('loadNote threw:', error);
       set({ saveStatus: 'failed', isHydrating: false });
       return;
     }
-    const note = result.data;
-    const validFormats: NoteFormat[] = ['markdown', 'plaintext'];
-    if (!validFormats.includes(note.format as NoteFormat)) {
-      console.warn(`loadNote: unknown format "${note.format}" for note ${note.id}, defaulting to markdown`);
-    }
-    const format = validFormats.includes(note.format as NoteFormat)
-      ? (note.format as NoteFormat)
-      : 'markdown';
-    set({
-      activeNoteId: note.id,
-      content: note.content,
-      format,
-      saveStatus: 'idle',
-      lastSavedAt: note.updatedAt,
-      isHydrating: true,
-    });
   },
   clearHydrating: () => set({ isHydrating: false }),
 }));
