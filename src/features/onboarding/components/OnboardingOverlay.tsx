@@ -1,11 +1,30 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { events } from '../../../generated/bindings';
 import { useFocusTrap } from '../../../lib/useFocusTrap';
+import { formatShortcutFromEvent } from '../../settings/shortcut';
 import { checkAccessibilityPermission, openAccessibilitySettings } from '../api';
 import { useOnboardingStore } from '../store';
 
 /** How often to re-check the macOS accessibility grant while guidance is shown. */
 const ACCESSIBILITY_POLL_MS = 1500;
+
+/** Physical `KeyboardEvent.code` values for the modifier keys. */
+const MODIFIER_CODES = new Set([
+  'ShiftLeft',
+  'ShiftRight',
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
+]);
+
+/** Inline guidance shown when a captured combination is not a bindable shortcut. */
+const USE_MODIFIER_MSG =
+  'Use at least one modifier (Ctrl/Cmd/Shift/Alt) with a letter or number.';
+/** Inline guidance shown when the backend rejects a captured shortcut. */
+const CONFLICT_MSG = 'That shortcut is unavailable. Try a different combination.';
 
 /**
  * First-run onboarding overlay (Epic 8).
@@ -15,7 +34,10 @@ const ACCESSIBILITY_POLL_MS = 1500;
  * renders the macOS accessibility-guidance state (Story 8.2) — a permission
  * message, a working "Open System Settings" button, and a "Skip for now" control —
  * auto-dismissing the guidance when a grant is detected. The Customize capture
- * state (Story 8.3) is still an inert shell.
+ * state (Story 8.3) captures a new modifier+key combination, previews it live,
+ * and on Save registers + persists it through the shared Settings path
+ * ({@link useOnboardingStore.applyCustomHotkey}); a conflict warns inline and
+ * keeps capture open so the user can retry.
  */
 export function OnboardingOverlay() {
   const isVisible = useOnboardingStore((s) => s.isVisible);
@@ -24,6 +46,12 @@ export function OnboardingOverlay() {
   const accessibilityNeeded = useOnboardingStore((s) => s.accessibilityNeeded);
   const dialogRef = useRef<HTMLDivElement>(null);
   const instructionRef = useRef<HTMLParagraphElement>(null);
+  const saveInFlightRef = useRef(false);
+  // Story 8.3 capture state: the combo captured so far (null until a valid one)
+  // and any inline warning (invalid combination or a registration conflict).
+  const [captured, setCaptured] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useFocusTrap(dialogRef, isVisible);
 
@@ -34,9 +62,11 @@ export function OnboardingOverlay() {
 
   // Dismiss on Esc. A window-level listener (not an element handler) is used
   // because focus is on the editor when the overlay first appears, so the
-  // keydown does not originate inside the dialog subtree.
+  // keydown does not originate inside the dialog subtree. Disabled while
+  // customizing — there Esc cancels capture (the capture-phase handler below
+  // stops propagation so this never fires), not onboarding.
   useEffect(() => {
-    if (!isVisible) return;
+    if (!isVisible || customizing) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -45,20 +75,25 @@ export function OnboardingOverlay() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isVisible]);
+  }, [isVisible, customizing]);
 
   // Dismiss on a global-hotkey press. The OS-level shortcut hides the window
   // without reloading the webview and does not reliably deliver a keydown to the
   // page, so the backend emits a typed `hotkey-pressed` event we listen for here.
   // Guarded so a missing Tauri runtime (unit tests) cannot crash the overlay.
+  // Suppressed while customizing so a stray press of the still-registered old
+  // shortcut cannot complete onboarding mid-capture.
   useEffect(() => {
-    if (!isVisible) return;
+    if (!isVisible || customizing) return;
     let active = true;
     let unlisten: (() => void) | null = null;
     try {
       void events.hotkeyPressed
         .listen(() => {
-          void useOnboardingStore.getState().dismiss();
+          if (!active) return;
+          const state = useOnboardingStore.getState();
+          if (!state.isVisible || state.customizing) return;
+          void state.dismiss();
         })
         .then((u) => {
           if (active) unlisten = u;
@@ -72,7 +107,50 @@ export function OnboardingOverlay() {
       active = false;
       unlisten?.();
     };
-  }, [isVisible]);
+  }, [isVisible, customizing]);
+
+  // Story 8.3 capture: while customizing, listen for the next modifier+key combo
+  // on the window in the CAPTURE phase, stopping propagation so Esc cancels
+  // capture (not onboarding) and the combo never leaks to the editor. Bare
+  // modifiers are ignored until a main key arrives; an unbindable combination
+  // surfaces an inline warning instead of being captured.
+  useEffect(() => {
+    if (!isVisible || !customizing) return;
+    saveInFlightRef.current = false;
+    setCaptured(null);
+    setWarning(null);
+    setIsSaving(false);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') return;
+      const target = e.target;
+      const targetButton =
+        target instanceof HTMLElement ? target.closest('button') : null;
+      if (
+        targetButton !== null &&
+        (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')
+      ) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (saveInFlightRef.current) return;
+      if (e.key === 'Escape') {
+        useOnboardingStore.getState().cancelCustomize();
+        return;
+      }
+      if (MODIFIER_CODES.has(e.code)) return;
+      const combo = formatShortcutFromEvent(e);
+      if (combo === null) {
+        setCaptured(null);
+        setWarning(USE_MODIFIER_MSG);
+        return;
+      }
+      setCaptured(combo);
+      setWarning(null);
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [isVisible, customizing]);
 
   // While the macOS accessibility guidance is shown, re-check the grant so the
   // guidance auto-dismisses once the user enables the permission. macOS emits no
@@ -106,6 +184,25 @@ export function OnboardingOverlay() {
     .split('+')
     .map((part) => part.trim())
     .filter(Boolean);
+
+  // Register + persist the captured shortcut via the shared Epic 7 path. On a
+  // conflict the store keeps capture mode open; surface an inline warning so the
+  // user can try another combination.
+  const handleSaveCustom = async () => {
+    if (captured === null || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setIsSaving(true);
+    try {
+      const ok = await useOnboardingStore.getState().applyCustomHotkey(captured);
+      if (!ok) {
+        setCaptured(null);
+        setWarning(CONFLICT_MSG);
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div
@@ -191,9 +288,100 @@ export function OnboardingOverlay() {
             </button>
           </div>
         ) : customizing ? (
-          <p ref={instructionRef} tabIndex={-1} style={{ margin: 0 }}>
-            Press your preferred shortcut…
-          </p>
+          <div>
+            <p
+              ref={instructionRef}
+              tabIndex={-1}
+              style={{ margin: '0 0 var(--space-3, 12px)' }}
+            >
+              Press your preferred shortcut…
+            </p>
+            <div
+              data-testid="hotkey-capture"
+              aria-live="polite"
+              style={{
+                display: 'flex',
+                gap: 'var(--space-2, 8px)',
+                justifyContent: 'center',
+                minHeight: '28px',
+                alignItems: 'center',
+              }}
+            >
+              {captured === null ? (
+                <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Waiting for a key combination…
+                </span>
+              ) : (
+                captured
+                  .split('+')
+                  .map((part) => part.trim())
+                  .filter(Boolean)
+                  .map((cap) => (
+                    <kbd
+                      key={cap}
+                      style={{
+                        padding: '4px 10px',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: '4px',
+                        background: 'var(--bg-primary)',
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: '13px',
+                      }}
+                    >
+                      {cap}
+                    </kbd>
+                  ))
+              )}
+            </div>
+            {warning !== null && (
+              <p
+                data-testid="hotkey-warning"
+                role="alert"
+                style={{
+                  margin: 'var(--space-3, 12px) 0 0',
+                  color: 'var(--danger, var(--text-muted))',
+                  fontSize: '12px',
+                }}
+              >
+                {warning}
+              </p>
+            )}
+            <div
+              style={{
+                display: 'flex',
+                gap: 'var(--space-2, 8px)',
+                justifyContent: 'center',
+                marginTop: 'var(--space-4, 16px)',
+              }}
+            >
+              <button
+                type="button"
+                data-testid="save-custom-hotkey"
+                disabled={captured === null || isSaving}
+                onClick={() => void handleSaveCustom()}
+                style={{
+                  ...onboardingButtonStyle,
+                  opacity: captured === null || isSaving ? 0.5 : 1,
+                  cursor: captured === null || isSaving ? 'default' : 'pointer',
+                }}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                data-testid="cancel-custom-hotkey"
+                disabled={isSaving}
+                onClick={() => useOnboardingStore.getState().cancelCustomize()}
+                style={{
+                  ...onboardingButtonStyle,
+                  opacity: isSaving ? 0.5 : 1,
+                  cursor: isSaving ? 'default' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         ) : (
           <div>
             <p

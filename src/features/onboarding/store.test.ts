@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useOnboardingStore, COMMAND_HINT_SESSION_LIMIT } from './store';
+import { useSettingsStore } from '../settings/store';
 import * as api from './api';
 
 /**
@@ -73,14 +74,43 @@ describe('useOnboardingStore (red-phase: Stories 8.1, 8.3)', () => {
     expect(useOnboardingStore.getState().customizing).toBe(true);
   });
 
-  it('applyCustomHotkey updates the displayed shortcut and exits capture mode (8.3)', () => {
+  it('cancelCustomize leaves capture mode without changing the shortcut (8.3)', () => {
     useOnboardingStore.setState({ customizing: true, hotkey: 'Ctrl+Shift+N' });
 
-    useOnboardingStore.getState().applyCustomHotkey('Alt+Space');
+    useOnboardingStore.getState().cancelCustomize();
 
     const s = useOnboardingStore.getState();
-    expect(s.hotkey).toBe('Alt+Space');
     expect(s.customizing).toBe(false);
+    expect(s.hotkey).toBe('Ctrl+Shift+N');
+  });
+
+  it('applyCustomHotkey registers via the shared path, then adopts the shortcut and exits capture (8.3)', async () => {
+    const setGlobalShortcut = vi
+      .spyOn(useSettingsStore.getState(), 'setGlobalShortcut')
+      .mockResolvedValue(true);
+    useOnboardingStore.setState({ customizing: true, hotkey: 'Ctrl+Shift+N' });
+
+    const ok = await useOnboardingStore.getState().applyCustomHotkey('Ctrl+Shift+J');
+
+    expect(setGlobalShortcut).toHaveBeenCalledWith('Ctrl+Shift+J');
+    expect(ok).toBe(true);
+    const s = useOnboardingStore.getState();
+    expect(s.hotkey).toBe('Ctrl+Shift+J');
+    expect(s.customizing).toBe(false);
+  });
+
+  it('applyCustomHotkey keeps the old shortcut and stays in capture on a conflict (8.3)', async () => {
+    vi.spyOn(useSettingsStore.getState(), 'setGlobalShortcut').mockResolvedValue(
+      false,
+    );
+    useOnboardingStore.setState({ customizing: true, hotkey: 'Ctrl+Shift+N' });
+
+    const ok = await useOnboardingStore.getState().applyCustomHotkey('Ctrl+Shift+J');
+
+    expect(ok).toBe(false);
+    const s = useOnboardingStore.getState();
+    expect(s.hotkey).toBe('Ctrl+Shift+N');
+    expect(s.customizing).toBe(true);
   });
 
   it('shows the command hint only within the first 5 sessions (8.1)', () => {
