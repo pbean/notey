@@ -13,6 +13,40 @@
 
 use tauri_app_lib::platform;
 
+/// Serializes the two tests that read/mutate the process-global `NOTEY_DATA_DIR`
+/// env var, so the override test cannot leak into the standard-path test when the
+/// harness runs them on parallel threads.
+static DATA_DIR_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Restores a process env var to its prior value, including non-Unicode values.
+struct EnvVarGuard {
+    key: &'static str,
+    prior: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, prior }
+    }
+
+    fn unset(key: &'static str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, prior }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.prior {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
 /// AC 8.6: `current()` resolves to the implementation for the target OS.
 #[test]
 #[ignore = "red-phase: Story 8.6"]
@@ -29,31 +63,54 @@ fn current_resolves_to_target_platform() {
 
 /// AC 8.5/8.6/FR58: the data directory is a per-user, platform-standard path.
 #[test]
-#[ignore = "red-phase: Story 8.5"]
 fn data_dir_is_user_scoped_and_standard() {
+    let _guard = DATA_DIR_ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _env = EnvVarGuard::unset("NOTEY_DATA_DIR");
+
     let dir = platform::current()
         .data_dir()
         .expect("data_dir must resolve");
-    let s = dir.to_string_lossy();
-    assert!(
-        s.contains("notey"),
-        "data dir must be namespaced to notey: {s}"
+    let namespace = if cfg!(target_os = "macos") {
+        "com.notey.app"
+    } else {
+        "notey"
+    };
+    let expected = dirs::data_dir()
+        .expect("platform data dir must resolve")
+        .join(namespace);
+    assert_eq!(
+        dir, expected,
+        "data dir must be the platform data dir plus the Notey namespace"
     );
 
-    #[cfg(unix)]
-    {
-        let home = std::env::var("HOME").unwrap_or_default();
-        assert!(
-            !home.is_empty() && s.starts_with(&home),
-            "data dir must live under the current user's HOME ({home}): {s}"
-        );
-    }
+    // macOS namespaces under the bundle identifier, mirroring config_dir.
+    #[cfg(target_os = "macos")]
+    assert!(
+        dir.to_string_lossy().contains("com.notey.app"),
+        "macOS data dir must use the bundle id namespace: {}",
+        dir.display()
+    );
+}
+
+/// AC 8.5: the `NOTEY_DATA_DIR` override seam (hermetic-test seam, mirroring
+/// `NOTEY_SOCKET_PATH`) takes precedence over the platform-standard path.
+#[test]
+fn data_dir_honors_override_seam() {
+    let _guard = DATA_DIR_ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _env = EnvVarGuard::set("NOTEY_DATA_DIR", "/tmp/notey-data-override");
+
+    let resolved = platform::current()
+        .data_dir()
+        .expect("override data_dir must resolve");
+    assert_eq!(
+        resolved,
+        std::path::PathBuf::from("/tmp/notey-data-override")
+    );
 }
 
 /// AC 8.5/FR51: the IPC socket path is user-scoped (no system-wide shared path).
 #[cfg(unix)]
 #[test]
-#[ignore = "red-phase: Story 8.5"]
 fn socket_path_is_user_scoped() {
     let path = platform::current().socket_path();
     let s = path.to_string_lossy();

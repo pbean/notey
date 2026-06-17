@@ -21,7 +21,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn data_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.5: %APPDATA%\\notey (per-user)")
+        // %APPDATA%\notey, per-user (Story 8.5).
+        super::resolve_data_dir("notey")
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
@@ -33,7 +34,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn socket_path(&self) -> PathBuf {
-        todo!("Story 8.5: user-scoped named pipe")
+        // User-scoped namespaced pipe `notey-<user>` (Story 8.5).
+        super::resolve_windows_socket()
     }
 
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
