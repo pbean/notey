@@ -46,6 +46,41 @@ npx tauri build --debug --no-bundle # debug binary at src-tauri/target/debug/not
 npx tauri build                     # release bundles for your platform
 ```
 
+## Releasing
+
+Releases are built by `.github/workflows/release.yml`, which runs
+`tauri-apps/tauri-action` across five targets (macOS arm64/x64, Linux x64/arm64,
+Windows x64) and uploads the bundles to a **draft** GitHub Release.
+
+One-time setup (maintainers): create **one** repo secret under **Settings →
+Secrets and variables → Actions** so the in-app updater artifacts get signed —
+`TAURI_SIGNING_PRIVATE_KEY` (contents of the private key from
+`npm run tauri signer generate`). The key has no passphrase, so do **not** create
+a `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret — GitHub rejects empty secret
+values, and the workflow already resolves the missing reference to an empty
+string (i.e. "no password"). The matching public key lives in
+`src-tauri/tauri.conf.json` under `plugins.updater.pubkey`.
+
+To cut a release:
+
+1. Bump the version in **all three** files, kept in lockstep: `package.json`,
+   `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+2. Update `CHANGELOG.md` (move **Unreleased** items under the new version).
+3. Tag and push:
+
+   ```sh
+   git tag vX.Y.Z
+   git push origin vX.Y.Z      # triggers the Release workflow
+   ```
+
+4. When the workflow finishes, review the **draft** release and **publish** it
+   (mark it as "latest"). Publishing is what makes the updater endpoint
+   (`releases/latest/download/latest.json`) resolve — **in-app auto-update only
+   goes live once the draft is published.**
+
+Release artifacts are currently unsigned (OS code-signing is wired but disabled;
+see the comment block in `release.yml` to enable Apple/Azure signing later).
+
 ## Testing
 
 ```sh
