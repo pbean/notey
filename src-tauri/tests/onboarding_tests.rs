@@ -6,7 +6,7 @@
 
 use tempfile::TempDir;
 
-use tauri_app_lib::services::onboarding::{self, OnboardingState, COMMAND_HINT_SESSION_LIMIT};
+use notey_lib::services::onboarding::{self, OnboardingState, COMMAND_HINT_SESSION_LIMIT};
 
 /// AC: "the application starts for the first time (no `onboarding_complete` flag)".
 /// A fresh config dir yields the default state — not complete, zero sessions.

@@ -3,8 +3,8 @@ mod helpers;
 use rusqlite::params;
 
 use helpers::factories::{create_temp_db, NoteBuilder};
-use tauri_app_lib::errors::NoteyError;
-use tauri_app_lib::services::notes;
+use notey_lib::errors::NoteyError;
+use notey_lib::services::notes;
 
 #[test]
 fn test_notes_table_creation() {
@@ -163,7 +163,7 @@ fn test_db_write_survives_reopen() {
     drop(conn);
 
     // Reopen the same database
-    let conn2 = tauri_app_lib::db::init_db(dir.path().to_path_buf()).expect("reopen failed");
+    let conn2 = notey_lib::db::init_db(dir.path().to_path_buf()).expect("reopen failed");
     let reloaded = notes::get_note(&conn2, note_id).expect("get_note after reopen failed");
 
     assert_eq!(reloaded.title, "durable title");
@@ -220,7 +220,7 @@ fn test_migration_idempotent_on_existing_db() {
     drop(conn);
 
     // Re-init the same DB (migrations should be a no-op)
-    let conn2 = tauri_app_lib::db::init_db(dir.path().to_path_buf()).expect("re-init failed");
+    let conn2 = notey_lib::db::init_db(dir.path().to_path_buf()).expect("re-init failed");
     let schema2: String = conn2
         .query_row(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes'",

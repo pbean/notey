@@ -73,7 +73,7 @@ import {
 } from './driver.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APP_PATH = path.resolve(__dirname, '..', 'src-tauri', 'target', 'debug', 'tauri-app');
+const APP_PATH = path.resolve(__dirname, '..', 'src-tauri', 'target', 'debug', 'notey');
 const ESCAPE = '\uE00C';
 const ENTER = '\uE007';
 const CONTROL = '\uE009';

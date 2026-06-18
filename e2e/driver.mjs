@@ -179,6 +179,15 @@ export async function executeAsyncScript(sessionId, script, args = []) {
   return request('POST', `/session/${sessionId}/execute/async`, { script, args });
 }
 
+/**
+ * Capture the current viewport as a PNG via the W3C `Take Screenshot` command.
+ * Returns a base64-encoded PNG string (the W3C-specified encoding); callers
+ * decode with `Buffer.from(value, 'base64')` before writing to disk.
+ */
+export async function takeScreenshot(sessionId) {
+  return request('GET', `/session/${sessionId}/screenshot`);
+}
+
 export function pause(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

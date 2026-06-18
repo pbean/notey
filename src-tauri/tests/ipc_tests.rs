@@ -18,8 +18,8 @@ use tempfile::TempDir;
 
 use helpers::factories::create_temp_db;
 use interprocess::local_socket::Stream;
-use tauri_app_lib::ipc::protocol::{IpcResponse, MAX_CONTENT_BYTES};
-use tauri_app_lib::ipc::socket_server::{self, Handler, IpcServer};
+use notey_lib::ipc::protocol::{IpcResponse, MAX_CONTENT_BYTES};
+use notey_lib::ipc::socket_server::{self, Handler, IpcServer};
 
 /// A running server bound to a temp socket over a shared temp DB. The server is
 /// held only to keep it alive and to unlink its socket on drop.
@@ -93,7 +93,7 @@ impl TestServer {
         let handler_conn = Arc::clone(&conn);
         let handler: Handler = Arc::new(move |raw: &[u8]| {
             let guard = handler_conn.lock().unwrap_or_else(|e| e.into_inner());
-            tauri_app_lib::ipc::protocol::handle_request(&guard, raw)
+            notey_lib::ipc::protocol::handle_request(&guard, raw)
         });
 
         // Held across env mutation AND `IpcServer::start` (which reads the env),
@@ -272,7 +272,7 @@ fn socket_server_default_matches_platform() {
     // With no override seam set, socket_server must defer to the single source of
     // truth in the platform abstraction (Story 8.5).
     let from_server = socket_server::socket_path();
-    let from_platform = tauri_app_lib::platform::current().socket_path();
+    let from_platform = notey_lib::platform::current().socket_path();
 
     assert_eq!(from_server, from_platform);
 }
@@ -395,7 +395,7 @@ fn start_at(path: &Path, conn: Arc<Mutex<Connection>>) -> IpcServer {
 fn handler_for_conn(conn: Arc<Mutex<Connection>>) -> Handler {
     Arc::new(move |raw: &[u8]| {
         let guard = conn.lock().unwrap_or_else(|e| e.into_inner());
-        tauri_app_lib::ipc::protocol::handle_request(&guard, raw)
+        notey_lib::ipc::protocol::handle_request(&guard, raw)
     })
 }
 

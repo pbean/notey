@@ -2,8 +2,8 @@ use chrono::Utc;
 use rusqlite::{params, Connection};
 use tempfile::TempDir;
 
-use tauri_app_lib::db;
-use tauri_app_lib::models::Note;
+use notey_lib::db;
+use notey_lib::models::Note;
 
 /// Create a file-backed temp DB with full init (PRAGMAs + migrations).
 /// Returns the connection and a `TempDir` guard — the directory is automatically

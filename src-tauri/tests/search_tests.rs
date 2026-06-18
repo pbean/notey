@@ -3,9 +3,9 @@ mod helpers;
 use rusqlite::params;
 
 use helpers::factories::{create_temp_db, NoteBuilder};
-use tauri_app_lib::db;
-use tauri_app_lib::services::notes;
-use tauri_app_lib::services::search_service;
+use notey_lib::db;
+use notey_lib::services::notes;
+use notey_lib::services::search_service;
 
 // P0-INT-005b: FTS5 virtual table and all 3 triggers exist in sqlite_master
 #[test]

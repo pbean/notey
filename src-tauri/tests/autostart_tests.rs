@@ -12,8 +12,8 @@
 
 use tempfile::TempDir;
 
-use tauri_app_lib::models::config::AppConfig;
-use tauri_app_lib::services::config;
+use notey_lib::models::config::AppConfig;
+use notey_lib::services::config;
 
 /// Persist a preference exactly as the `set_autostart` command does: set the field
 /// on the loaded config and save through the config service.

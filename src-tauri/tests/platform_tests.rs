@@ -1,6 +1,6 @@
 //! ATDD red-phase acceptance tests — Stories 8.6 (Cross-Platform Verification &
 //! Wayland Fallback), 8.5 (Per-User Data Isolation), and 8.2 (macOS Accessibility
-//! Permission Guidance), exercised through the [`tauri_app_lib::platform`]
+//! Permission Guidance), exercised through the [`notey_lib::platform`]
 //! abstraction.
 //!
 //! Assertions are `#[cfg(target_os = ...)]`-gated so each only compiles/runs on
@@ -10,7 +10,7 @@
 //!
 //!   cargo test --test platform_tests <name> -- --ignored
 
-use tauri_app_lib::platform;
+use notey_lib::platform;
 
 /// Serializes the two tests that read/mutate the process-global `NOTEY_DATA_DIR`
 /// env var, so the override test cannot leak into the standard-path test when the
@@ -136,7 +136,7 @@ fn config_dir_is_user_scoped_and_standard() {
 #[test]
 fn config_dir_matches_services_config() {
     let via_service =
-        tauri_app_lib::services::config::config_dir().expect("services config_dir must resolve");
+        notey_lib::services::config::config_dir().expect("services config_dir must resolve");
     let via_trait = platform::current()
         .config_dir()
         .expect("platform config_dir must resolve");
