@@ -13,8 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -28,3 +27,8 @@ dist-ssr
 .codex/
 .automator/runs/
 .automator/archive/
+
+# Local tooling / scaffolding (kept on disk, not tracked)
+.agents/
+_bmad/
+_bmad-output/
