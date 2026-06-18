@@ -1,69 +1,78 @@
-//! ATDD red-phase acceptance tests — Story 8.4 (Auto-Start on Login),
-//! preference-persistence + service-contract slice.
+//! Acceptance tests — Story 8.4 (Auto-Start on Login), preference-persistence
+//! slice.
 //!
-//! Every test is `#[ignore = "red-phase: Story 8.4"]` against the unimplemented
-//! [`tauri_app_lib::services::autostart`] scaffold. Platform-level launch-agent
-//! behavior (does the OS actually start the app at login?) is verified by
-//! manual/platform QA — these tests pin the persistence and idempotence contract.
+//! The user's auto-start preference is the single source of truth at `config.toml`
+//! `[general] auto_start` (serde key `autoStart`). These tests pin the persistence
+//! and idempotence contract through the config service, hermetically against a
+//! `TempDir`. Platform-level launch-agent behavior (does the OS actually start the
+//! app at login?) is owned by `tauri-plugin-autostart` and verified by
+//! manual/platform QA — it is not exercised here.
 //!
-//!   cargo test --test autostart_tests <name> -- --ignored
+//!   cargo test --test autostart_tests
 
 use tempfile::TempDir;
 
-use tauri_app_lib::services::autostart::{self, AutostartState};
+use notey_lib::models::config::AppConfig;
+use notey_lib::services::config;
+
+/// Persist a preference exactly as the `set_autostart` command does: set the field
+/// on the loaded config and save through the config service.
+fn persist(config_dir: &std::path::Path, enabled: bool) {
+    let mut cfg = config::load_or_create(config_dir).expect("load config");
+    cfg.general.auto_start = enabled;
+    config::save(config_dir, &cfg).expect("save config");
+}
+
+fn load_enabled(config_dir: &std::path::Path) -> bool {
+    config::load_or_create(config_dir)
+        .expect("load config")
+        .general
+        .auto_start
+}
 
 /// AC: a fresh install has auto-start disabled.
 #[test]
-#[ignore = "red-phase: Story 8.4"]
-fn load_defaults_to_disabled() {
+fn fresh_install_defaults_to_disabled() {
     let tmp = TempDir::new().unwrap();
-    let state = autostart::load(tmp.path()).expect("load must succeed on a fresh dir");
-    assert_eq!(state, AutostartState { enabled: false });
+    assert!(!load_enabled(tmp.path()));
+    assert!(!AppConfig::default().general.auto_start);
 }
 
-/// AC: "the user enables auto-start … the setting is saved to config:
-/// `auto_start = true`". (Scaffold persists `[autostart] enabled` — see module
-/// docs; reconcile the section name at green phase.)
+/// AC: enabling auto-start saves `[general] auto_start = true` to config.toml.
 #[test]
-#[ignore = "red-phase: Story 8.4"]
 fn enable_persists_true() {
     let tmp = TempDir::new().unwrap();
-    autostart::enable(tmp.path()).expect("enable must persist");
-    assert!(
-        autostart::load(tmp.path()).unwrap().enabled,
-        "enabled preference must survive a reload"
-    );
-    assert!(autostart::state_file_path(tmp.path()).exists());
+    persist(tmp.path(), true);
+    assert!(load_enabled(tmp.path()), "preference must survive a reload");
+    assert!(tmp.path().join("config.toml").exists());
 }
 
-/// AC: "the user disables auto-start … the config is updated: `auto_start = false`".
+/// AC: disabling auto-start updates the config to `auto_start = false`.
 #[test]
-#[ignore = "red-phase: Story 8.4"]
 fn disable_persists_false() {
     let tmp = TempDir::new().unwrap();
-    autostart::enable(tmp.path()).unwrap();
-    autostart::disable(tmp.path()).expect("disable must persist");
-    assert!(!autostart::load(tmp.path()).unwrap().enabled);
+    persist(tmp.path(), true);
+    persist(tmp.path(), false);
+    assert!(!load_enabled(tmp.path()));
 }
 
-/// Enabling twice is a no-op at the persistence layer (no duplicate launch agent).
+/// Enabling twice is a no-op at the persistence layer (no divergent state).
 #[test]
-#[ignore = "red-phase: Story 8.4"]
 fn enable_is_idempotent() {
     let tmp = TempDir::new().unwrap();
-    autostart::enable(tmp.path()).unwrap();
-    autostart::enable(tmp.path()).unwrap();
-    assert!(autostart::load(tmp.path()).unwrap().enabled);
+    persist(tmp.path(), true);
+    persist(tmp.path(), true);
+    assert!(load_enabled(tmp.path()));
 }
 
-/// AC: the platform mechanism is the source of truth for the *active* state.
-/// `is_enabled` reflects what the OS reports (here: disabled by default in a
-/// clean test environment).
+/// A config file predating Story 8.4 (no `autoStart` key) loads as disabled.
 #[test]
-#[ignore = "red-phase: Story 8.4"]
-fn is_enabled_reports_platform_state() {
-    assert!(
-        !autostart::is_enabled().expect("is_enabled must query the platform"),
-        "a clean test environment must report auto-start as not registered"
-    );
+fn missing_key_loads_as_disabled() {
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("config.toml"),
+        "[general]\ntheme = \"dark\"\nlayoutMode = \"floating\"\n",
+    )
+    .unwrap();
+    assert!(!load_enabled(tmp.path()));
 }

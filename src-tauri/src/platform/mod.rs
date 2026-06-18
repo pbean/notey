@@ -1,23 +1,31 @@
 //! Cross-platform abstraction over OS-specific behavior: standard paths, global
-//! hotkey registration (with a Wayland fallback on Linux), auto-start, and the
-//! macOS accessibility-permission flow.
+//! hotkey backend selection, auto-start, and the macOS accessibility-permission
+//! flow.
 //!
-//! **RED-PHASE STUB (Epic 8 — Stories 8.2, 8.5, 8.6).** The [`Platform`] trait
-//! defines the contract; the per-OS implementations in [`linux`], [`macos`], and
-//! [`windows`] are unimplemented scaffolds (`todo!`). Acceptance tests live in
-//! `tests/platform_tests.rs`, marked `#[ignore = "red-phase: Story 8.x"]`.
+//! **Story 8.5 (done):** `data_dir` and `socket_path` are implemented for all
+//! three targets via the shared resolvers below; the DB location (`lib.rs`) and
+//! `crate::ipc::socket_server::socket_path` route through this trait so per-user
+//! isolation has a single source of truth.
 //!
-//! ## Green-phase wiring (do this when implementing)
-//! - Implement each `#[cfg(target_os = ...)]` struct against the real OS APIs.
-//! - Linux `register_hotkey`: try the standard Tauri global-shortcut plugin first;
-//!   on failure under Wayland, attempt the XDG GlobalShortcuts portal (verify the
-//!   current `ashpd` version on crates.io — do not pin from memory); if neither
-//!   works, return [`NoteyError::Config`] so the caller can notify the user (FR57).
-//! - Route `crate::ipc::socket_server::socket_path` and the DB/config dir helpers
-//!   through this trait so per-user isolation (Story 8.5) has a single source of
-//!   truth.
+//! **Story 8.6 (done):** `config_dir`, `log_dir`, and `register_hotkey` are
+//! implemented for all three targets. `services::config::config_dir` now
+//! delegates to this trait so config-path resolution has a single source of
+//! truth, and `lib.rs` consults `register_hotkey` to detect a compositor with no
+//! usable hotkey backend (pure Wayland without XWayland) and degrade gracefully
+//! (FR56/FR57/FR58).
+//!
+//! **DW-97 (done):** the `autostart_*` methods are implemented for all three
+//! targets. Their signatures take the Tauri `AppHandle` so they can reach
+//! `tauri-plugin-autostart` (`app.autolaunch()`), which owns the per-OS
+//! launch-agent mechanism. Each per-OS impl delegates to the shared
+//! `autostart_*` helpers below (one place to call the plugin, no per-OS
+//! reimplementation), and `commands::autostart` + the `lib.rs` startup reconcile
+//! now route through this trait so auto-start side effects have a single source
+//! of truth. Still deferred: the native Wayland `ashpd` GlobalShortcuts portal
+//! (fast-follow, DW-96; `register_hotkey` returns `Err` on such sessions rather
+//! than `HotkeyBackend::WaylandPortal`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::errors::NoteyError;
 
@@ -30,8 +38,8 @@ pub mod windows;
 
 /// Which mechanism satisfied a global-hotkey registration request.
 ///
-/// Distinguishing the path taken lets the UI explain a degraded experience on
-/// compositors where only the portal works (Story 8.6 / FR57).
+/// Distinguishing the path taken lets callers explain degraded hotkey support
+/// when a compositor cannot use the standard backend (Story 8.6 / FR57).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyBackend {
     /// The standard Tauri global-shortcut plugin (X11, macOS, Windows).
@@ -59,18 +67,27 @@ pub trait Platform: Send + Sync {
     fn socket_path(&self) -> PathBuf;
 
     /// Register the global capture hotkey, returning which backend served it.
-    /// Linux attempts [`HotkeyBackend::WaylandPortal`] when the standard plugin
-    /// fails under Wayland (FR57).
+    /// Linux returns [`HotkeyBackend::Standard`] when X11/XWayland is available
+    /// and [`NoteyError::Config`] on pure Wayland without XWayland. Native
+    /// [`HotkeyBackend::WaylandPortal`] support is deferred to DW-96.
     fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError>;
 
-    /// Enable auto-start on login. Story 8.4 / FR41–FR43.
-    fn autostart_enable(&self) -> Result<(), NoteyError>;
+    /// Enable auto-start on login (Story 8.4 / FR41–FR43, DW-97).
+    ///
+    /// Delegates to `tauri-plugin-autostart` via the Tauri [`AppHandle`], which
+    /// owns the per-OS launch-agent mechanism (plist / `.desktop` / registry).
+    ///
+    /// [`AppHandle`]: tauri::AppHandle
+    fn autostart_enable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError>;
 
-    /// Disable auto-start on login.
-    fn autostart_disable(&self) -> Result<(), NoteyError>;
+    /// Disable auto-start on login (DW-97). See [`autostart_enable`].
+    ///
+    /// [`autostart_enable`]: Platform::autostart_enable
+    fn autostart_disable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError>;
 
-    /// Whether auto-start on login is currently configured.
-    fn autostart_is_enabled(&self) -> Result<bool, NoteyError>;
+    /// Whether auto-start on login is currently registered at the OS level
+    /// (DW-97). Reports the live plugin state.
+    fn autostart_is_enabled(&self, app: &tauri::AppHandle) -> Result<bool, NoteyError>;
 
     /// Whether the OS has granted the accessibility permission required for the
     /// global hotkey. Non-macOS platforms return `Ok(true)` (no such gate).
@@ -96,4 +113,125 @@ pub fn current() -> Box<dyn Platform> {
     {
         Box::new(windows::WindowsPlatform::new())
     }
+}
+
+// ── Shared auto-start delegation (Story 8.4 / FR41–FR43 / DW-97) ─────────────
+//
+// Auto-start is platform-agnostic at this layer: `tauri-plugin-autostart` owns
+// the per-OS launch-agent mechanism (plist / `.desktop` / registry), so the
+// three per-OS `Platform::autostart_*` impls all delegate here. Centralizing the
+// `app.autolaunch()` calls in one place keeps the impls thin and removes the
+// cross-platform-divergence risk of reimplementing the plugin per OS.
+
+/// Register the OS launch agent so Notey starts on login.
+pub(crate) fn autostart_enable(app: &tauri::AppHandle) -> Result<(), NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .enable()
+        .map_err(|e| NoteyError::Config(format!("Failed to enable auto-start: {e}")))
+}
+
+/// Remove the OS launch agent so Notey no longer starts on login.
+pub(crate) fn autostart_disable(app: &tauri::AppHandle) -> Result<(), NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .disable()
+        .map_err(|e| NoteyError::Config(format!("Failed to disable auto-start: {e}")))
+}
+
+/// Report whether the OS launch agent is currently registered.
+pub(crate) fn autostart_is_enabled(app: &tauri::AppHandle) -> Result<bool, NoteyError> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| NoteyError::Config(format!("Failed to query auto-start state: {e}")))
+}
+
+// ── Shared path resolvers (Story 8.5 / FR51 / FR58) ──────────────────────────
+//
+// The per-OS `data_dir`/`socket_path` impls delegate here so resolution lives in
+// exactly one place. `namespace` differs per OS (`notey` vs `com.notey.app`) to
+// match `services::config::config_dir`'s existing convention.
+
+/// Resolve the per-user data directory, namespaced for this OS.
+///
+/// Honors the `NOTEY_DATA_DIR` env override first (the hermetic-test seam,
+/// mirroring `NOTEY_SOCKET_PATH`); otherwise `dirs::data_dir()` joined with
+/// `namespace` (`$XDG_DATA_HOME` / `%APPDATA%` / `~/Library/Application Support`).
+/// Pure resolver — the caller creates the directory. Returns
+/// [`NoteyError::Config`] when no platform data directory can be determined.
+pub(crate) fn resolve_data_dir(namespace: &str) -> Result<PathBuf, NoteyError> {
+    if let Ok(custom) = std::env::var("NOTEY_DATA_DIR") {
+        return Ok(PathBuf::from(custom));
+    }
+    dirs::data_dir()
+        .map(|base| base.join(namespace))
+        .ok_or_else(|| {
+            NoteyError::Config("Could not determine platform data directory".to_string())
+        })
+}
+
+/// Resolve the per-user config directory, namespaced for this OS (Story 8.6).
+///
+/// `dirs::config_dir()` joined with `namespace` (`$XDG_CONFIG_HOME` / `%APPDATA%`
+/// / `~/Library/Application Support`). Pure resolver — the caller creates the
+/// directory. This is the single implementation behind both the [`Platform`]
+/// trait's `config_dir` and `services::config::config_dir`. Returns
+/// [`NoteyError::Config`] when no platform config directory can be determined.
+pub(crate) fn resolve_config_dir(namespace: &str) -> Result<PathBuf, NoteyError> {
+    dirs::config_dir()
+        .map(|base| base.join(namespace))
+        .ok_or_else(|| {
+            NoteyError::Config("Could not determine platform config directory".to_string())
+        })
+}
+
+/// Default per-user Unix socket path (no override seams — those live in
+/// `socket_server::socket_path`). Prefers `$XDG_RUNTIME_DIR/notey.sock` (a dir
+/// that is itself `0700`), falling back to a user-scoped temp-dir path.
+#[cfg(unix)]
+pub(crate) fn resolve_unix_socket() -> PathBuf {
+    if let Some(dir) = dirs::runtime_dir() {
+        return dir.join("notey.sock");
+    }
+    let file_name = user_scope_token()
+        .map(|token| format!("notey-{token}.sock"))
+        .unwrap_or_else(|| "notey.sock".to_string());
+    std::env::temp_dir().join(file_name)
+}
+
+/// Default per-user Windows named-pipe name (no override seams).
+#[cfg(windows)]
+pub(crate) fn resolve_windows_socket() -> PathBuf {
+    PathBuf::from(
+        user_scope_token()
+            .map(|token| format!("notey-{token}"))
+            .unwrap_or_else(|| "notey".to_string()),
+    )
+}
+
+/// Derive a stable, filesystem-safe per-user token for fallback socket naming.
+#[cfg(any(unix, windows))]
+fn user_scope_token() -> Option<String> {
+    dirs::home_dir()
+        .as_deref()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+        .or_else(|| std::env::var("USER").ok())
+        .or_else(|| std::env::var("USERNAME").ok())
+        .and_then(|candidate| {
+            let sanitized: String = candidate
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect();
+            let trimmed = sanitized.trim_matches('-');
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
 }

@@ -18,8 +18,8 @@ use tempfile::TempDir;
 
 use helpers::factories::create_temp_db;
 use interprocess::local_socket::Stream;
-use tauri_app_lib::ipc::protocol::{IpcResponse, MAX_CONTENT_BYTES};
-use tauri_app_lib::ipc::socket_server::{self, Handler, IpcServer};
+use notey_lib::ipc::protocol::{IpcResponse, MAX_CONTENT_BYTES};
+use notey_lib::ipc::socket_server::{self, Handler, IpcServer};
 
 /// A running server bound to a temp socket over a shared temp DB. The server is
 /// held only to keep it alive and to unlink its socket on drop.
@@ -34,6 +34,35 @@ struct TestServer {
 /// Unique per-process counter so concurrent temp socket paths never collide.
 static SOCKET_SEQ: AtomicUsize = AtomicUsize::new(0);
 static SOCKET_PATH_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+/// Restores a process env var to its prior value, including non-Unicode values.
+struct EnvVarGuard {
+    key: &'static str,
+    prior: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, prior }
+    }
+
+    fn unset(key: &'static str) -> Self {
+        let prior = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, prior }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.prior {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
 
 /// Serializes EVERY `IpcServer::start` in this suite. `IpcServer::start` reads the
 /// process-global `NOTEY_IPC_*` env vars on every start, so an env-setting test's
@@ -64,7 +93,7 @@ impl TestServer {
         let handler_conn = Arc::clone(&conn);
         let handler: Handler = Arc::new(move |raw: &[u8]| {
             let guard = handler_conn.lock().unwrap_or_else(|e| e.into_inner());
-            tauri_app_lib::ipc::protocol::handle_request(&guard, raw)
+            notey_lib::ipc::protocol::handle_request(&guard, raw)
         });
 
         // Held across env mutation AND `IpcServer::start` (which reads the env),
@@ -208,18 +237,20 @@ fn int_002_008_socket_path_is_user_scoped() {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     // Override seam works (the testability ASR).
-    std::env::set_var("NOTEY_SOCKET_PATH", "/tmp/notey-override.sock");
-    assert_eq!(
-        socket_server::socket_path(),
-        PathBuf::from("/tmp/notey-override.sock")
-    );
-    std::env::remove_var("NOTEY_SOCKET_PATH");
+    {
+        let _env = EnvVarGuard::set("NOTEY_SOCKET_PATH", "/tmp/notey-override.sock");
+        assert_eq!(
+            socket_server::socket_path(),
+            PathBuf::from("/tmp/notey-override.sock")
+        );
+    }
 
     // Default resolves under the per-user runtime dir (itself 0700) on Linux,
     // which — together with the 0600 file mode — is the automatable slice of
     // cross-user isolation. True multi-uid access is manual QA (RISK-E6-007).
     #[cfg(target_os = "linux")]
     if let Some(runtime) = dirs::runtime_dir() {
+        let _env = EnvVarGuard::unset("NOTEY_SOCKET_PATH");
         let resolved = socket_server::socket_path();
         assert!(
             resolved.starts_with(&runtime),
@@ -227,6 +258,23 @@ fn int_002_008_socket_path_is_user_scoped() {
         );
         assert_eq!(resolved.file_name().unwrap(), "notey.sock");
     }
+}
+
+// ── 8.5: socket_server default delegates to the Platform abstraction ──────────
+
+#[test]
+fn socket_server_default_matches_platform() {
+    let _guard = SOCKET_PATH_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env = EnvVarGuard::unset("NOTEY_SOCKET_PATH");
+
+    // With no override seam set, socket_server must defer to the single source of
+    // truth in the platform abstraction (Story 8.5).
+    let from_server = socket_server::socket_path();
+    let from_platform = notey_lib::platform::current().socket_path();
+
+    assert_eq!(from_server, from_platform);
 }
 
 // ── 6.2-INT-003: protocol robustness — malformed / unknown, no panic ──────────
@@ -347,7 +395,7 @@ fn start_at(path: &Path, conn: Arc<Mutex<Connection>>) -> IpcServer {
 fn handler_for_conn(conn: Arc<Mutex<Connection>>) -> Handler {
     Arc::new(move |raw: &[u8]| {
         let guard = conn.lock().unwrap_or_else(|e| e.into_inner());
-        tauri_app_lib::ipc::protocol::handle_request(&guard, raw)
+        notey_lib::ipc::protocol::handle_request(&guard, raw)
     })
 }
 

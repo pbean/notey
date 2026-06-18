@@ -106,59 +106,57 @@ type WorkerRegistry = Arc<Mutex<HashMap<u64, WorkerEntry>>>;
 /// it ultimately calls [`handle_request`].
 pub type Handler = Arc<dyn Fn(&[u8]) -> IpcResponse + Send + Sync>;
 
+/// Scan an argument iterator for a `--socket-path <PATH>` (or
+/// `--socket-path=<PATH>`) override, returning the first non-empty value.
+///
+/// Parsed permissively so the desktop app never aborts on flags injected by its
+/// launcher (e.g. a WebDriver harness forwarding `tauri:options.args`): unknown
+/// arguments are ignored, and a flag with a missing or empty value is treated as
+/// absent (falls through to env/default) rather than an error.
+fn socket_path_arg_from<I: Iterator<Item = String>>(args: I) -> Option<PathBuf> {
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        if let Some(value) = arg.strip_prefix("--socket-path=") {
+            if !value.is_empty() {
+                return Some(PathBuf::from(value));
+            }
+            continue;
+        }
+        if arg == "--socket-path" {
+            let Some(value) = args.next() else {
+                continue;
+            };
+            if !value.is_empty() && !value.starts_with("--") {
+                return Some(PathBuf::from(value));
+            }
+        }
+    }
+    None
+}
+
+/// Read the `--socket-path` override from this process's actual arguments.
+fn socket_path_arg() -> Option<PathBuf> {
+    socket_path_arg_from(std::env::args())
+}
+
 /// Resolve the per-user socket path.
 ///
-/// Honors the `NOTEY_SOCKET_PATH` override first (the testability seam). On Unix,
-/// prefers `$XDG_RUNTIME_DIR/notey.sock`, falling back to a user-scoped temp-dir
-/// path. On Windows, returns a user-scoped namespaced pipe name.
+/// Precedence: an explicit `--socket-path` CLI argument wins (the channel the
+/// E2E harness routes through `tauri:options.args`, since it survives a launcher
+/// that resets the environment), then the `NOTEY_SOCKET_PATH` env override (the
+/// testability seam). Otherwise it delegates to the platform abstraction's
+/// [`crate::platform::Platform::socket_path`], the single source of truth for the
+/// default per-user path (Story 8.5).
 pub fn socket_path() -> PathBuf {
+    if let Some(custom) = socket_path_arg() {
+        return custom;
+    }
+
     if let Ok(custom) = std::env::var("NOTEY_SOCKET_PATH") {
         return PathBuf::from(custom);
     }
 
-    #[cfg(unix)]
-    {
-        if let Some(dir) = dirs::runtime_dir() {
-            return dir.join("notey.sock");
-        }
-        let file_name = user_scope_token()
-            .map(|token| format!("notey-{token}.sock"))
-            .unwrap_or_else(|| "notey.sock".to_string());
-        std::env::temp_dir().join(file_name)
-    }
-
-    #[cfg(windows)]
-    {
-        PathBuf::from(
-            user_scope_token()
-                .map(|token| format!("notey-{token}"))
-                .unwrap_or_else(|| "notey".to_string()),
-        )
-    }
-}
-
-fn user_scope_token() -> Option<String> {
-    dirs::home_dir()
-        .as_deref()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-        .map(str::to_owned)
-        .or_else(|| std::env::var("USER").ok())
-        .or_else(|| std::env::var("USERNAME").ok())
-        .and_then(|candidate| {
-            let sanitized: String = candidate
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() {
-                        c.to_ascii_lowercase()
-                    } else {
-                        '-'
-                    }
-                })
-                .collect();
-            let trimmed = sanitized.trim_matches('-');
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        })
+    crate::platform::current().socket_path()
 }
 
 /// Build the transport `Name` for `path`: a filesystem socket on Unix, a
@@ -166,16 +164,15 @@ fn user_scope_token() -> Option<String> {
 fn to_name(path: &Path) -> io::Result<Name<'static>> {
     #[cfg(windows)]
     {
-        let raw = path
-            .file_name()
-            .unwrap_or(path.as_os_str())
-            .to_owned();
+        let raw = path.file_name().unwrap_or(path.as_os_str()).to_owned();
         raw.to_ns_name::<interprocess::local_socket::GenericNamespaced>()
     }
 
     #[cfg(not(windows))]
     {
-        path.as_os_str().to_owned().to_fs_name::<interprocess::local_socket::GenericFilePath>()
+        path.as_os_str()
+            .to_owned()
+            .to_fs_name::<interprocess::local_socket::GenericFilePath>()
     }
 }
 
@@ -585,5 +582,100 @@ fn reaper_loop(shutdown: Arc<AtomicBool>, registry: WorkerRegistry) {
             }
         }
         drop(reg);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an owned-`String` argument iterator from string literals, mirroring
+    /// what `std::env::args()` yields (the program name is included as argv[0]).
+    fn argv(items: &[&str]) -> std::vec::IntoIter<String> {
+        items
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    #[test]
+    fn socket_path_arg_space_form() {
+        let got = socket_path_arg_from(argv(&["notey", "--socket-path", "/tmp/x.sock"]));
+        assert_eq!(got, Some(PathBuf::from("/tmp/x.sock")));
+    }
+
+    #[test]
+    fn socket_path_arg_equals_form() {
+        let got = socket_path_arg_from(argv(&["notey", "--socket-path=/tmp/x.sock"]));
+        assert_eq!(got, Some(PathBuf::from("/tmp/x.sock")));
+    }
+
+    #[test]
+    fn socket_path_arg_missing_value_is_absent() {
+        // Flag is the final token with no value following it.
+        let got = socket_path_arg_from(argv(&["notey", "--socket-path"]));
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn socket_path_arg_missing_value_before_unknown_flag_is_absent() {
+        let got = socket_path_arg_from(argv(&["notey", "--socket-path", "--unrelated"]));
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn socket_path_arg_empty_value_is_absent() {
+        assert_eq!(
+            socket_path_arg_from(argv(&["notey", "--socket-path="])),
+            None
+        );
+        assert_eq!(
+            socket_path_arg_from(argv(&["notey", "--socket-path", ""])),
+            None
+        );
+    }
+
+    #[test]
+    fn socket_path_arg_skips_empty_value_and_keeps_scanning() {
+        let got = socket_path_arg_from(argv(&[
+            "notey",
+            "--socket-path=",
+            "--socket-path",
+            "/tmp/x.sock",
+        ]));
+        assert_eq!(got, Some(PathBuf::from("/tmp/x.sock")));
+    }
+
+    #[test]
+    fn socket_path_arg_ignores_unknown_extra_args() {
+        let got = socket_path_arg_from(argv(&[
+            "notey",
+            "--unrelated",
+            "value",
+            "--socket-path",
+            "/tmp/x.sock",
+            "--another",
+        ]));
+        assert_eq!(got, Some(PathBuf::from("/tmp/x.sock")));
+    }
+
+    #[test]
+    fn socket_path_arg_absent() {
+        let got = socket_path_arg_from(argv(&["notey", "--unrelated", "value"]));
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn socket_path_arg_first_occurrence_wins() {
+        // Defensive: a duplicated flag resolves to the first value, not the last.
+        let got = socket_path_arg_from(argv(&[
+            "notey",
+            "--socket-path",
+            "/tmp/first.sock",
+            "--socket-path",
+            "/tmp/second.sock",
+        ]));
+        assert_eq!(got, Some(PathBuf::from("/tmp/first.sock")));
     }
 }

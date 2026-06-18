@@ -40,7 +40,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-04-03
-last_updated: 2026-06-16 # epic-6-retro item-1 (E2E) note corrected + local live-sync E2E fixed (DW-95; 16/16 local); item 5 (DW-85) → done; items 1+2 previously → done
+last_updated: 2026-06-17 # story 8-6 → done
 # Note: epic-2-retrospective rewritten fresh on 2026-04-04
 project: notey
 project_key: NOKEY
@@ -132,13 +132,13 @@ development_status:
   epic-7-retrospective: optional
 
   # Epic 8: Onboarding & Platform Integration
-  epic-8: backlog
-  8-1-first-run-detection-onboarding-overlay: backlog
-  8-2-macos-accessibility-permission-guidance: backlog
-  8-3-hotkey-customization-during-onboarding: backlog
-  8-4-auto-start-on-login: backlog
-  8-5-per-user-data-isolation: backlog
-  8-6-cross-platform-verification-wayland-fallback: backlog
+  epic-8: in-progress
+  8-1-first-run-detection-onboarding-overlay: done
+  8-2-macos-accessibility-permission-guidance: done
+  8-3-hotkey-customization-during-onboarding: done
+  8-4-auto-start-on-login: done
+  8-5-per-user-data-isolation: done
+  8-6-cross-platform-verification-wayland-fallback: done
   epic-8-retrospective: optional
 
   # ═══════════════════════════════════════════════

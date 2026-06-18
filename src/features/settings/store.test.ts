@@ -6,6 +6,14 @@ import { useSettingsStore } from './store';
 import { useSearchStore } from '../search/store';
 import { useToastStore } from '../toast/store';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('useSettingsStore', () => {
   beforeEach(() => {
     useSettingsStore.getState().resetSettings();
@@ -253,5 +261,79 @@ describe('useSettingsStore', () => {
 
     expect(ok).toBe(true);
     expect(useSettingsStore.getState().bindings.search).toBe('Ctrl+F');
+  });
+
+  it('setAutostart enables, persists via set_autostart, and adopts the returned config', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: false } }));
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: true } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setAutostart(true);
+
+    expect(ok).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('set_autostart', { enabled: true });
+    expect(useSettingsStore.getState().config?.general?.autoStart).toBe(true);
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes('enabled'))).toBe(true);
+  });
+
+  it('setAutostart keeps the prior state and toasts on failure', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: false } }));
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart') return Promise.reject({ type: 'Config', message: 'boom' });
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+
+    const ok = await useSettingsStore.getState().setAutostart(true);
+
+    expect(ok).toBe(false);
+    expect(useSettingsStore.getState().config?.general?.autoStart ?? false).toBe(false);
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes('Couldn’t change auto-start'))).toBe(true);
+    consoleSpy.mockRestore();
+  });
+
+  it('open() reconciles the toggle to the live OS auto-start state', async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: false } }));
+      if (cmd === 'get_autostart') return Promise.resolve(true); // OS reports enabled
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    await useSettingsStore.getState().open();
+
+    expect(useSettingsStore.getState().config?.general?.autoStart).toBe(true);
+  });
+
+  it('ignores stale open() auto-start reconciliation after a completed toggle', async () => {
+    const liveState = deferred<boolean>();
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: false } }));
+      if (cmd === 'get_autostart') return liveState.promise;
+      if (cmd === 'set_autostart')
+        return Promise.resolve(buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: true } }));
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+
+    const openPromise = useSettingsStore.getState().open();
+    await waitFor(() => {
+      expect(useSettingsStore.getState().isOpen).toBe(true);
+    });
+
+    await useSettingsStore.getState().setAutostart(true);
+    liveState.resolve(false);
+    await openPromise;
+
+    expect(useSettingsStore.getState().config?.general?.autoStart).toBe(true);
   });
 });

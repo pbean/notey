@@ -1,25 +1,49 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { useWorkspaceStore } from '../../workspace/store';
+import { useOnboardingStore } from '../../onboarding/store';
 import { StatusBar } from './StatusBar';
 
 const MOCK_WORKSPACES = [
-  { id: 1, name: 'my-project', path: '/p', createdAt: '2026-01-01T00:00:00+00:00', noteCount: 4 },
-  { id: 2, name: 'other', path: '/o', createdAt: '2026-01-02T00:00:00+00:00', noteCount: 6 },
+  {
+    id: 1,
+    name: 'my-project',
+    path: '/p',
+    createdAt: '2026-01-01T00:00:00+00:00',
+    noteCount: 4,
+  },
+  {
+    id: 2,
+    name: 'other',
+    path: '/o',
+    createdAt: '2026-01-02T00:00:00+00:00',
+    noteCount: 6,
+  },
 ];
 
 describe('StatusBar', () => {
+  beforeEach(() => {
+    useOnboardingStore.getState().reset();
+  });
 
   it('renders "No workspace" when no workspace is active', () => {
     render(<StatusBar />);
-    expect(screen.getByTestId('workspace-name')).toHaveTextContent('No workspace');
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent(
+      'No workspace',
+    );
   });
 
   it('renders workspace name with note count in "[name] \u00b7 [N] notes" format', () => {
     const mockNotes = Array.from({ length: 4 }, (_, i) => ({
-      id: i + 1, title: `Note ${i}`, content: '', format: 'markdown',
-      workspaceId: 1, createdAt: '2026-01-01T00:00:00+00:00',
-      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+      id: i + 1,
+      title: `Note ${i}`,
+      content: '',
+      format: 'markdown',
+      workspaceId: 1,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00',
+      deletedAt: null,
+      isTrashed: false,
     }));
     useWorkspaceStore.setState({
       activeWorkspaceId: 1,
@@ -28,14 +52,22 @@ describe('StatusBar', () => {
       filteredNotes: mockNotes,
     });
     render(<StatusBar />);
-    expect(screen.getByTestId('workspace-name')).toHaveTextContent('my-project \u00b7 4 notes');
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent(
+      'my-project \u00b7 4 notes',
+    );
   });
 
   it('renders "All Workspaces" with total note count when isAllWorkspaces is true', () => {
     const mockNotes = Array.from({ length: 10 }, (_, i) => ({
-      id: i + 1, title: `Note ${i}`, content: '', format: 'markdown',
-      workspaceId: i < 4 ? 1 : 2, createdAt: '2026-01-01T00:00:00+00:00',
-      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+      id: i + 1,
+      title: `Note ${i}`,
+      content: '',
+      format: 'markdown',
+      workspaceId: i < 4 ? 1 : 2,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00',
+      deletedAt: null,
+      isTrashed: false,
     }));
     useWorkspaceStore.setState({
       isAllWorkspaces: true,
@@ -45,14 +77,22 @@ describe('StatusBar', () => {
       filteredNotes: mockNotes,
     });
     render(<StatusBar />);
-    expect(screen.getByTestId('workspace-name')).toHaveTextContent('All Workspaces \u00b7 10 notes');
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent(
+      'All Workspaces \u00b7 10 notes',
+    );
   });
 
   it('renders singular "1 note" for single note count', () => {
     const singleNote = {
-      id: 1, title: 'Solo', content: '', format: 'markdown',
-      workspaceId: 1, createdAt: '2026-01-01T00:00:00+00:00',
-      updatedAt: '2026-01-01T00:00:00+00:00', deletedAt: null, isTrashed: false,
+      id: 1,
+      title: 'Solo',
+      content: '',
+      format: 'markdown',
+      workspaceId: 1,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00',
+      deletedAt: null,
+      isTrashed: false,
     };
     useWorkspaceStore.setState({
       activeWorkspaceId: 1,
@@ -61,9 +101,13 @@ describe('StatusBar', () => {
       filteredNotes: [singleNote],
     });
     render(<StatusBar />);
-    expect(screen.getByTestId('workspace-name')).toHaveTextContent('my-project \u00b7 1 note');
+    expect(screen.getByTestId('workspace-name')).toHaveTextContent(
+      'my-project \u00b7 1 note',
+    );
     // Verify it's NOT "1 notes" (plural)
-    expect(screen.getByTestId('workspace-name').textContent).not.toContain('1 notes');
+    expect(screen.getByTestId('workspace-name').textContent).not.toContain(
+      '1 notes',
+    );
   });
 
   it('workspace trigger is clickable (button element)', () => {
@@ -93,5 +137,21 @@ describe('StatusBar', () => {
     expect(toggle.style.height).toBe('24px');
     expect(toggle.style.display).toBe('flex');
     expect(toggle.parentElement?.style.gap).toBe('');
+  });
+
+  it('renders the command hint only after onboarding state loads within the session limit', () => {
+    useOnboardingStore.setState({ initialized: false, sessionsSeen: 0 });
+    const { rerender } = render(<StatusBar />);
+    expect(screen.queryByTestId('command-hint')).not.toBeInTheDocument();
+
+    useOnboardingStore.setState({ initialized: true, sessionsSeen: 4 });
+    rerender(<StatusBar />);
+    expect(screen.getByTestId('command-hint')).toHaveTextContent(
+      'Ctrl+P for commands',
+    );
+
+    useOnboardingStore.setState({ sessionsSeen: 5 });
+    rerender(<StatusBar />);
+    expect(screen.queryByTestId('command-hint')).not.toBeInTheDocument();
   });
 });

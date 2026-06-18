@@ -1,6 +1,8 @@
-//! macOS [`Platform`] implementation. RED-PHASE STUB (Stories 8.2, 8.6).
+//! macOS [`Platform`] implementation. Accessibility-permission methods (Story 8.2),
+//! paths/hotkey-backend selection (Stories 8.5/8.6), and `autostart_*` (DW-97 —
+//! delegated to `tauri-plugin-autostart`'s `LaunchAgent`) are implemented.
 
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use crate::errors::NoteyError;
 use crate::platform::{HotkeyBackend, Platform};
@@ -22,44 +24,82 @@ impl Platform for MacosPlatform {
     }
 
     fn data_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.5: ~/Library/Application Support/com.notey.app (per-user)")
+        // ~/Library/Application Support/com.notey.app, per-user (Story 8.5).
+        super::resolve_data_dir("com.notey.app")
     }
 
     fn config_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: ~/Library/Application Support/com.notey.app")
+        // ~/Library/Application Support/com.notey.app, per-user (Story 8.6).
+        super::resolve_config_dir("com.notey.app")
     }
 
     fn log_dir(&self) -> Result<PathBuf, NoteyError> {
-        todo!("Story 8.6: ~/Library/Logs/com.notey.app")
+        // ~/Library/Logs/com.notey.app, per-user (Story 8.6). `dirs` has no
+        // dedicated logs dir on macOS, so derive it from the home directory.
+        dirs::home_dir()
+            .map(|home| home.join("Library").join("Logs").join("com.notey.app"))
+            .ok_or_else(|| {
+                NoteyError::Config("Could not determine home directory for logs".to_string())
+            })
     }
 
     fn socket_path(&self) -> PathBuf {
-        todo!("Story 8.5: user-scoped temp-dir socket (per-user, 0600)")
+        // $XDG_RUNTIME_DIR/notey.sock or user-scoped temp fallback; bound 0600
+        // by socket_server (Story 8.5).
+        super::resolve_unix_socket()
     }
 
-    fn register_hotkey(&self, accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
-        todo!("Story 8.6: standard plugin registration for {accelerator}")
+    fn register_hotkey(&self, _accelerator: &str) -> Result<HotkeyBackend, NoteyError> {
+        // Story 8.6: macOS has a single global-shortcut backend (the standard
+        // plugin). The actual registration happens in `lib.rs`; this only reports
+        // the backend. (The Accessibility-permission gate is handled separately
+        // via `accessibility_permission_granted`, Story 8.2.)
+        Ok(HotkeyBackend::Standard)
     }
 
-    fn autostart_enable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: install LaunchAgent plist")
+    fn autostart_enable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        // DW-97: delegate to the shared tauri-plugin-autostart helper. The plugin
+        // is registered with MacosLauncher::LaunchAgent in lib.rs (Story 8.4).
+        super::autostart_enable(app)
     }
 
-    fn autostart_disable(&self) -> Result<(), NoteyError> {
-        todo!("Story 8.4: remove LaunchAgent plist")
+    fn autostart_disable(&self, app: &tauri::AppHandle) -> Result<(), NoteyError> {
+        super::autostart_disable(app)
     }
 
-    fn autostart_is_enabled(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.4: check for the LaunchAgent plist")
+    fn autostart_is_enabled(&self, app: &tauri::AppHandle) -> Result<bool, NoteyError> {
+        super::autostart_is_enabled(app)
     }
 
     fn accessibility_permission_granted(&self) -> Result<bool, NoteyError> {
-        todo!("Story 8.2: query AXIsProcessTrusted()")
+        // `AXIsProcessTrusted` reports whether the app is allowed to use the
+        // Accessibility APIs the global hotkey depends on (Story 8.2 / FR54). It
+        // returns CoreFoundation's `Boolean` (an `unsigned char`), so bind it as
+        // `u8` and compare — a Rust `bool` would be UB for any byte other than
+        // 0/1. The call is side-effect-free and never blocks.
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrusted() -> u8;
+        }
+        Ok(unsafe { AXIsProcessTrusted() } != 0)
     }
 
     fn open_accessibility_settings(&self) -> Result<(), NoteyError> {
-        todo!(
-            "Story 8.2: open x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        )
+        // Deep-link straight to System Settings > Privacy & Security >
+        // Accessibility. `open` hands the URL to LaunchServices and exits
+        // quickly; wait for that short-lived helper so failures are reported and
+        // the child process is reaped.
+        let status = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .status()
+            .map_err(NoteyError::Io)?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(NoteyError::Io(io::Error::other(format!(
+                "open accessibility settings exited with {status}"
+            ))))
+        }
     }
 }

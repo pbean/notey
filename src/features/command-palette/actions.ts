@@ -8,6 +8,7 @@ import { flushSave } from '../editor/hooks/useAutoSave';
 import { normalizeLayoutMode, nextLayoutMode } from '../settings/layoutMode';
 import { useSettingsStore } from '../settings/store';
 import { singleflight } from '../../lib/singleflight';
+import { withTimeout } from '../../lib/withTimeout';
 
 /**
  * Create a new note, open it in a tab, and load it into the editor.
@@ -25,23 +26,30 @@ export async function createNewNote(): Promise<void> {
     const format = useEditorStore.getState().format;
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
 
-    const result = await commands.createNote(format, workspaceId);
-    if (result.status === 'error') {
-      console.error('createNote failed:', result.error);
-      return;
-    }
-
-    const note = result.data;
-    useTabStore.getState().openTab(note.id, 'New note');
-
-    await useEditorStore.getState().loadNote(note.id);
-    // loadNote sets saveStatus to 'failed' on error — close the orphaned tab
-    if (useEditorStore.getState().saveStatus === 'failed') {
-      const { tabs } = useTabStore.getState();
-      const tabIndex = tabs.findIndex((t) => t.noteId === note.id);
-      if (tabIndex !== -1) {
-        useTabStore.getState().closeTab(tabIndex);
+    try {
+      const result = await withTimeout(commands.createNote(format, workspaceId), {
+        label: 'create_note',
+      });
+      if (result.status === 'error') {
+        console.error('createNote failed:', result.error);
+        return;
       }
+
+      const note = result.data;
+      useTabStore.getState().openTab(note.id, 'New note');
+
+      await useEditorStore.getState().loadNote(note.id);
+      // loadNote sets saveStatus to 'failed' on error — close the orphaned tab
+      if (useEditorStore.getState().saveStatus === 'failed') {
+        const { tabs } = useTabStore.getState();
+        const tabIndex = tabs.findIndex((t) => t.noteId === note.id);
+        if (tabIndex !== -1) {
+          useTabStore.getState().closeTab(tabIndex);
+        }
+      }
+    } catch (error) {
+      console.error('createNote threw:', error);
+      return;
     }
   });
 }
@@ -247,7 +255,9 @@ function bindSystemThemeListener(): void {
 async function applyLayoutModeToWindow(layoutMode: string): Promise<boolean> {
   const mode = normalizeLayoutMode(layoutMode);
   try {
-    const result = await commands.applyLayoutMode(mode);
+    const result = await withTimeout(commands.applyLayoutMode(mode), {
+      label: 'apply_layout_mode',
+    });
     if (result.status === 'error') {
       console.error('applyLayoutMode failed:', result.error);
       return false;
@@ -298,7 +308,9 @@ function applyFontFamily(family: string): void {
 async function persistSettingsUpdate(partial: PartialAppConfig, context: string): Promise<boolean> {
   const save = async () => {
     try {
-      const result = await commands.updateConfig(partial);
+      const result = await withTimeout(commands.updateConfig(partial), {
+        label: 'update_config',
+      });
       if (result.status === 'error') {
         console.error(`updateConfig failed in ${context}:`, result.error);
         return false;
@@ -370,32 +382,78 @@ export async function applyStartupConfig(): Promise<void> {
  */
 export async function toggleTheme(): Promise<void> {
   await singleflight('toggle-theme', async () => {
-    const configResult = await commands.getConfig();
-    if (configResult.status === 'error') {
-      console.error('getConfig failed:', configResult.error);
+    try {
+      const configResult = await withTimeout(commands.getConfig(), {
+        label: 'get_config',
+      });
+      if (configResult.status === 'error') {
+        console.error('getConfig failed:', configResult.error);
+        return;
+      }
+
+      const current = configResult.data.general?.theme ?? 'dark';
+      const currentIsDark = current === 'dark' || (current === 'system' && systemPrefersDark());
+      const next = currentIsDark ? 'light' : 'dark';
+
+      const updateResult = await withTimeout(
+        commands.updateConfig({
+          general: { theme: next, layoutMode: null },
+          editor: null,
+          hotkey: null,
+          shortcuts: null,
+        }),
+        { label: 'update_config' },
+      );
+      if (updateResult.status === 'error') {
+        console.error('updateConfig failed:', updateResult.error);
+        return;
+      }
+
+      // Mark theme as user-controlled before applying, so a concurrent startup
+      // application (still awaiting its getConfig) will skip it. Set only on the
+      // success path — a failed toggle must not suppress startup application.
+      userToggled.theme = true;
+      applyThemeClass(next);
+    } catch (error) {
+      console.error('toggleTheme threw:', error);
       return;
     }
+  });
+}
 
-    const current = configResult.data.general?.theme ?? 'dark';
-    const currentIsDark = current === 'dark' || (current === 'system' && systemPrefersDark());
-    const next = currentIsDark ? 'light' : 'dark';
+/**
+ * Toggle auto-start on login (Story 8.4). Reads persisted config, reconciles to
+ * the live OS registration when available, then delegates to the settings store's
+ * `setAutostart` (plugin registration + persistence + toast). Guarded against
+ * concurrent invocations (e.g. key repeat) to avoid a lost-update race.
+ */
+export async function toggleAutostart(): Promise<void> {
+  await singleflight('toggle-autostart', async () => {
+    try {
+      const configResult = await withTimeout(commands.getConfig(), {
+        label: 'get_config',
+      });
+      if (configResult.status === 'error') {
+        console.error('getConfig failed:', configResult.error);
+        return;
+      }
 
-    const updateResult = await commands.updateConfig({
-      general: { theme: next, layoutMode: null },
-      editor: null,
-      hotkey: null,
-      shortcuts: null,
-    });
-    if (updateResult.status === 'error') {
-      console.error('updateConfig failed:', updateResult.error);
+      let current = configResult.data.general?.autoStart ?? false;
+      const liveResult = await withTimeout(commands.getAutostart(), {
+        label: 'get_autostart',
+      });
+      if (liveResult.status === 'ok') {
+        current = liveResult.data;
+      } else {
+        console.error('getAutostart failed:', liveResult.error);
+      }
+
+      const next = !current;
+      await useSettingsStore.getState().setAutostart(next);
+    } catch (error) {
+      console.error('toggleAutostart threw:', error);
       return;
     }
-
-    // Mark theme as user-controlled before applying, so a concurrent startup
-    // application (still awaiting its getConfig) will skip it. Set only on the
-    // success path — a failed toggle must not suppress startup application.
-    userToggled.theme = true;
-    applyThemeClass(next);
   });
 }
 
@@ -414,29 +472,39 @@ export function toggleFormat(): void {
  */
 export async function toggleLayoutMode(): Promise<void> {
   await singleflight('toggle-layout-mode', async () => {
-    const configResult = await commands.getConfig();
-    if (configResult.status === 'error') {
-      console.error('getConfig failed:', configResult.error);
+    try {
+      const configResult = await withTimeout(commands.getConfig(), {
+        label: 'get_config',
+      });
+      if (configResult.status === 'error') {
+        console.error('getConfig failed:', configResult.error);
+        return;
+      }
+
+      const next = nextLayoutMode(configResult.data.general?.layoutMode);
+
+      const updateResult = await withTimeout(
+        commands.updateConfig({
+          general: { theme: null, layoutMode: next },
+          editor: null,
+          hotkey: null,
+          shortcuts: null,
+        }),
+        { label: 'update_config' },
+      );
+      if (updateResult.status === 'error') {
+        console.error('updateConfig failed:', updateResult.error);
+        return;
+      }
+
+      // Mark layout as user-controlled before applying (see toggleTheme). Success
+      // path only, so a failed toggle does not suppress startup application.
+      userToggled.layoutMode = true;
+      await applyLayoutModeToWindow(next);
+    } catch (error) {
+      console.error('toggleLayoutMode threw:', error);
       return;
     }
-
-    const next = nextLayoutMode(configResult.data.general?.layoutMode);
-
-    const updateResult = await commands.updateConfig({
-      general: { theme: null, layoutMode: next },
-      editor: null,
-      hotkey: null,
-      shortcuts: null,
-    });
-    if (updateResult.status === 'error') {
-      console.error('updateConfig failed:', updateResult.error);
-      return;
-    }
-
-    // Mark layout as user-controlled before applying (see toggleTheme). Success
-    // path only, so a failed toggle does not suppress startup application.
-    userToggled.layoutMode = true;
-    await applyLayoutModeToWindow(next);
   });
 }
 

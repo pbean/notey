@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { commands } from '../../../generated/bindings';
 import { useEditorStore } from '../store';
 import { useWorkspaceStore } from '../../workspace/store';
+import { withTimeout } from '../../../lib/withTimeout';
 
 /** Module-level reference to the active hook instance's flush function. */
 let registeredFlush: (() => Promise<void>) | null = null;
@@ -42,7 +43,9 @@ async function performSave(
     if (isCreatingRef) isCreatingRef.current = true;
     try {
       const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
-      const createResult = await commands.createNote(format, workspaceId);
+      const createResult = await withTimeout(commands.createNote(format, workspaceId), {
+        label: 'create_note',
+      });
       if (createResult.status === 'error') {
         setSaveStatus('failed');
         console.error('createNote failed:', createResult.error);
@@ -50,6 +53,10 @@ async function performSave(
       }
       noteId = createResult.data.id;
       setActiveNote(noteId);
+    } catch (error) {
+      setSaveStatus('failed');
+      console.error('createNote threw:', error);
+      return;
     } finally {
       if (isCreatingRef) isCreatingRef.current = false;
     }
@@ -58,14 +65,22 @@ async function performSave(
   const firstLine = content.split('\n')[0].trim();
   const title = firstLine.slice(0, 100) || 'Untitled';
 
-  const updateResult = await commands.updateNote(noteId, title, content, null);
-  if (updateResult.status === 'error') {
+  try {
+    const updateResult = await withTimeout(commands.updateNote(noteId, title, content, null), {
+      label: 'update_note',
+    });
+    if (updateResult.status === 'error') {
+      setSaveStatus('failed');
+      console.error('updateNote failed:', updateResult.error);
+      return;
+    }
+
+    markSaved(updateResult.data.updatedAt);
+  } catch (error) {
     setSaveStatus('failed');
-    console.error('updateNote failed:', updateResult.error);
+    console.error('updateNote threw:', error);
     return;
   }
-
-  markSaved(updateResult.data.updatedAt);
 }
 
 /**

@@ -37,15 +37,21 @@ pub enum Theme {
 }
 
 /// General application settings.
-///
 /// `theme` is one of `system` (the default — follow the OS `prefers-color-scheme`
 /// until the user picks a theme), `dark`, or `light`. A saved manual `dark`/`light`
 /// preference overrides the OS setting on restart.
+/// `auto_start` (serialized `[general] autoStart`) is the persisted auto-start-on-login
+/// preference (Story 8.4 / FR41–FR43). It defaults to `false` and tolerates a missing
+/// key on older config files via serde. The OS launch agent is managed by
+/// `tauri-plugin-autostart`; this field is the single source of truth the app
+/// reconciles the OS registration to on every startup.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
     pub theme: Theme,
     pub layout_mode: String,
+    #[serde(default, alias = "auto_start")]
+    pub auto_start: bool,
 }
 
 /// Editor-specific settings.
@@ -170,6 +176,8 @@ impl Default for GeneralConfig {
             // The default window mode (Story 7.5). `floating` is the always-on-top
             // 600×400 capture overlay — the app's primary form factor.
             layout_mode: "floating".to_string(),
+            // Auto-start on login is opt-in (Story 8.4).
+            auto_start: false,
         }
     }
 }
@@ -219,5 +227,35 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.shortcuts.command_palette, "Ctrl+P");
         assert_eq!(config.shortcuts.close_tab, "Ctrl+W");
+    }
+
+    #[test]
+    fn auto_start_defaults_to_false() {
+        // Story 8.4: a fresh install has auto-start opt-in (disabled).
+        assert!(!AppConfig::default().general.auto_start);
+    }
+
+    #[test]
+    fn auto_start_roundtrips_and_tolerates_missing_key() {
+        // A config without the key deserializes to the false default (serde default).
+        let without: AppConfig =
+            toml::from_str("[general]\ntheme = \"dark\"\nlayoutMode = \"floating\"\n").unwrap();
+        assert!(!without.general.auto_start);
+
+        // The approved story text uses the Rust/TOML spelling in some places; accept it
+        // for hand-edited configs while keeping the existing camelCase emitted schema.
+        let snake_case: AppConfig = toml::from_str(
+            "[general]\ntheme = \"dark\"\nlayoutMode = \"floating\"\nauto_start = true\n",
+        )
+        .unwrap();
+        assert!(snake_case.general.auto_start);
+
+        // An explicit `true` round-trips through serialize → deserialize.
+        let mut cfg = AppConfig::default();
+        cfg.general.auto_start = true;
+        let serialized = toml::to_string(&cfg).unwrap();
+        assert!(serialized.contains("autoStart = true"));
+        let parsed: AppConfig = toml::from_str(&serialized).unwrap();
+        assert!(parsed.general.auto_start);
     }
 }

@@ -74,7 +74,11 @@ pub fn compute_layout(
     work_area: Option<WorkArea>,
     scale_factor: f64,
 ) -> Result<LayoutPlan, NoteyError> {
-    let scale = if scale_factor > 0.0 { scale_factor } else { 1.0 };
+    let scale = if scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
 
     match mode {
         "floating" => Ok(LayoutPlan {
@@ -125,7 +129,9 @@ pub fn compute_layout(
             skip_taskbar: false,
             maximize: true,
         }),
-        other => Err(NoteyError::Validation(format!("Unknown layout mode: {other}"))),
+        other => Err(NoteyError::Validation(format!(
+            "Unknown layout mode: {other}"
+        ))),
     }
 }
 

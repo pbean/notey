@@ -1,8 +1,8 @@
 mod helpers;
 
 use helpers::factories::{create_temp_db, setup_test_db, NoteBuilder};
-use tauri_app_lib::errors::NoteyError;
-use tauri_app_lib::services::workspace_service;
+use notey_lib::errors::NoteyError;
+use notey_lib::services::workspace_service;
 use tempfile::TempDir;
 
 // UNIT-2.1-001: workspaces table created with correct schema by migration
@@ -167,7 +167,7 @@ fn test_migration_applies_on_existing_db_with_notes() {
 
     // Verify re-init doesn't break anything
     drop(conn);
-    let conn2 = tauri_app_lib::db::init_db(dir.path().to_path_buf()).expect("re-init failed");
+    let conn2 = notey_lib::db::init_db(dir.path().to_path_buf()).expect("re-init failed");
     let note_count2: i64 = conn2
         .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
         .expect("count notes after re-init");
@@ -674,7 +674,7 @@ fn test_resolve_workspace_then_create_note_with_workspace_id() {
     let ws = workspace_service::resolve_workspace(&conn, dir.path().to_str().unwrap())
         .expect("resolve_workspace failed");
 
-    let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
+    let note = notey_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
         .expect("create_note failed");
 
     assert_eq!(
@@ -685,7 +685,7 @@ fn test_resolve_workspace_then_create_note_with_workspace_id() {
 
     // Verify via independent get_note
     let fetched =
-        tauri_app_lib::services::notes::get_note(&conn, note.id).expect("get_note failed");
+        notey_lib::services::notes::get_note(&conn, note.id).expect("get_note failed");
     assert_eq!(
         fetched.workspace_id,
         Some(ws.id),
@@ -722,7 +722,7 @@ fn test_list_notes_filtered_by_workspace_integration() {
         .insert(&conn);
     let _note_null = NoteBuilder::new().title("Unscoped").insert(&conn); // workspace_id = NULL
 
-    let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws_a.id))
+    let result = notey_lib::services::notes::list_notes(&conn, Some(ws_a.id))
         .expect("list_notes filtered");
     assert_eq!(result.len(), 2, "should return only notes in ws_a");
     assert!(
@@ -758,7 +758,7 @@ fn test_list_notes_filtered_excludes_trashed_integration() {
         .trashed()
         .insert(&conn);
 
-    let result = tauri_app_lib::services::notes::list_notes(&conn, Some(ws.id))
+    let result = notey_lib::services::notes::list_notes(&conn, Some(ws.id))
         .expect("list_notes filtered");
     assert_eq!(result.len(), 1, "trashed note should be excluded");
     assert_eq!(result[0].title, "Active");
@@ -779,7 +779,7 @@ fn test_list_notes_preserves_workspace_id() {
         .insert(&conn);
     NoteBuilder::new().title("Unscoped").insert(&conn);
 
-    let notes = tauri_app_lib::services::notes::list_notes(&conn, None).expect("list_notes failed");
+    let notes = notey_lib::services::notes::list_notes(&conn, None).expect("list_notes failed");
     assert_eq!(notes.len(), 2);
 
     let scoped = notes
@@ -810,12 +810,12 @@ fn test_update_note_preserves_workspace_id() {
     let ws = workspace_service::create_workspace(&conn, "Project", dir.path().to_str().unwrap())
         .expect("create_workspace failed");
 
-    let note = tauri_app_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
+    let note = notey_lib::services::notes::create_note(&conn, "markdown", Some(ws.id))
         .expect("create_note failed");
     assert_eq!(note.workspace_id, Some(ws.id));
 
     // Update title and content — workspace_id should remain unchanged
-    let updated = tauri_app_lib::services::notes::update_note(
+    let updated = notey_lib::services::notes::update_note(
         &conn,
         note.id,
         Some("Updated Title".to_string()),

@@ -7,14 +7,5 @@
     "key": "1",
     "label": "Keep monitoring specta",
     "resolution": ""
-  },
-  "DW-85": {
-    "answered_at": "2026-06-13",
-    "bundle_name": "",
-    "effect": "keep-open",
-    "intent": "Keep tracking until a cross-platform timeout + worker-budget design (covering the Windows named-pipe no-timeout constraint) is decided.",
-    "key": "1",
-    "label": "Defer until cross-platform design agreed",
-    "resolution": ""
   }
 }

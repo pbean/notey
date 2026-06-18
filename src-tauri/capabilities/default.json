@@ -5,12 +5,19 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
     "opener:default",
     "dialog:allow-open",
     "dialog:allow-save",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    "allow-set-autostart",
+    "allow-get-autostart",
     "allow-create-note",
     "allow-get-note",
     "allow-update-note",
@@ -21,6 +28,11 @@
     "allow-list-notes",
     "allow-get-config",
     "allow-update-config",
+    "allow-get-onboarding-state",
+    "allow-complete-onboarding",
+    "allow-increment-onboarding-session",
+    "allow-check-accessibility-permission",
+    "allow-open-accessibility-settings",
     "allow-dismiss-window",
     "allow-apply-layout-mode",
     "allow-create-workspace",
@@ -33,6 +45,7 @@
     "allow-rebuild-fts-index",
     "allow-search-notes",
     "allow-export-markdown",
-    "allow-export-json"
+    "allow-export-json",
+    "allow-get-hotkey-status"
   ]
 }

@@ -359,4 +359,31 @@ describe('SettingsPanel', () => {
     fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(screen.getByTestId('settings-done'));
   });
+
+  it('toggles auto-start on and persists via set_autostart (Story 8.4)', async () => {
+    const cfgOn = buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: true } });
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_config')
+        return Promise.resolve(
+          buildConfig({ general: { theme: 'system', layoutMode: 'floating', autoStart: false } }),
+        );
+      if (cmd === 'get_autostart') return Promise.resolve(false);
+      if (cmd === 'set_autostart') return Promise.resolve(cfgOn);
+      return Promise.reject(new Error(`unmocked: ${cmd}`));
+    });
+    await useSettingsStore.getState().open();
+    render(<SettingsPanel />);
+
+    const toggle = screen.getByTestId('autostart-toggle');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('set_autostart', { enabled: true });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('autostart-toggle')).toHaveAttribute('aria-checked', 'true');
+    });
+  });
 });

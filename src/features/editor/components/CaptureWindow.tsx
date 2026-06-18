@@ -13,6 +13,7 @@ import { TrashPanel } from '../../trash/components/TrashPanel';
 import { useTrashStore } from '../../trash/store';
 import { SettingsPanel } from '../../settings/components/SettingsPanel';
 import { useSettingsStore } from '../../settings/store';
+import { OnboardingOverlay } from '../../onboarding/components/OnboardingOverlay';
 import { matchesShortcut } from '../../settings/shortcuts';
 import { createNewNote, toggleTheme } from '../../command-palette/actions';
 
@@ -136,6 +137,7 @@ export function CaptureWindow() {
         {isNoteListOpen && <NoteListPanel />}
         {isTrashOpen && <TrashPanel />}
         {isSettingsOpen && <SettingsPanel />}
+        <OnboardingOverlay />
       </div>
       <CommandPalette />
       <StatusBar />

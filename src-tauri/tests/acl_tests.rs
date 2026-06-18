@@ -14,6 +14,13 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-list-notes",
     "allow-get-config",
     "allow-update-config",
+    "allow-get-onboarding-state",
+    "allow-complete-onboarding",
+    "allow-increment-onboarding-session",
+    "allow-check-accessibility-permission",
+    "allow-open-accessibility-settings",
+    "allow-set-autostart",
+    "allow-get-autostart",
     "allow-dismiss-window",
     "allow-apply-layout-mode",
     "allow-create-workspace",
@@ -27,6 +34,7 @@ const EXPECTED_COMMANDS: &[&str] = &[
     "allow-search-notes",
     "allow-export-markdown",
     "allow-export-json",
+    "allow-get-hotkey-status",
 ];
 
 // P0-INT-006: Tauri ACL rejects unauthorized commands

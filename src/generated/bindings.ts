@@ -33,6 +33,31 @@ export const commands = {
 	 *  cannot clobber each other from stale snapshots.
 	 */
 	updateConfig: (partial: PartialAppConfig) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("update_config", { partial })),
+	// Returns the persisted onboarding state (completion flag + session count).
+	getOnboardingState: () => typedError<OnboardingState, NoteyError>(__TAURI_INVOKE("get_onboarding_state")),
+	// Marks onboarding complete and persists it. Idempotent.
+	completeOnboarding: () => typedError<null, NoteyError>(__TAURI_INVOKE("complete_onboarding")),
+	// Increments the persisted session counter and returns the new count.
+	incrementOnboardingSession: () => typedError<number, NoteyError>(__TAURI_INVOKE("increment_onboarding_session")),
+	/**
+	 *  Whether the OS has granted the accessibility permission the global hotkey
+	 *  depends on. Always `Ok(true)` off macOS (no such gate).
+	 */
+	checkAccessibilityPermission: () => typedError<boolean, NoteyError>(__TAURI_INVOKE("check_accessibility_permission")),
+	/**
+	 *  Open the OS settings pane where the user grants accessibility permission.
+	 *  No-op off macOS.
+	 */
+	openAccessibilitySettings: () => typedError<null, NoteyError>(__TAURI_INVOKE("open_accessibility_settings")),
+	// Enable/disable auto-start via the plugin, persist atomically, and return committed config.
+	setAutostart: (enabled: boolean) => typedError<AppConfig, NoteyError>(__TAURI_INVOKE("set_autostart", { enabled })),
+	/**
+	 *  Whether auto-start on login is currently registered at the OS level.
+	 *  Reports the live platform state via the autostart plugin (the source of truth
+	 *  for the *active* registration), letting the UI reconcile its toggle with the
+	 *  real OS state. Off desktop there is no launch agent, so it reports `false`.
+	 */
+	getAutostart: () => typedError<boolean, NoteyError>(__TAURI_INVOKE("get_autostart")),
 	// Hides the calling window (dismiss without destroy).
 	dismissWindow: () => typedError<null, NoteyError>(__TAURI_INVOKE("dismiss_window")),
 	/**
@@ -79,10 +104,19 @@ export const commands = {
 	 *  export service.
 	 */
 	exportJson: (filePath: string) => typedError<number, NoteyError>(__TAURI_INVOKE("export_json", { filePath })),
+	/**
+	 *  Return the global-shortcut backend status for the current session.
+	 * 
+	 *  Reads the value recorded during startup hotkey detection. A poisoned lock is
+	 *  recovered by cloning the inner value — the status is plain data with no
+	 *  transactional state to repair.
+	 */
+	getHotkeyStatus: () => __TAURI_INVOKE<HotkeyStatus>("get_hotkey_status"),
 };
 
 /** Events */
 export const events = {
+	hotkeyPressed: makeEvent<HotkeyPressed>("hotkey-pressed"),
 	noteCreated: makeEvent<NoteCreated>("note-created"),
 };
 
@@ -119,19 +153,52 @@ export type EditorConfig = {
 
 /**
  *  General application settings.
- * 
  *  `theme` is one of `system` (the default — follow the OS `prefers-color-scheme`
  *  until the user picks a theme), `dark`, or `light`. A saved manual `dark`/`light`
  *  preference overrides the OS setting on restart.
+ *  `auto_start` (serialized `[general] autoStart`) is the persisted auto-start-on-login
+ *  preference (Story 8.4 / FR41–FR43). It defaults to `false` and tolerates a missing
+ *  key on older config files via serde. The OS launch agent is managed by
+ *  `tauri-plugin-autostart`; this field is the single source of truth the app
+ *  reconciles the OS registration to on every startup.
  */
 export type GeneralConfig = {
 	theme: Theme,
 	layoutMode: string,
+	autoStart?: boolean,
 };
 
 // Hotkey bindings.
 export type HotkeyConfig = {
 	globalShortcut: string,
+};
+
+/**
+ *  The `hotkey-pressed` event — emitted whenever the registered global capture
+ *  shortcut fires.
+ * 
+ *  First-run onboarding (Story 8.1) dismisses its overlay when the user presses
+ *  the hotkey, but the OS-level shortcut hides the window without reloading the
+ *  webview, and a registered global shortcut does not reliably deliver a keydown
+ *  to the focused page across platforms. The shortcut handler emits this typed
+ *  event; the visible overlay listens via the generated `events.hotkeyPressed`
+ *  binding and completes onboarding. It is a marker event with no payload.
+ */
+export type HotkeyPressed = null;
+
+/**
+ *  Availability of the global-shortcut backend for the current session.
+ * 
+ *  Wire shape (camelCase): `{ "available": false, "reason": "<message>" }`.
+ */
+export type HotkeyStatus = {
+	// `true` when a usable global-shortcut backend was found at startup.
+	available: boolean,
+	/**
+	 *  Human-readable reason the backend is unavailable, when `available` is
+	 *  `false`. `None` when the hotkey is available.
+	 */
+	reason: string | null,
 };
 
 export type Note = {
@@ -165,6 +232,26 @@ export type NoteCreatedData = {
 };
 
 export type NoteyError = { type: "Database" } | { type: "NotFound" } | { type: "Workspace" } | { type: "Io" } | { type: "Validation"; message: string } | { type: "Config"; message: string };
+
+/**
+ *  Persisted first-run onboarding state.
+ * 
+ *  Serialized to `onboarding.toml`. `complete` gates the one-time onboarding
+ *  overlay; `sessions_seen` counts app launches so the early command hint can
+ *  retire itself after [`COMMAND_HINT_SESSION_LIMIT`] sessions.
+ */
+export type OnboardingState = {
+	/**
+	 *  `true` once the user has dismissed the onboarding overlay (by pressing the
+	 *  hotkey or Esc). The overlay is never shown again once this is set.
+	 */
+	complete?: boolean,
+	/**
+	 *  How many sessions the user has started. Drives the progressive
+	 *  command-palette hint in the status bar.
+	 */
+	sessionsSeen?: number,
+};
 
 // Partial config for updates — all fields optional.
 export type PartialAppConfig = {

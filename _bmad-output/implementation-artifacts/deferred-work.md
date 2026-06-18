@@ -706,7 +706,9 @@ resolution: bindingsFromConfig now applies first-binding-wins dedupe at load (re
 origin: code review of spec-singleflight-guard-helper.md (edge-case + blind review), 2026-06-14
 location: src/lib/singleflight.ts:50
 reason: The shared `singleflight` helper only clears an in-flight key in `started.finally(...)`. If the wrapped operation never settles (e.g. a Tauri IPC/dialog promise that hangs), the key stays in the `inFlight` map forever and every later same-key call coalesces onto the dead promise, so that command (createNewNote/toggleTheme/export/note-list refresh) is disabled until reload. This is a PRE-EXISTING gap inherited from the hand-rolled boolean guards it replaced (they likewise never reset on a hung promise), surfaced incidentally by this refactor — it is NOT a regression. Adding a timeout/abort to the helper is explicitly out of scope per the spec's "Never" boundary (no timers/retries in the helper), so it needs a deliberate design call: whether to add an optional abort/timeout to the helper or to push timeouts to the IPC layer (note Story 6.7 already added a 5s timeout on the CLI side).
-status: open
+status: done 2026-06-16
+resolution: Added `src/lib/withTimeout.ts` (IpcTimeoutError + 5s default / 60s export bound) and wrapped the Tauri `commands.*` invokes inside every singleflight-wrapped flight (create-note, toggle-theme, toggle-layout-mode, trash-active-note, note-list-refresh, export-json, export-markdown), including helper IPC reached through `flushSave()` and `loadNote()`; a hung invoke now rejects and releases its singleflight key through existing error paths. singleflight.ts left timer-free (unchanged); native dialogs left unwrapped.
+decision: 2026-06-16 Timeout at the IPC layer — Add a timeout/abort wrapper around the Tauri invoke layer (mirroring the CLI's 5s timeout from Story 6.7) so wrapped operations always settle, keeping singleflight timer-free and respecting its 'Never' boundary.
 
 ### DW-91: First-feature E2E leaves orphaned marker notes if it fails mid-cycle
 
@@ -744,4 +746,42 @@ status: open
 origin: local verification of epic-6 retro item-1 (E2E), 2026-06-16
 location: e2e/run.mjs (cliLiveSyncTests, waitForAppSocket / realInstancePresent guard)
 reason: The CLI live-sync suite originally pinned a unique per-run `NOTEY_SOCKET_PATH` so the test app and CLI rendezvous on their own endpoint, isolated from any real notey instance. This relies on the env var propagating to the tauri-driver-launched app. It holds on CI's older Ubuntu `webkit2gtk-driver`, but a modern WebKitWebDriver (verified locally on `webkit2gtk-4.1 2.52.4`) **resets the launched app's environment** — stripping `NOTEY_SOCKET_PATH` and forcing `XDG_RUNTIME_DIR` back to the real session value — and `tauri-driver 2.0.6` forwards only `{binary, args}` (no env passthrough). So locally the app always binds the default `$XDG_RUNTIME_DIR/notey.sock`, diverging from the per-run path the CLI used → `notey add` failed exit-2 ("not running") and the suite was 14/16 locally while green on CI. Fixed test-only by discovering the socket the app actually bound (probe configured path + `$XDG_RUNTIME_DIR/notey.sock` for liveness) and pointing the CLI there — local now 16/16, CI unchanged (it matches the first candidate). Residual limitation: because the test app falls back to the *default* socket locally, the suite cannot isolate from a real running notey; it now detects a live pre-existing instance and skips the live-sync suite with an actionable message rather than hijacking it. Proper isolation would need either an env-passthrough in a newer tauri-driver or an app-level `--socket-path` arg routed via `tauri:options.args` (app source change; deferred). Test-harness robustness, not a product defect.
+status: done 2026-06-16
+resolution: Added a permissive `--socket-path` parser to `socket_server::socket_path()` (precedence: CLI arg > `NOTEY_SOCKET_PATH` > default) with unit tests, and routed a per-run `--socket-path` through `tauri:options.args` in `e2e/run.mjs` (via `createSession(application, args)`); the live-sync suite now binds an isolated endpoint regardless of env stripping, so the `realInstancePresent` skip guard and multi-candidate socket discovery were removed.
+decision: 2026-06-16 App-level --socket-path arg — Add a --socket-path CLI arg to the desktop app that overrides the socket path, and route a per-run unique path through tauri:options.args in e2e/run.mjs so each E2E run binds an isolated endpoint independent of env propagation.
+
+### DW-96: Native Wayland global-shortcut portal via `ashpd` (fast-follow)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src-tauri/src/platform/linux.rs (register_hotkey WaylandPortal arm); test linux_hotkey_falls_back_to_wayland_portal (#[ignore])
+severity: medium
+reason: PRD (prd.md:144,323,423) and architecture.md (49,870) explicitly scope the native xdg-desktop-portal GlobalShortcuts integration as a post-v1 fast-follow gated on Tauri global-hotkey PR #162; v1's Wayland fallback is XWayland (epic-8 context "XWayland is the baseline fallback for v1"). The trait + HotkeyBackend::WaylandPortal enum already anticipate it; implementing the real ashpd D-Bus registration + activation-signal wiring needs a Wayland harness (un-CI-testable) and a new async dependency. Deferred from the 8.6 capstone to keep that story CI-verifiable.
 status: open
+
+### DW-97: Route auto-start through the `Platform` trait (autostart_enable/disable/is_enabled)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src-tauri/src/platform/{linux,macos,windows}.rs (autostart_* methods, currently todo!())
+severity: low
+reason: The trait's autostart_* methods take only &self with no Tauri AppHandle, but the real mechanism (tauri-plugin-autostart via app.autolaunch()) requires the handle and already fully satisfies FR41-43 from Story 8.4 (commands/autostart.rs + lib.rs reconcile). Routing through the trait would mean reimplementing the plugin's plist/.desktop/registry logic by hand — a refactor with no functional gain and real cross-platform risk. Needs a trait-signature redesign (pass the handle, or move autostart off the path-trait) before it is worth doing. The todo!() stubs are relabeled to point here.
+status: done 2026-06-17
+resolution: Redesigned the `Platform` trait's `autostart_enable/disable/is_enabled` to take `&tauri::AppHandle` (kept object-safe). Added shared `pub(crate)` `autostart_*` helpers in `platform/mod.rs` that delegate to `app.autolaunch()` (one call site, no per-OS reimplementation); each of linux/macos/windows now delegates to them instead of `todo!()`. Switched `commands/autostart.rs` (`set_autostart` incl. rollback, `get_autostart`) and the `lib.rs` startup reconcile to route through `crate::platform::current()`. No behavior/IPC/bindings change; FR41–43 preserved. Verified: cargo build, clippy -D warnings, autostart_tests + platform_tests green, no `.autolaunch()` call sites outside `platform/mod.rs`, bindings.ts unchanged.
+decision: 2026-06-17 Redesign trait + route — Redesign the Platform trait's autostart_* signatures to accept the Tauri AppHandle (or move autostart off the path-trait into a dedicated abstraction), then implement autostart_enable/disable/is_enabled on each platform by delegating to tauri-plugin-autostart's autolaunch(), and switch commands/autostart.rs to call through the trait.
+
+### DW-98: CI release pipeline producing artifacts for all 5 targets (FR — AC4 of 8.6)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: .github/workflows/ (new release.yml; ci.yml currently runs tests + a Linux debug build only)
+severity: medium
+reason: AC4 of story 8.6 wants build artifacts for Windows x64, macOS x64, macOS ARM64, Linux x64, Linux ARM64 (via tauri-apps/tauri-action on tag push). This is a standalone ops/infra deliverable that cannot be exercised by this session's cargo test / clippy / vitest gate (it only runs on a release tag), so adding an unverifiable workflow here would give no confidence. Belongs in its own release-engineering PR.
+status: done 2026-06-17
+resolution: Added .github/workflows/release.yml — tag-push (`v*`) + workflow_dispatch trigger with explicit releaseTag input, tauri-action@v0 with a 5-entry fail-fast:false matrix (macos-latest ARM64, macos-15-intel x64, ubuntu-22.04, native ubuntu-22.04-arm, windows-latest), pinned nightly-2026-04-03 toolchain, draft GitHub Release. Validated with YAML parse; actionlint was unavailable in the review environment.
+
+### DW-99: User-facing notification when the global shortcut is unavailable on the compositor (FR57)
+
+origin: bmad-auto-dev split of spec-8-6-cross-platform-verification-wayland-fallback.md, 2026-06-17
+location: src/ (frontend toast/dialog) + src-tauri/src/lib.rs (global-shortcut setup)
+severity: low
+reason: FR57 / AC2 asks that the user be notified when no hotkey backend works on their compositor. Story 8.6 implements the backend detection (Platform::register_hotkey) and a clear startup warning log for the unavailable case, but the user-facing UI surface (toast/dialog + a typed event) is separable frontend work. Deferred to keep 8.6 backend-only and CI-verifiable; the backend signal it needs is in place.
+status: done 2026-06-17
+resolution: 2026-06-17 (spec-dw-hotkey-unavailable-user-notification.md). The `register_hotkey` Err arm in lib.rs now records the outcome in managed `Mutex<HotkeyStatus>` state (new models/hotkey.rs); a thin sync command `get_hotkey_status` (commands/hotkey.rs, +ACL/perm) exposes it. Frontend `startHotkeyUnavailableNotice` pulls it at startup and raises a persistent, click-dismissable toast via the existing toast store when unavailable. Chose pull over the bundle-suggested setup-time event because the window is startup-hidden and the webview listener isn't attached when `setup` runs, so an event would be dropped (logged as a PREFERENCE escalation). Verified: cargo test, clippy -D warnings, vitest (627), tsc, eslint all green.

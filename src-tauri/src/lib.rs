@@ -18,32 +18,43 @@ use crate::commands::config::ConfigDir;
 
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
-        .events(collect_events![ipc::events::NoteCreated])
+        .events(collect_events![
+            ipc::events::NoteCreated,
+            ipc::events::HotkeyPressed
+        ])
         .commands(collect_commands![
-        commands::notes::create_note,
-        commands::notes::get_note,
-        commands::notes::update_note,
-        commands::notes::trash_note,
-        commands::notes::restore_note,
-        commands::notes::list_trashed_notes,
-        commands::notes::delete_note_permanently,
-        commands::notes::list_notes,
-        commands::notes::reassign_note_workspace,
-        commands::notes::rebuild_fts_index,
-        commands::config::get_config,
-        commands::config::update_config,
-        commands::window::dismiss_window,
-        commands::window::apply_layout_mode,
-        commands::workspace::create_workspace,
-        commands::workspace::list_workspaces,
-        commands::workspace::get_workspace,
-        commands::workspace::detect_workspace,
-        commands::workspace::resolve_workspace,
-        commands::system::get_current_dir,
-        commands::search::search_notes,
-        commands::export::export_markdown,
-        commands::export::export_json,
-    ])
+            commands::notes::create_note,
+            commands::notes::get_note,
+            commands::notes::update_note,
+            commands::notes::trash_note,
+            commands::notes::restore_note,
+            commands::notes::list_trashed_notes,
+            commands::notes::delete_note_permanently,
+            commands::notes::list_notes,
+            commands::notes::reassign_note_workspace,
+            commands::notes::rebuild_fts_index,
+            commands::config::get_config,
+            commands::config::update_config,
+            commands::onboarding::get_onboarding_state,
+            commands::onboarding::complete_onboarding,
+            commands::onboarding::increment_onboarding_session,
+            commands::accessibility::check_accessibility_permission,
+            commands::accessibility::open_accessibility_settings,
+            commands::autostart::set_autostart,
+            commands::autostart::get_autostart,
+            commands::window::dismiss_window,
+            commands::window::apply_layout_mode,
+            commands::workspace::create_workspace,
+            commands::workspace::list_workspaces,
+            commands::workspace::get_workspace,
+            commands::workspace::detect_workspace,
+            commands::workspace::resolve_workspace,
+            commands::system::get_current_dir,
+            commands::search::search_notes,
+            commands::export::export_markdown,
+            commands::export::export_json,
+            commands::hotkey::get_hotkey_status,
+        ])
 }
 
 /// Toggles the main window: shows + centers + focuses if hidden, hides if visible.
@@ -150,6 +161,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Auto-start on login (Story 8.4). LaunchAgent is the macOS mechanism; no
+        // extra launch args. The plugin exposes app.autolaunch() (ManagerExt).
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             // Register typed tauri-specta events (e.g. `note-created`) into the
@@ -157,10 +174,12 @@ pub fn run() {
             builder.mount_events(app);
 
             // --- Database ---
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data dir");
+            // Resolve the per-user data directory through the Platform abstraction
+            // (Story 8.5) so data-path isolation has a single source of truth
+            // rather than Tauri's bundle-id-based default.
+            let data_dir = crate::platform::current()
+                .data_dir()
+                .expect("Failed to resolve data dir");
             let conn = db::init_db(data_dir).expect("Failed to initialize database");
             app.manage(Mutex::new(conn));
 
@@ -186,8 +205,58 @@ pub fn run() {
                 }
             }
 
+            // --- First-run onboarding: reveal the window so the overlay shows ---
+            // The main window is created hidden and is normally summoned via the
+            // global shortcut. On first run (onboarding not yet completed) we show
+            // it at startup so the OnboardingOverlay greets the user. A read failure
+            // is non-fatal — fall back to the default hidden-until-summoned behavior.
+            let first_run = !services::onboarding::is_complete(&config_dir).unwrap_or(false);
+            if first_run {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.center();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            // --- Auto-start on login: reconcile OS registration to the saved
+            // preference (Story 8.4 / FR43). The persisted `[general] auto_start`
+            // is the source of truth; aligning the launch agent on every startup
+            // ensures a reboot relaunches Notey when enabled (and that an
+            // externally-removed agent is restored). Best-effort and non-fatal —
+            // a plugin failure must never block startup.
+            #[cfg(desktop)]
+            {
+                // Route through the Platform trait (DW-97) so auto-start side
+                // effects have a single source of truth; the trait delegates to
+                // `tauri-plugin-autostart`.
+                let desired = config.general.auto_start;
+                let platform = crate::platform::current();
+                let handle = app.handle();
+                match platform.autostart_is_enabled(handle) {
+                    Ok(active) if active != desired => {
+                        let outcome = if desired {
+                            platform.autostart_enable(handle)
+                        } else {
+                            platform.autostart_disable(handle)
+                        };
+                        if let Err(e) = outcome {
+                            eprintln!("warning: failed to reconcile auto-start to {desired}: {e}");
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("warning: failed to query auto-start state: {e}"),
+                }
+            }
+
             app.manage(Mutex::new(config));
             app.manage(ConfigDir(config_dir));
+
+            // Hotkey backend status (Story 8.6 / FR57, DW-99). Managed
+            // unconditionally so `get_hotkey_status` always resolves, including on
+            // builds where the desktop shortcut block below is compiled out.
+            // Defaults to available; the detection arm updates it on a backend miss.
+            app.manage(Mutex::new(models::hotkey::HotkeyStatus::available()));
 
             // --- Global shortcut ---
             #[cfg(desktop)]
@@ -200,8 +269,7 @@ pub fn run() {
                         "Warning: invalid shortcut '{}', falling back to {}",
                         shortcut_str, default_shortcut
                     );
-                    parse_shortcut(&default_shortcut)
-                        .expect("platform default shortcut must parse")
+                    parse_shortcut(&default_shortcut).expect("platform default shortcut must parse")
                 });
 
                 let app_handle = app.handle().clone();
@@ -213,19 +281,55 @@ pub fn run() {
                             // value when the hotkey is re-registered via update_config.
                             if event.state() == ShortcutState::Pressed {
                                 toggle_main_window(&app_handle);
+                                // Notify the webview so the first-run onboarding overlay
+                                // can complete on hotkey press (Story 8.1). Best-effort:
+                                // a failed emit must not affect window toggling.
+                                let _ = ipc::events::HotkeyPressed.emit(&app_handle);
                             }
                         })
                         .build(),
                 )?;
 
-                // Non-fatal: a saved shortcut that conflicts with another app
-                // must not brick startup. Log and continue — the window stays
-                // summonable via the tray and the user can rebind in Settings.
-                if let Err(e) = app.global_shortcut().register(shortcut) {
-                    eprintln!(
-                        "Warning: failed to register global shortcut '{}': {}",
-                        shortcut_str, e
-                    );
+                // Story 8.6 / FR57: consult the Platform abstraction for the
+                // hotkey backend available on this session before registering.
+                // On a compositor with no usable backend (pure Wayland without
+                // XWayland — native portal support is a fast-follow, DW-96) it
+                // returns Err; notify the user and skip the initial registration.
+                // The plugin/handler above stays installed so a later rebind via
+                // update_config can still register, and the window remains
+                // summonable from the tray.
+                match crate::platform::current().register_hotkey(&shortcut_str) {
+                    Ok(_backend) => {
+                        *app.state::<Mutex<models::hotkey::HotkeyStatus>>()
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                            models::hotkey::HotkeyStatus::available();
+
+                        // Non-fatal: a saved shortcut that conflicts with another
+                        // app must not brick startup. Log and continue — the
+                        // window stays summonable via the tray and the user can
+                        // rebind in Settings.
+                        if let Err(e) = app.global_shortcut().register(shortcut) {
+                            eprintln!(
+                                "Warning: failed to register global shortcut '{}': {}",
+                                shortcut_str, e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Notice: global shortcut unavailable on this compositor ({e}); \
+                             summon Notey from the tray icon instead."
+                        );
+                        // Record the miss so the frontend can pull it on startup and
+                        // warn the user the hotkey will not work (Story 8.6 / FR57,
+                        // DW-99). The managed default is `available()`, so only the
+                        // unavailable case needs to overwrite it.
+                        *app.state::<Mutex<models::hotkey::HotkeyStatus>>()
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                            models::hotkey::HotkeyStatus::unavailable(e.to_string());
+                    }
                 }
             }
 
@@ -285,8 +389,7 @@ pub fn run() {
                     std::sync::Arc::new(move |raw: &[u8]| {
                         let response = {
                             let state = app_handle.state::<Mutex<rusqlite::Connection>>();
-                            let conn =
-                                state.lock().unwrap_or_else(commands::recover_poisoned_db);
+                            let conn = state.lock().unwrap_or_else(commands::recover_poisoned_db);
                             ipc::protocol::handle_request(&conn, raw)
                             // conn guard dropped here, before emitting.
                         };
@@ -349,7 +452,15 @@ mod tests {
     #[test]
     fn parse_shortcut_accepts_modifier_aliases() {
         // Each spelling of a modifier resolves; same combo parses every way.
-        for s in ["Ctrl+N", "Control+N", "Cmd+N", "Command+N", "Super+N", "Meta+N", "Alt+N"] {
+        for s in [
+            "Ctrl+N",
+            "Control+N",
+            "Cmd+N",
+            "Command+N",
+            "Super+N",
+            "Meta+N",
+            "Alt+N",
+        ] {
             assert!(parse_shortcut(s).is_some(), "expected '{s}' to parse");
         }
     }

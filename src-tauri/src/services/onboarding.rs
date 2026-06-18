@@ -1,20 +1,17 @@
 //! First-run onboarding state: persistence of the "onboarding complete" flag and
 //! the early-session counter that drives progressive command-palette hints.
 //!
-//! **RED-PHASE STUB (Epic 8 — Stories 8.1 & 8.3).** Every function below is an
-//! unimplemented scaffold (`todo!`). The acceptance tests in
-//! `tests/onboarding_tests.rs` are written against this contract but marked
-//! `#[ignore = "red-phase: Story 8.x"]` so the suite stays green until a developer
-//! implements a function and activates its tests (TDD red → green).
+//! State is serialized to `onboarding.toml` in the platform config dir (sibling
+//! to `config.toml`; see [`crate::services::config::config_dir`]) using the same
+//! atomic temp-file + rename write the config service uses. A missing or corrupt
+//! file resolves to the default state — onboarding never fails the app.
 //!
-//! ## Green-phase wiring (do this when implementing)
-//! - Persist `OnboardingState` to `onboarding.toml` in the platform config dir
-//!   (sibling to `config.toml`; see [`crate::services::config::config_dir`]).
-//! - Expose `get_onboarding_state` / `complete_onboarding` Tauri commands, register
-//!   them in `lib.rs::specta_builder`, add their permission TOMLs + capabilities,
-//!   and extend `EXPECTED_COMMANDS` in `tests/acl_tests.rs`.
+//! The `get_onboarding_state` / `complete_onboarding` / `increment_onboarding_session`
+//! Tauri commands (in `commands::onboarding`) expose this service to the frontend.
 
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -24,6 +21,8 @@ use crate::errors::NoteyError;
 /// Number of early sessions during which the "Ctrl+P for commands" status-bar hint
 /// is shown before it disappears permanently (Story 8.1 progressive disclosure).
 pub const COMMAND_HINT_SESSION_LIMIT: u32 = 5;
+
+static ONBOARDING_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Persisted first-run onboarding state.
 ///
@@ -43,37 +42,114 @@ pub struct OnboardingState {
     pub sessions_seen: u32,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct PersistedOnboardingState {
+    #[serde(default)]
+    complete: bool,
+    #[serde(default, alias = "sessionsSeen")]
+    sessions_seen: u32,
+}
+
+impl From<PersistedOnboardingState> for OnboardingState {
+    fn from(state: PersistedOnboardingState) -> Self {
+        Self {
+            complete: state.complete,
+            sessions_seen: state.sessions_seen,
+        }
+    }
+}
+
+impl From<&OnboardingState> for PersistedOnboardingState {
+    fn from(state: &OnboardingState) -> Self {
+        Self {
+            complete: state.complete,
+            sessions_seen: state.sessions_seen,
+        }
+    }
+}
+
 /// Full path to `onboarding.toml` within the given config directory.
 pub fn state_file_path(config_dir: &Path) -> PathBuf {
     config_dir.join("onboarding.toml")
 }
 
 /// Load onboarding state from disk, returning the default (not-complete, zero
-/// sessions) when the file is missing or unreadable.
+/// sessions) when the file is missing or corrupt — onboarding state must never
+/// fail the app.
 pub fn load(config_dir: &Path) -> Result<OnboardingState, NoteyError> {
-    todo!("Story 8.1: read onboarding.toml under {config_dir:?}, default on missing/corrupt")
+    let path = state_file_path(config_dir);
+    if !path.exists() {
+        return Ok(OnboardingState::default());
+    }
+    match fs::read_to_string(&path) {
+        Ok(contents) => Ok(
+            toml::from_str::<PersistedOnboardingState>(&contents).map_or_else(
+                |e| {
+                    eprintln!(
+                        "Warning: onboarding.toml is corrupt ({e}), falling back to defaults"
+                    );
+                    OnboardingState::default()
+                },
+                OnboardingState::from,
+            ),
+        ),
+        Err(e) => {
+            eprintln!("Warning: failed to read onboarding.toml ({e}), falling back to defaults");
+            Ok(OnboardingState::default())
+        }
+    }
 }
 
 /// Returns whether onboarding has been completed.
 pub fn is_complete(config_dir: &Path) -> Result<bool, NoteyError> {
-    todo!("Story 8.1: return load(config_dir)?.complete for {config_dir:?}")
+    Ok(load(config_dir)?.complete)
 }
 
-/// Mark onboarding as complete and persist atomically. Idempotent.
+/// Mark onboarding as complete and persist atomically. Idempotent — preserves the
+/// existing session counter.
 pub fn mark_complete(config_dir: &Path) -> Result<(), NoteyError> {
-    todo!("Story 8.1: set complete=true and atomically write onboarding.toml under {config_dir:?}")
+    let _guard = ONBOARDING_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = load(config_dir)?;
+    state.complete = true;
+    save(config_dir, &state)
 }
 
 /// Increment the session counter, persist, and return the new count.
 pub fn increment_session(config_dir: &Path) -> Result<u32, NoteyError> {
-    todo!("Story 8.1: load, bump sessions_seen, persist, return new count for {config_dir:?}")
+    let _guard = ONBOARDING_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = load(config_dir)?;
+    state.sessions_seen = state.sessions_seen.saturating_add(1);
+    save(config_dir, &state)?;
+    Ok(state.sessions_seen)
 }
 
 /// Whether the early "Ctrl+P for commands" status-bar hint should still be shown
 /// for the given state (i.e. within the first [`COMMAND_HINT_SESSION_LIMIT`]
-/// sessions and onboarding done).
+/// sessions).
 pub fn should_show_command_hint(state: &OnboardingState) -> bool {
-    todo!(
-        "Story 8.1: true when sessions_seen < COMMAND_HINT_SESSION_LIMIT (state: {state:?})"
-    )
+    state.sessions_seen < COMMAND_HINT_SESSION_LIMIT
+}
+
+/// Writes onboarding state to `onboarding.toml` using an atomic temp-file + rename,
+/// mirroring [`crate::services::config::save`]. Cleans up the temp file on failure.
+fn save(config_dir: &Path, state: &OnboardingState) -> Result<(), NoteyError> {
+    fs::create_dir_all(config_dir)?;
+    let path = state_file_path(config_dir);
+    let tmp_path = config_dir.join("onboarding.toml.tmp");
+    let persisted = PersistedOnboardingState::from(state);
+    let contents = toml::to_string_pretty(&persisted)
+        .map_err(|e| NoteyError::Config(format!("Failed to serialize onboarding state: {e}")))?;
+    if let Err(e) = fs::write(&tmp_path, &contents) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+    if let Err(e) = fs::rename(&tmp_path, &path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
+    }
+    Ok(())
 }

@@ -45,3 +45,6 @@ auto = "per-epic"               # never | per-epic | run-end (auto-triggered swe
 max_bundles = 5              # bundles executed per sweep; triage excess is truncated
 max_triage_attempts = 2      # triage validation retries before escalating
 repeat = true
+
+[scm]
+isolation = "worktree"

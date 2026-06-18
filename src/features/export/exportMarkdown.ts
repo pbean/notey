@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { commands } from "../../generated/bindings";
 import { useToastStore } from "../toast/store";
 import { singleflight, resetSingleflight } from "../../lib/singleflight";
+import { withTimeout, EXPORT_IPC_TIMEOUT_MS } from "../../lib/withTimeout";
 
 /** Payload of the backend `export-markdown-progress` event. */
 interface ExportProgress {
@@ -68,7 +69,10 @@ export async function exportToMarkdown(): Promise<void> {
         }
       }, PROGRESS_TOAST_DELAY_MS);
 
-      const result = await commands.exportMarkdown(directory);
+      const result = await withTimeout(commands.exportMarkdown(directory), {
+        timeoutMs: EXPORT_IPC_TIMEOUT_MS,
+        label: "export_markdown",
+      });
 
       if (result.status === "ok") {
         useToastStore
