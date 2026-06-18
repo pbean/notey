@@ -88,10 +88,43 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater artifact signing (NOT OS code-signing). Signs each bundle and
+          # assembles latest.json so the in-app auto-updater trusts the release.
+          # Create ONE repo secret: TAURI_SIGNING_PRIVATE_KEY = contents of the
+          # private key from `tauri signer generate`. The key has no passphrase, so
+          # do NOT create the PASSWORD secret (GitHub rejects empty secret values) —
+          # the reference below resolves to an empty string when the secret is
+          # absent, which is exactly "no password". Without the key the build still
+          # runs but produces no .sig/latest.json and auto-update will not work.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          #
+          # --- OS code-signing (intentionally OFF; unsigned v1) ----------------
+          # Releases are unsigned today; users follow the "open anyway" flow (see
+          # docs/installation.md). To enable later, add the secrets below — no
+          # other workflow change is needed (Tauri auto-signs when they exist):
+          #
+          # macOS (Developer ID, $99/yr — Tauri auto-signs AND notarizes):
+          #   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          #   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          #   APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          #   APPLE_ID: ${{ secrets.APPLE_ID }}
+          #   APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}      # app-specific pw
+          #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          #
+          # Windows (Azure Trusted Signing — also add a bundle.windows.signCommand
+          # using trusted-signing-cli in tauri.conf.json):
+          #   AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          #   AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          #   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         with:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.releaseTag || github.ref_name }}
           releaseName: Notey ${{ github.event_name == 'workflow_dispatch' && inputs.releaseTag || github.ref_name }}
           releaseBody: 'See the assets below to download and install this version.'
-          releaseDraft: true # artifacts are unsigned (v1) — a human publishes after review
+          # Draft so a human reviews unsigned artifacts before publishing. NOTE:
+          # the updater endpoint (releases/latest/download/latest.json) only
+          # resolves once the draft is PUBLISHED and marked "latest" — auto-update
+          # goes live at publish time, not at build time.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

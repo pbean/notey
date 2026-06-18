@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- In-app auto-updater: on startup Notey checks the GitHub Releases endpoint and
+  shows a banner to install the new signed build and restart
+  (`tauri-plugin-updater`).
+
+### Changed
+- Release workflow now signs updater artifacts and emits `latest.json`; it is also
+  wired (commented) for later macOS/Windows OS code-signing. Release builds remain
+  unsigned for now — see [docs/installation.md](docs/installation.md) for the
+  per-OS "open anyway" steps.
 
 ## [0.1.0] - 2026-06-17
 

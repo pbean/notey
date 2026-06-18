@@ -167,6 +167,11 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        // In-app auto-updater: checks the GitHub Releases `latest.json` endpoint
+        // (configured in tauri.conf.json) and installs signed update artifacts.
+        // `process` provides `relaunch()` so the app restarts onto the new build.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             // Register typed tauri-specta events (e.g. `note-created`) into the

@@ -6,6 +6,8 @@ import { restoreSession, startSessionAutoSave } from './features/session/persist
 import { startNoteCreatedSync } from './features/note-list/realtimeSync';
 import { initOnboarding } from './features/onboarding/bootstrap';
 import { startHotkeyUnavailableNotice } from './features/hotkey/unavailableNotice';
+import { checkForUpdates } from './features/updates/checkForUpdates';
+import { UpdateBanner } from './features/updates/components/UpdateBanner';
 
 /** Application root — renders the main CaptureWindow and the toast overlay. */
 function App() {
@@ -24,6 +26,10 @@ function App() {
     // (via a persistent toast) that the hotkey will not work (FR57, DW-99).
     // Best-effort and independent of the chain below.
     void startHotkeyUnavailableNotice();
+
+    // Probe for a newer release in the background. No-op outside Tauri and fully
+    // best-effort — surfaces the UpdateBanner only when an install is available.
+    void checkForUpdates();
 
     // Attempt workspace init first, then restore the saved session. Auto-save
     // still starts if either step fails so session persistence keeps working.
@@ -75,6 +81,7 @@ function App() {
 
   return (
     <>
+      <UpdateBanner />
       <CaptureWindow />
       <Toaster />
     </>

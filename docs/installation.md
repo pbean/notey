@@ -16,8 +16,38 @@ Download the artifact for your platform and install it the usual way for your OS
 (open the `.dmg` on macOS, the `.AppImage`/`.deb` on Linux, or the installer on
 Windows).
 
-> Release artifacts are currently unsigned. Your OS may warn you on first launch;
-> allow the app to run via your platform's standard "open anyway" flow.
+### Opening an unsigned build
+
+Release artifacts are currently **unsigned**, so your OS warns you the first time
+you launch. This is expected — follow your platform's "open anyway" flow once and
+the app runs normally thereafter:
+
+- **macOS** — Gatekeeper shows *"Notey can't be opened because it is from an
+  unidentified developer."* Either **right-click (or Control-click) the app →
+  Open → Open**, or clear the quarantine flag from a terminal:
+
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/Notey.app
+  ```
+
+- **Windows** — SmartScreen shows *"Windows protected your PC."* Click
+  **More info → Run anyway**.
+
+- **Linux** — make the AppImage executable, then run it:
+
+  ```sh
+  chmod +x Notey_*.AppImage
+  ./Notey_*.AppImage
+  ```
+
+  Or install the Debian package: `sudo dpkg -i Notey_*.deb` (or
+  `sudo apt install ./Notey_*.deb` to pull in dependencies).
+
+### Updates
+
+Once installed, Notey checks for new releases on startup and shows an **in-app
+banner** offering to install and restart when a newer version is published — no
+manual re-download needed.
 
 ## First launch
 

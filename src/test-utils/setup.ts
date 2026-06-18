@@ -10,6 +10,7 @@ import { useToastStore } from '../features/toast/store';
 import { useTrashStore } from '../features/trash/store';
 import { useSettingsStore } from '../features/settings/store';
 import { useOnboardingStore } from '../features/onboarding/store';
+import { useUpdateStore } from '../features/updates/store';
 import { resetToggleTracking } from '../features/command-palette/actions';
 import { resetSingleflight } from '../lib/singleflight';
 
@@ -45,6 +46,7 @@ afterEach(() => {
   useTrashStore.getState().resetTrash();
   useSettingsStore.getState().resetSettings();
   useOnboardingStore.getState().reset();
+  useUpdateStore.getState().reset();
 
   // Clear shared in-flight (singleflight) dedup keys and the sticky per-session
   // theme/layout toggle markers (module-level, not a store)
